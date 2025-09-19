@@ -15,7 +15,7 @@ Understanding these behaviours is the baseline for the refactor: each new module
 ## Repository layout
 - `oldScripts/` – Reference MATLAB implementation to be dissected and rewritten.
 - `clinicalData/` – Sample datasets, lab mappings, and historical experiment outputs the refactor will use for parity testing.
-- `scripts/` – Placeholder for new refactored code (language/architecture to be defined as the project evolves).
+- `scripts/` – Placeholder for new refactored code (language/architecture to be defined as the project evolves). Legacy MATLAB scripts remain in the original project at `../epScheduling/scripts` and can be referenced via `addpath` when comparisons are needed.
 
 ## Refactor objectives
 - Document and modularise the functional areas above before porting them into the new stack.
@@ -39,4 +39,3 @@ As the refactor progresses, this README should be updated with implementation sp
 - **ParityValidator**: compares refactored outputs to MATLAB references to ensure behavioural fidelity during migration.
 
 Future refactor tasks will map each MATLAB script or workflow to one or more of the classes above, enabling gradual porting while preserving validated behaviour.
-
