@@ -4,21 +4,21 @@ classdef CaseRequest
     properties (SetAccess = immutable)
         CaseId string
         Date datetime
-        Procedure eprefactor.Procedure
-        Operator eprefactor.Operator
+        Procedure conduction.Procedure
+        Operator conduction.Operator
         AdmissionStatus string
         Location string
         Room string
-        Lab eprefactor.Lab
+        Lab conduction.Lab
     end
 
     methods
         function obj = CaseRequest(row, procedure, operator, lab)
             arguments
                 row table
-                procedure (1,1) eprefactor.Procedure
-                operator (1,1) eprefactor.Operator
-                lab eprefactor.Lab = eprefactor.Lab.empty
+                procedure (1,1) conduction.Procedure
+                operator (1,1) conduction.Operator
+                lab conduction.Lab = conduction.Lab.empty
             end
 
             obj.CaseId = string(row.case_id(1));

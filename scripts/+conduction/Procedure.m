@@ -19,7 +19,7 @@ classdef Procedure
             end
 
             obj.Name = strtrim(name);
-            obj.Id = eprefactor.Procedure.canonicalId(obj.Name);
+            obj.Id = conduction.Procedure.canonicalId(obj.Name);
             obj.SetupDuration = setupDuration;
             obj.ProcedureDuration = procedureDuration;
             obj.PostDuration = postDuration;
@@ -34,16 +34,16 @@ classdef Procedure
         function proc = fromRow(row)
             name = string(row.procedure(1));
             if ismember('setup_minutes', row.Properties.VariableNames)
-                setupDuration = eprefactor.Procedure.asDouble(row.setup_minutes(1));
+                setupDuration = conduction.Procedure.asDouble(row.setup_minutes(1));
             elseif ismember('in_room_to_procedure_start_minutes', row.Properties.VariableNames)
-                setupDuration = eprefactor.Procedure.asDouble(row.in_room_to_procedure_start_minutes(1));
+                setupDuration = conduction.Procedure.asDouble(row.in_room_to_procedure_start_minutes(1));
             else
-                setupDuration = eprefactor.Procedure.asDouble(row.in_room_to_induction_minutes(1));
+                setupDuration = conduction.Procedure.asDouble(row.in_room_to_induction_minutes(1));
             end
-            procedureDuration = eprefactor.Procedure.asDouble(row.procedure_minutes(1));
-            postDuration = eprefactor.Procedure.asDouble(row.post_procedure_minutes(1));
+            procedureDuration = conduction.Procedure.asDouble(row.procedure_minutes(1));
+            postDuration = conduction.Procedure.asDouble(row.post_procedure_minutes(1));
 
-            proc = eprefactor.Procedure(name, setupDuration, procedureDuration, postDuration);
+            proc = conduction.Procedure(name, setupDuration, procedureDuration, postDuration);
         end
 
         function id = canonicalId(name)

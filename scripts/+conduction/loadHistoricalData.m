@@ -238,7 +238,7 @@ for name = procedureNames(:)'
         continue;
     end
     row = dataTable(idx, :);
-    proc = eprefactor.Procedure.fromRow(row);
+    proc = conduction.Procedure.fromRow(row);
     procedures(char(proc.Id)) = proc;
 end
 end
@@ -249,12 +249,12 @@ operatorNames = operatorNames(~ismissing(operatorNames));
 operators = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
 for name = operatorNames(:)'
-    operator = eprefactor.Operator(name);
+    operator = conduction.Operator(name);
     operators(char(operator.Id)) = operator;
 end
 
 if ~operators.isKey('operator_unknown')
-    operators('operator_unknown') = eprefactor.Operator("Unknown Operator");
+    operators('operator_unknown') = conduction.Operator("Unknown Operator");
 end
 end
 
@@ -272,7 +272,7 @@ for room = roomNames(:)'
     if ~isempty(idx) && ismember('location', dataTable.Properties.VariableNames)
         location = string(dataTable.location(idx));
     end
-    lab = eprefactor.Lab(room, location);
+    lab = conduction.Lab(room, location);
     labs(char(lab.Id)) = lab;
 end
 end
@@ -287,37 +287,37 @@ roomNames = string(dataTable.room);
 for idx = 1:height(dataTable)
     row = dataTable(idx, :);
 
-    procedureId = char(eprefactor.Procedure.canonicalId(procedureNames(idx)));
+    procedureId = char(conduction.Procedure.canonicalId(procedureNames(idx)));
     if ~procedures.isKey(procedureId)
-        proc = eprefactor.Procedure.fromRow(row);
+        proc = conduction.Procedure.fromRow(row);
         procedures(procedureId) = proc;
     end
     procedure = procedures(procedureId);
 
-    operatorId = char(eprefactor.Operator.canonicalId(surgeonNames(idx)));
+    operatorId = char(conduction.Operator.canonicalId(surgeonNames(idx)));
     if ~operators.isKey(operatorId)
-        operators(operatorId) = eprefactor.Operator(surgeonNames(idx));
+        operators(operatorId) = conduction.Operator(surgeonNames(idx));
     end
     operator = operators(operatorId);
 
-    lab = eprefactor.Lab.empty;
+    lab = conduction.Lab.empty;
     if ~ismissing(roomNames(idx)) && strlength(roomNames(idx)) > 0
-        labId = char(eprefactor.Lab.canonicalId(roomNames(idx)));
+        labId = char(conduction.Lab.canonicalId(roomNames(idx)));
         if ~labs.isKey(labId)
             location = "";
             if ismember('location', dataTable.Properties.VariableNames)
                 location = string(dataTable.location(idx));
             end
-            labs(labId) = eprefactor.Lab(roomNames(idx), location);
+            labs(labId) = conduction.Lab(roomNames(idx), location);
         end
         lab = labs(labId);
     end
 
-    caseCells{idx, 1} = eprefactor.CaseRequest(row, procedure, operator, lab);
+    caseCells{idx, 1} = conduction.CaseRequest(row, procedure, operator, lab);
 end
 
 if isempty(caseCells)
-    caseRequests = eprefactor.CaseRequest.empty;
+    caseRequests = conduction.CaseRequest.empty;
 else
     caseRequests = vertcat(caseCells{:});
 end

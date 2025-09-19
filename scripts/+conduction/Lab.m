@@ -16,7 +16,7 @@ classdef Lab
 
             obj.Room = strtrim(room);
             obj.Location = strtrim(location);
-            obj.Id = eprefactor.Lab.canonicalId(obj.Room);
+            obj.Id = conduction.Lab.canonicalId(obj.Room);
         end
     end
 

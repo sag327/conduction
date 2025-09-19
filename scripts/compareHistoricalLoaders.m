@@ -21,7 +21,7 @@ if ~any(strcmp(path, 'scripts'))
     addpath('scripts');
 end
 
-[newTableRaw, newEntities] = eprefactor.loadHistoricalData(filePath);
+[newTableRaw, newEntities] = conduction.loadHistoricalData(filePath);
 [legacyData, legacySchedules] = loadHistoricalDataFromFile(filePath); %#ok<ASGLU>
 legacyTable = struct2table(legacyData);
 
@@ -75,8 +75,8 @@ function compareProcedures(newEntities, legacyTable)
 procedureValues = values(newEntities.procedures);
 newProcedures = sort(string(cellfun(@(p) p.Name, procedureValues, 'UniformOutput', false)));
 legacyProcedures = sort(unique(string(legacyTable.procedure)));
-legacyProcedures = arrayfun(@eprefactor.Procedure.canonicalId, legacyProcedures);
-newProcedures = arrayfun(@eprefactor.Procedure.canonicalId, newProcedures);
+legacyProcedures = arrayfun(@conduction.Procedure.canonicalId, legacyProcedures);
+newProcedures = arrayfun(@conduction.Procedure.canonicalId, newProcedures);
 legacyProcedures = sort(legacyProcedures);
 newProcedures = sort(newProcedures);
 
@@ -91,8 +91,8 @@ function compareOperators(newEntities, legacyTable)
 operatorValues = values(newEntities.operators);
 newOperators = sort(string(cellfun(@(o) o.Name, operatorValues, 'UniformOutput', false)));
 legacyOperators = sort(unique(string(legacyTable.surgeon)));
-legacyOperators = arrayfun(@eprefactor.Operator.canonicalId, legacyOperators);
-newOperators = arrayfun(@eprefactor.Operator.canonicalId, newOperators);
+legacyOperators = arrayfun(@conduction.Operator.canonicalId, legacyOperators);
+newOperators = arrayfun(@conduction.Operator.canonicalId, newOperators);
 legacyOperators = sort(legacyOperators);
 newOperators = sort(newOperators);
 

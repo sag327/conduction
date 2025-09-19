@@ -13,7 +13,7 @@ classdef Operator
             end
 
             obj.Name = strtrim(name);
-            obj.Id = eprefactor.Operator.canonicalId(obj.Name);
+            obj.Id = conduction.Operator.canonicalId(obj.Name);
         end
     end
 

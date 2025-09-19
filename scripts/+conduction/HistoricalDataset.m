@@ -9,7 +9,7 @@ classdef HistoricalDataset
         Procedures containers.Map
         Operators containers.Map
         Labs containers.Map
-        CaseRequests eprefactor.CaseRequest
+        CaseRequests conduction.CaseRequest
     end
 
     methods (Static)
@@ -18,8 +18,8 @@ classdef HistoricalDataset
                 filePath (1,1) string
             end
 
-            [tableData, historicalEntities] = eprefactor.loadHistoricalData(filePath);
-            dataset = eprefactor.HistoricalDataset(tableData, historicalEntities);
+            [tableData, historicalEntities] = conduction.loadHistoricalData(filePath);
+            dataset = conduction.HistoricalDataset(tableData, historicalEntities);
         end
     end
 
@@ -90,7 +90,7 @@ classdef HistoricalDataset
                 operatorIdentifier (1,1) string
             end
 
-            operatorId = eprefactor.Operator.canonicalId(operatorIdentifier);
+            operatorId = conduction.Operator.canonicalId(operatorIdentifier);
             mask = arrayfun(@(c) c.Operator.Id == operatorId, obj.CaseRequests);
             cases = obj.CaseRequests(mask);
         end
@@ -107,7 +107,7 @@ classdef HistoricalDataset
                 procedureIdentifier (1,1) string
             end
 
-            procedureId = eprefactor.Procedure.canonicalId(procedureIdentifier);
+            procedureId = conduction.Procedure.canonicalId(procedureIdentifier);
             mask = arrayfun(@(c) c.Procedure.Id == procedureId, obj.CaseRequests);
             cases = obj.CaseRequests(mask);
         end
