@@ -14,9 +14,10 @@ classdef HistoricalDataset
 
     methods (Static)
         function dataset = fromFile(filePath)
-            if nargin < 1 || strlength(filePath) == 0
-                filePath = "clinicalData/testProcedureDurations-7day.xlsx";
+            arguments
+                filePath (1,1) string
             end
+
             [tableData, historicalEntities] = eprefactor.loadHistoricalData(filePath);
             dataset = eprefactor.HistoricalDataset(tableData, historicalEntities);
         end
