@@ -33,7 +33,13 @@ classdef Procedure
     methods (Static)
         function proc = fromRow(row)
             name = string(row.procedure(1));
-            setupDuration = eprefactor.Procedure.asDouble(row.in_room_to_induction_minutes(1));
+            if ismember('setup_minutes', row.Properties.VariableNames)
+                setupDuration = eprefactor.Procedure.asDouble(row.setup_minutes(1));
+            elseif ismember('in_room_to_procedure_start_minutes', row.Properties.VariableNames)
+                setupDuration = eprefactor.Procedure.asDouble(row.in_room_to_procedure_start_minutes(1));
+            else
+                setupDuration = eprefactor.Procedure.asDouble(row.in_room_to_induction_minutes(1));
+            end
             procedureDuration = eprefactor.Procedure.asDouble(row.procedure_minutes(1));
             postDuration = eprefactor.Procedure.asDouble(row.post_procedure_minutes(1));
 
@@ -45,7 +51,8 @@ classdef Procedure
             if strlength(name) == 0
                 name = "procedure";
             end
-            id = matlab.lang.makeValidName(lower(name));
+            sanitized = matlab.lang.makeValidName(lower(char(name)));
+            id = string(lower(sanitized));
         end
 
         function value = asDouble(rawValue)

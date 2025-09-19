@@ -1,0 +1,4 @@
+# Ignore temporary files
+.DS_Store
+scripts/.DS_Store
+clinicalData/~$*.xlsx

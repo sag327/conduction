@@ -64,6 +64,8 @@ normalised.case_id = cleanCaseIds(normalised.case_id);
 
 keyColumns = {'case_id', 'date', 'procedure'};
 normalised = dropEmptyRows(normalised, keyColumns);
+
+normalised = enforceDataTypes(normalised);
 end
 
 function mapping = getCanonicalColumnMap()
@@ -80,6 +82,7 @@ addCanonical('location', {'Case_Location', 'Case Location'});
 addCanonical('room', {'Room'});
 addCanonical('admission_status', {'Admission_Patient_Class', 'AdmissionPatientClass', 'Admission Patient Class', 'Admission Status'});
 addCanonical('in_room_to_induction_minutes', {'In Room to Anesthesia Induction (Minutes)', 'In Room to Induction (Minutes)'});
+addCanonical('setup_minutes', {'In Room to Procedure Start (Minutes)', 'InRoomToProcedureStart_Minutes_', 'In_Room_to_Procedure_Start_Minutes'});
 addCanonical('procedure_minutes', {'Procedure Start to Procedure Complete (Minutes)', 'Procedure Duration (Minutes)'});
 addCanonical('post_procedure_minutes', {'Procedure Complete to Out of Room (Minutes)', 'Procedure Complete to Exit (Minutes)'});
 
@@ -158,6 +161,69 @@ entities.procedures = procedures;
 entities.operators = operators;
 entities.labs = labs;
 entities.caseRequests = caseRequests;
+end
+
+function tbl = enforceDataTypes(tbl)
+stringColumns = {'surgeon', 'procedure', 'service', 'location', 'room', 'admission_status'};
+for idx = 1:numel(stringColumns)
+    col = stringColumns{idx};
+    if ismember(col, tbl.Properties.VariableNames)
+        tbl.(col) = string(tbl.(col));
+    end
+end
+
+numericColumns = {'in_room_to_induction_minutes', 'setup_minutes', 'procedure_minutes', 'post_procedure_minutes'};
+for idx = 1:numel(numericColumns)
+    col = numericColumns{idx};
+    if ismember(col, tbl.Properties.VariableNames)
+        tbl.(col) = toDoubleVector(tbl.(col));
+    end
+end
+
+if ismember('date', tbl.Properties.VariableNames)
+    tbl.date = toDateVector(tbl.date);
+end
+
+if ismember('case_id', tbl.Properties.VariableNames)
+    tbl.case_id = string(tbl.case_id);
+end
+
+end
+
+function values = toDoubleVector(values)
+if iscell(values)
+    values = cellfun(@toDoubleScalar, values);
+elseif isstring(values)
+    values = str2double(values);
+elseif isnumeric(values)
+    values = double(values);
+else
+    values = str2double(string(values));
+end
+values = double(values);
+end
+
+function dates = toDateVector(values)
+if isdatetime(values)
+    dates = values;
+elseif isnumeric(values)
+    dates = datetime(values, 'ConvertFrom', 'excel');
+elseif iscell(values)
+    dates = datetime(values);
+else
+    dates = datetime(string(values));
+end
+dates = dates(:);
+end
+
+function value = toDoubleScalar(inputValue)
+if isempty(inputValue)
+    value = NaN;
+elseif isnumeric(inputValue)
+    value = double(inputValue);
+else
+    value = str2double(string(inputValue));
+end
 end
 
 function procedures = buildProcedures(dataTable)

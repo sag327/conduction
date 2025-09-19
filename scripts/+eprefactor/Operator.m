@@ -24,7 +24,8 @@ classdef Operator
                 id = "operator_unknown";
                 return;
             end
-            id = matlab.lang.makeValidName(lower(name));
+            sanitized = matlab.lang.makeValidName(lower(char(name)));
+            id = string(lower(sanitized));
         end
     end
 end
