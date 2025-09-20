@@ -6,7 +6,7 @@ This repository tracks the refactor of a mature MATLAB workflow used to plan and
 ## What the legacy MATLAB suite does
 - **Data ingestion** – `loadHistoricalDataFromFile.m` reads historical procedure datasets and supporting lab metadata into rich MATLAB structures keyed by case, operator, and date.
 - **Schedule reconstruction** – Utilities such as `reconstructHistoricalSchedule.m`, `getCasesByDate.m`, and `createHistoricalScheduleContainer` rebuild daily schedules so they can be analysed or used as baselines for optimization.
-- **Optimization engine** – `scheduleHistoricalCases.m` formulates an integer linear program to assign cases to labs, balance operator workloads, respect turnover times, and optionally prioritise outpatient cases.
+- **Optimization engine** – `optimizeDailySchedule.m` formulates an integer linear program to assign cases to labs, balance operator workloads, respect turnover times, and optionally prioritise outpatient cases.
 - **Analysis & reporting** – `analyzeHistoricalData.m` and `analyzeStatisticalDataset.m` generate comprehensive metrics (idle time, lab flips, throughput, surgeon/operator stats) and can persist structured reports for downstream visualization.
 - **Experiment automation** – Scripts such as `runSchedulingExperiment.m`, `configureExperiment.m`, and `batchProcessHistoricalCases.m` coordinate multi-day experiments, capture results, and write summaries into `.mat` files for further analysis.
 
@@ -39,3 +39,12 @@ As the refactor progresses, this README should be updated with implementation sp
 - **ParityValidator**: compares refactored outputs to MATLAB references to ensure behavioural fidelity during migration.
 
 Future refactor tasks will map each MATLAB script or workflow to one or more of the classes above, enabling gradual porting while preserving validated behaviour.
+
+### Optimization Configuration
+
+Use `config = conduction.configureOptimization(...)` to build an options struct, then call:
+
+```matlab
+config = conduction.configureOptimization('NumLabs',5,'OptimizationMetric','operatorIdle');
+[newDaily, outcome] = conduction.optimizeDailySchedule(oldDaily, config);
+```

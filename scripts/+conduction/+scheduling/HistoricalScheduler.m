@@ -258,7 +258,7 @@ classdef HistoricalScheduler
             prepared = conduction.scheduling.SchedulingPreprocessor.prepareDataset(cases, options);
             model = conduction.scheduling.OptimizationModelBuilder.build(prepared, options);
             [solution, solverInfo] = conduction.scheduling.OptimizationSolver.solve(model, options);
-            [dailySchedule, outcome] = conduction.scheduling.ScheduleAssembler.assemble(prepared, model, solution, solverInfo);
+            [dailySchedule, outcome] = conduction.scheduling.ScheduleAssembler.assemble(prepared, model, solution, solverInfo, options);
         end
 
         function tf = isOutpatient(caseStruct)

@@ -2,12 +2,13 @@ classdef ScheduleAssembler
     %SCHEDULEASSEMBLER Convert solver output into schedule structures.
 
     methods (Static)
-        function [dailySchedule, outcome] = assemble(prepared, model, solution, solverInfo)
+        function [dailySchedule, outcome] = assemble(prepared, model, solution, solverInfo, options)
             arguments
                 prepared struct
                 model struct
                 solution double
                 solverInfo struct
+                options (1,1) conduction.scheduling.SchedulingOptions
             end
 
             numCases = model.numCases;
@@ -132,6 +133,7 @@ classdef ScheduleAssembler
             outcome.uniqueOperators = uniqueOperators;
             outcome.scheduleStruct = scheduleStruct;
             outcome.resultsMetadata = resultsStruct;
+            outcome.options = options.toStruct();
         end
     end
 
