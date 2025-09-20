@@ -215,28 +215,8 @@ function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange
     endHour = (scheduleEnd + 60) / 60;
 end
 
-function labLabels = resolveLabLabels(dailySchedule, expectedLabs)
-    labs = dailySchedule.Labs;
-    if isempty(labs) || numel(labs) ~= expectedLabs
-        labLabels = arrayfun(@(idx) sprintf('Lab %d', idx), 1:expectedLabs, 'UniformOutput', false);
-        return;
-    end
-
-    labLabels = arrayfun(@(lab) labelForLab(lab), labs, 'UniformOutput', false);
-end
-
-function label = labelForLab(lab)
-    room = char(lab.Room);
-    location = char(lab.Location);
-    if ~isempty(room)
-        if isempty(location)
-            label = room;
-        else
-            label = sprintf('%s (%s)', room, location);
-        end
-    else
-        label = char(lab.Id);
-    end
+function labLabels = resolveLabLabels(~, expectedLabs)
+    labLabels = arrayfun(@(idx) sprintf('Lab %d', idx), 1:expectedLabs, 'UniformOutput', false);
 end
 
 function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, operatorColors, opts)
@@ -475,7 +455,7 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
     xlim(ax, [startHour, endHour + 1]);
     ylim(ax, [0.5, numOperators + 0.5]);
 
-    labels = arrayfun(@(op) extractLastName(op.name), operatorData, 'UniformOutput', false);
+    labels = formatOperatorLabels(operatorData);
     set(ax, 'YTick', 1:numOperators, 'YTickLabel', labels);
 
     formatXAxisTimeTicks(ax, startHour, endHour);
@@ -520,38 +500,161 @@ function label = hourLabel(hourValue)
 end
 
 function label = composeCaseLabel(caseId, operatorName)
-    label = sprintf('%s\n%s', char(caseId), extractLastName(operatorName));
-end
-
-function lastName = extractLastName(fullName)
-    parts = split(strtrim(string(fullName)), {',', ' '});
-    parts(parts == "") = [];
-    if isempty(parts)
+    info = parseOperatorName(operatorName);
+    lastName = char(info.lastName);
+    if isempty(lastName)
         lastName = 'Unknown';
-    else
-        lastName = char(parts(end));
     end
+    label = sprintf('%s\n%s', char(caseId), lastName);
 end
 
-function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
-    if nargin < 3 || isempty(caseTimelines)
-        dateCandidate = scheduleDate;
-    else
-        dates = [caseTimelines.date];
-        dates = dates(~isnat(dates));
-        if isempty(dates)
-            dateCandidate = scheduleDate;
-        else
-            dateCandidate = dates(1);
-        end
-    end
-
-    if isempty(dateCandidate) || isnat(dateCandidate)
-        titleStr = char(baseTitle);
+function labels = formatOperatorLabels(operatorData)
+    if isempty(operatorData)
+        labels = {};
         return;
     end
 
-    titleStr = sprintf('%s - %s', char(baseTitle), datestr(dateCandidate, 'mmm dd, yyyy'));
+    parts = arrayfun(@(op) parseOperatorName(op.name), operatorData);
+    numOps = numel(parts);
+
+    lastNames = cell(1, numOps);
+    firstInitials = cell(1, numOps);
+    firstNames = cell(1, numOps);
+    for i = 1:numOps
+        rawLast = string(parts(i).lastName);
+        if strlength(rawLast) == 0
+            rawLast = "Unknown";
+        end
+        lastNames{i} = char(rawLast);
+
+        initialToken = string(parts(i).firstInitial);
+        if strlength(initialToken) > 0
+            firstInitials{i} = char(initialToken(1));
+        else
+            firstInitials{i} = '';
+        end
+
+        firstToken = string(parts(i).firstName);
+        if strlength(firstToken) > 0
+            firstNames{i} = char(firstToken);
+        else
+            firstNames{i} = '';
+        end
+    end
+
+    labels = lastNames;
+
+    normalizedLast = cellfun(@lower, lastNames, 'UniformOutput', false);
+    [~, ~, idx] = unique(normalizedLast);
+    counts = accumarray(idx, 1);
+    duplicateMask = counts(idx) > 1;
+
+    for i = 1:numOps
+        if ~duplicateMask(i)
+            continue;
+        end
+        if ~isempty(firstInitials{i})
+            labels{i} = sprintf('%s %s.', lastNames{i}, firstInitials{i});
+        end
+    end
+
+    if ~any(duplicateMask)
+        return;
+    end
+
+    groupMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    for i = 1:numOps
+        if ~duplicateMask(i)
+            continue;
+        end
+        initialKey = lower(firstInitials{i});
+        if isempty(initialKey)
+            initialKey = '_';
+        end
+        key = sprintf('%s|%s', normalizedLast{i}, initialKey);
+        if ~groupMap.isKey(key)
+            groupMap(key) = [];
+        end
+        groupMap(key) = [groupMap(key), i];
+    end
+
+    keys = groupMap.keys;
+    for k = 1:numel(keys)
+        indices = groupMap(keys{k});
+        if numel(indices) <= 1
+            continue;
+        end
+        for j = 1:numel(indices)
+            idxVal = indices(j);
+            if ~isempty(firstNames{idxVal})
+                labels{idxVal} = sprintf('%s %s', lastNames{idxVal}, firstNames{idxVal});
+            elseif ~isempty(firstInitials{idxVal})
+                labels{idxVal} = sprintf('%s %s.', lastNames{idxVal}, firstInitials{idxVal});
+            else
+                labels{idxVal} = lastNames{idxVal};
+            end
+        end
+    end
+end
+
+function info = parseOperatorName(fullName)
+    nameStr = strtrim(string(fullName));
+    info = struct('firstName', "", 'firstInitial', "", 'lastName', "");
+    if strlength(nameStr) == 0
+        return;
+    end
+
+    if contains(nameStr, ',')
+        segments = split(nameStr, ',');
+        lastPart = strtrim(segments(1));
+        firstPart = "";
+        if numel(segments) > 1
+            firstPart = strtrim(segments(2));
+        end
+    else
+        tokens = split(nameStr, ' ');
+        tokens(tokens == "") = [];
+        if numel(tokens) == 0
+            return;
+        end
+        lastPart = string(tokens(end));
+        firstPart = join(tokens(1:end-1), ' ');
+    end
+
+    firstPart = strtrim(firstPart);
+    lastPart = strtrim(lastPart);
+
+    if strlength(firstPart) > 0
+        info.firstName = firstPart;
+        info.firstInitial = extractBetween(firstPart, 1, 1);
+    end
+    info.lastName = lastPart;
+end
+
+function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
+    resolvedDate = resolveScheduleDate(scheduleDate, caseTimelines);
+    baseTitleStr = char(baseTitle);
+    if isnat(resolvedDate)
+        titleStr = baseTitleStr;
+    else
+        titleStr = sprintf('%s - %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+    end
+end
+
+function resolvedDate = resolveScheduleDate(scheduleDate, caseTimelines)
+    resolvedDate = NaT;
+    if nargin >= 1 && ~isempty(scheduleDate) && ~isnat(scheduleDate)
+        resolvedDate = dateshift(scheduleDate, 'start', 'day');
+        return;
+    end
+
+    if nargin >= 2 && ~isempty(caseTimelines)
+        dates = [caseTimelines.date];
+        dates = dates(~isnat(dates));
+        if ~isempty(dates)
+            resolvedDate = dateshift(dates(1), 'start', 'day');
+        end
+    end
 end
 
 function logDebugSummary(caseTimelines, metrics, operatorData)

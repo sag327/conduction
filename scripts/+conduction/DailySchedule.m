@@ -108,6 +108,30 @@ classdef DailySchedule
 
             scheduleObj = conduction.DailySchedule(scheduleDate, labs, labAssignments, metrics);
         end
+
+        function scheduleObj = fromHistoricalTable(dayTable, labsMap)
+            %FROMHISTORICALTABLE Build a DailySchedule from historical table rows.
+            arguments
+                dayTable table
+                labsMap containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')
+            end
+
+            if isempty(dayTable)
+                scheduleObj = conduction.DailySchedule.empty;
+                return;
+            end
+
+            if ~istable(dayTable)
+                error('DailySchedule:InvalidHistoricalData', ...
+                    'Historical data must be provided as a table.');
+            end
+
+            scheduleDate = conduction.DailySchedule.extractDateFromTable(dayTable);
+            [labs, labAssignments] = conduction.DailySchedule.buildAssignmentsFromTable(dayTable, labsMap);
+
+            metrics = struct(); % Metrics will be computed in dedicated analytics later.
+            scheduleObj = conduction.DailySchedule(scheduleDate, labs, labAssignments, metrics);
+        end
     end
 
     methods (Static, Access = private)
@@ -121,6 +145,9 @@ classdef DailySchedule
             else
                 error('DailySchedule:InvalidDate', ...
                     'Unable to parse schedule date from input of type %s.', class(value));
+            end
+            if isnat(dt)
+                dt = NaT;
             end
         end
 
@@ -168,10 +195,10 @@ classdef DailySchedule
                 elseif isfield(cases, 'procStartTime')
                     starts = [starts, [cases.procStartTime]]; %#ok<AGROW>
                 end
-                if isfield(cases, 'endTime')
-                    ends = [ends, [cases.endTime]]; %#ok<AGROW>
-                elseif isfield(cases, 'procEndTime')
+                if isfield(cases, 'procEndTime')
                     ends = [ends, [cases.procEndTime]]; %#ok<AGROW>
+                elseif isfield(cases, 'endTime')
+                    ends = [ends, [cases.endTime]]; %#ok<AGROW>
                 end
             end
 
@@ -180,6 +207,264 @@ classdef DailySchedule
             else
                 range = [min(starts), max(ends)];
             end
+        end
+
+        function dt = extractDateFromTable(dayTable)
+            dt = NaT;
+            if ismember('date', dayTable.Properties.VariableNames)
+                dateValues = dayTable.date;
+                for idx = 1:numel(dateValues)
+                    candidate = conduction.DailySchedule.parseDate(dateValues(idx));
+                    if ~isnat(candidate)
+                        dt = dateshift(candidate, 'start', 'day');
+                        return;
+                    end
+                end
+            end
+            if isnat(dt)
+                dt = NaT;
+            end
+        end
+
+        function [labs, assignments] = buildAssignmentsFromTable(dayTable, labsMap)
+            rooms = repmat("", height(dayTable), 1);
+            if ismember('room', dayTable.Properties.VariableNames)
+                rooms = string(dayTable.room);
+            end
+
+            labKeys = arrayfun(@(name) conduction.DailySchedule.labKeyForRoom(name), rooms, ...
+                'UniformOutput', false);
+            if isempty(labKeys)
+                labs = conduction.Lab.empty(1, 0);
+                assignments = cell(1, 0);
+                return;
+            end
+
+            [uniqueKeys, ~, groupIdx] = unique(labKeys, 'stable');
+            numLabs = numel(uniqueKeys);
+
+            labCells = cell(1, numLabs);
+            assignments = cell(1, numLabs);
+            for labIdx = 1:numLabs
+                rows = dayTable(groupIdx == labIdx, :);
+                sampleRow = rows(1, :);
+                roomName = "";
+                if ismember('room', rows.Properties.VariableNames)
+                    roomName = conduction.DailySchedule.getStringFromRow(sampleRow, 'room');
+                end
+                location = "";
+                if ismember('location', rows.Properties.VariableNames)
+                    location = conduction.DailySchedule.getStringFromRow(sampleRow, 'location');
+                end
+
+                labCells{labIdx} = conduction.DailySchedule.labForKey(uniqueKeys{labIdx}, roomName, location, labsMap);
+                assignments{labIdx} = conduction.DailySchedule.buildCasesForLab(rows);
+            end
+
+            labs = [labCells{:}];
+        end
+
+        function key = labKeyForRoom(roomName)
+            roomStr = string(roomName);
+            if strlength(roomStr) == 0 || roomStr == "<missing>"
+                key = 'lab_unassigned';
+            else
+                key = char(conduction.Lab.canonicalId(roomStr));
+            end
+        end
+
+        function labObj = labForKey(key, roomName, location, labsMap)
+            if labsMap.isKey(key)
+                labObj = labsMap(key);
+                return;
+            end
+
+            label = string(roomName);
+            if strlength(label) == 0
+                label = "Unassigned Lab";
+            end
+
+            loc = string(location);
+            if strlength(loc) == 0
+                loc = "";
+            end
+
+            labObj = conduction.Lab(label, loc);
+        end
+
+        function cases = buildCasesForLab(tableSlice)
+            baseStruct = conduction.DailySchedule.baseCaseStruct();
+            cases = repmat(baseStruct, 0, 1);
+
+            for idx = 1:height(tableSlice)
+                row = tableSlice(idx, :);
+                caseStruct = conduction.DailySchedule.buildCaseFromRow(row);
+                cases(end+1) = caseStruct; %#ok<AGROW>
+            end
+
+            if isempty(cases)
+                cases = struct([]);
+                return;
+            end
+
+            procStarts = [cases.procStartTime];
+            [~, order] = sort(procStarts);
+            cases = cases(order);
+        end
+
+        function caseStruct = buildCaseFromRow(row)
+            caseStruct = conduction.DailySchedule.baseCaseStruct();
+
+            caseIdValue = conduction.DailySchedule.getStringFromRow(row, 'case_id');
+            operatorValue = conduction.DailySchedule.getStringFromRow(row, 'surgeon');
+            roomValue = conduction.DailySchedule.getStringFromRow(row, 'room');
+
+            caseStruct.caseID = char(caseIdValue);
+            caseStruct.operator = char(operatorValue);
+            caseStruct.room = char(roomValue);
+
+            caseStruct.date = conduction.DailySchedule.getDatetimeFromRow(row, 'date');
+
+            procStartDt = conduction.DailySchedule.getDatetimeFromRow(row, 'procedure_start_datetime');
+            procEndDt = conduction.DailySchedule.getDatetimeFromRow(row, 'procedure_complete_datetime');
+
+            procStartMinutes = conduction.DailySchedule.datetimeToMinutes(procStartDt);
+            procEndMinutes = conduction.DailySchedule.datetimeToMinutes(procEndDt);
+
+            setupMinutes = conduction.DailySchedule.getNumericFromRow(row, 'setup_minutes');
+            procedureMinutes = conduction.DailySchedule.getNumericFromRow(row, 'procedure_minutes');
+            postMinutes = conduction.DailySchedule.getNumericFromRow(row, 'post_procedure_minutes');
+            turnoverMinutes = conduction.DailySchedule.getNumericFromRow(row, 'turnover_minutes');
+
+            if isnan(postMinutes)
+                postMinutes = 0;
+            end
+            if isnan(turnoverMinutes)
+                turnoverMinutes = 0;
+            end
+
+            startMinutes = NaN;
+            if ~isnan(procStartMinutes) && ~isnan(setupMinutes)
+                startMinutes = procStartMinutes - setupMinutes;
+            elseif ~isnan(procStartMinutes)
+                startMinutes = procStartMinutes;
+            end
+
+            if isnan(procEndMinutes) && ~isnan(procStartMinutes) && ~isnan(procedureMinutes)
+                procEndMinutes = procStartMinutes + procedureMinutes;
+            end
+
+            if ~isnan(startMinutes) && startMinutes < 0
+                startMinutes = max(startMinutes, 0);
+            end
+
+            caseStruct.startTime = startMinutes;
+            caseStruct.procStartTime = procStartMinutes;
+            caseStruct.procEndTime = procEndMinutes;
+            caseStruct.postTime = max(postMinutes, 0);
+            caseStruct.turnoverTime = max(turnoverMinutes, 0);
+            caseStruct.procedureMinutes = procedureMinutes;
+            caseStruct.procedureDuration = procedureMinutes;
+        end
+
+        function baseStruct = baseCaseStruct()
+            baseStruct = struct( ...
+                'caseID', "", ...
+                'operator', "", ...
+                'startTime', NaN, ...
+                'procStartTime', NaN, ...
+                'procEndTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'procedureMinutes', NaN, ...
+                'procedureDuration', NaN, ...
+                'date', NaT, ...
+                'room', "" ...
+            );
+        end
+
+        function value = getNumericFromRow(row, varName)
+            if ~ismember(varName, row.Properties.VariableNames)
+                value = NaN;
+                return;
+            end
+            raw = row.(varName);
+            if istable(raw)
+                raw = raw{1,1};
+            end
+            if iscell(raw)
+                raw = raw{1};
+            end
+            if isstring(raw) || ischar(raw)
+                value = str2double(raw);
+            else
+                value = double(raw);
+            end
+            if isnan(value)
+                value = NaN;
+            end
+        end
+
+        function str = getStringFromRow(row, varName)
+            if ~ismember(varName, row.Properties.VariableNames)
+                str = "";
+                return;
+            end
+            raw = row.(varName);
+            if istable(raw)
+                raw = raw{1,1};
+            end
+            if iscell(raw)
+                raw = raw{1};
+            end
+            if isstring(raw)
+                str = raw(1);
+            elseif ischar(raw)
+                str = string(raw);
+            elseif isnumeric(raw)
+                if isempty(raw)
+                    str = "";
+                else
+                    str = string(raw(1));
+                end
+            else
+                str = "";
+            end
+        end
+
+        function dt = getDatetimeFromRow(row, varName)
+            if ~ismember(varName, row.Properties.VariableNames)
+                dt = NaT;
+                return;
+            end
+            raw = row.(varName);
+            if istable(raw)
+                raw = raw{1,1};
+            end
+            if iscell(raw)
+                raw = raw{1};
+            end
+            if isa(raw, 'datetime')
+                dt = raw;
+            elseif isnumeric(raw)
+                dt = datetime(raw, 'ConvertFrom', 'excel');
+            elseif isstring(raw) || ischar(raw)
+                try
+                    dt = datetime(string(raw));
+                catch
+                    dt = NaT;
+                end
+            else
+                dt = NaT;
+            end
+        end
+
+        function mins = datetimeToMinutes(dt)
+            if isempty(dt) || isnat(dt)
+                mins = NaN;
+                return;
+            end
+            mins = minutes(timeofday(dt));
         end
     end
 end

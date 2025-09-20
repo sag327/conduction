@@ -35,6 +35,7 @@ classdef HistoricalDataset
             obj.Operators = entities.operators;
             obj.Labs = entities.labs;
             obj.CaseRequests = entities.caseRequests;
+
         end
 
         function summary = dailyCaseSummary(obj)
@@ -69,6 +70,53 @@ classdef HistoricalDataset
             targetDate = datetime(targetDate);
             mask = dateshift(obj.Table.date, 'start', 'day') == dateshift(targetDate, 'start', 'day');
             cases = obj.CaseRequests(mask);
+        end
+
+        function schedule = dailyScheduleForDate(obj, targetDate)
+            arguments
+                obj
+                targetDate
+            end
+
+            if isempty(obj.Table)
+                schedule = conduction.DailySchedule.empty;
+                return;
+            end
+
+            dayValue = dateshift(datetime(targetDate), 'start', 'day');
+            dateVector = dateshift(obj.Table.date, 'start', 'day');
+            mask = dateVector == dayValue;
+            if ~any(mask)
+                schedule = conduction.DailySchedule.empty;
+                return;
+            end
+
+            dayTable = obj.Table(mask, :);
+            schedule = conduction.DailySchedule.fromHistoricalTable(dayTable, obj.Labs);
+        end
+
+        function schedules = dailySchedules(obj)
+            if isempty(obj.Table)
+                schedules = conduction.DailySchedule.empty;
+                return;
+            end
+
+            uniqueDates = unique(dateshift(obj.Table.date, 'start', 'day'));
+            scheduleCells = cell(1, numel(uniqueDates));
+            count = 0;
+            for idxDate = 1:numel(uniqueDates)
+                schedule = obj.dailyScheduleForDate(uniqueDates(idxDate));
+                if ~isempty(schedule)
+                    count = count + 1;
+                    scheduleCells{count} = schedule;
+                end
+            end
+
+            if count == 0
+                schedules = conduction.DailySchedule.empty;
+            else
+                schedules = [scheduleCells{1:count}];
+            end
         end
 
         function cases = casesBetween(obj, startDate, endDate)
@@ -179,4 +227,38 @@ classdef HistoricalDataset
             labIds = obj.Labs.keys;
         end
     end
+
+    methods (Access = private)
+        function [schedules, indexMap] = buildDailySchedules(obj)
+            if isempty(obj.Table)
+                schedules = conduction.DailySchedule.empty;
+                indexMap = containers.Map('KeyType', 'char', 'ValueType', 'double');
+                return;
+            end
+
+            uniqueDates = unique(dateshift(obj.Table.date, 'start', 'day'));
+            scheduleCells = cell(1, numel(uniqueDates));
+            indexMap = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            count = 0;
+            dateVector = dateshift(obj.Table.date, 'start', 'day');
+            for idxDate = 1:numel(uniqueDates)
+                dayValue = uniqueDates(idxDate);
+                mask = dateVector == dayValue;
+                dayTable = obj.Table(mask, :);
+                schedule = conduction.DailySchedule.fromHistoricalTable(dayTable, obj.Labs);
+                if ~isempty(schedule)
+                    count = count + 1;
+                    scheduleCells{count} = schedule;
+                    indexMap(conduction.HistoricalDataset.scheduleKey(dayValue)) = count;
+                end
+            end
+
+            if count == 0
+                schedules = conduction.DailySchedule.empty;
+            else
+                schedules = [scheduleCells{1:count}];
+            end
+        end
+    end
+
 end

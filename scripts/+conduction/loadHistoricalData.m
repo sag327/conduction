@@ -85,6 +85,9 @@ addCanonical('in_room_to_induction_minutes', {'In Room to Anesthesia Induction (
 addCanonical('setup_minutes', {'In Room to Procedure Start (Minutes)', 'InRoomToProcedureStart_Minutes_', 'In_Room_to_Procedure_Start_Minutes'});
 addCanonical('procedure_minutes', {'Procedure Start to Procedure Complete (Minutes)', 'Procedure Duration (Minutes)'});
 addCanonical('post_procedure_minutes', {'Procedure Complete to Out of Room (Minutes)', 'Procedure Complete to Exit (Minutes)'});
+addCanonical('in_room_to_out_of_room_minutes', {'In Room to Out of Room (Minutes)'});
+addCanonical('procedure_start_datetime', {'Procedure Start Date and Time'});
+addCanonical('procedure_complete_datetime', {'Procedure Complete Date and Time'});
 
     function addCanonical(name, aliases)
         mapping(index).canonical = name; %#ok<AGROW>
@@ -172,7 +175,7 @@ for idx = 1:numel(stringColumns)
     end
 end
 
-numericColumns = {'in_room_to_induction_minutes', 'setup_minutes', 'procedure_minutes', 'post_procedure_minutes'};
+numericColumns = {'in_room_to_induction_minutes', 'setup_minutes', 'procedure_minutes', 'post_procedure_minutes', 'in_room_to_out_of_room_minutes'};
 for idx = 1:numel(numericColumns)
     col = numericColumns{idx};
     if ismember(col, tbl.Properties.VariableNames)
@@ -182,6 +185,14 @@ end
 
 if ismember('date', tbl.Properties.VariableNames)
     tbl.date = toDateVector(tbl.date);
+end
+
+datetimeColumns = {'procedure_start_datetime', 'procedure_complete_datetime'};
+for idx = 1:numel(datetimeColumns)
+    col = datetimeColumns{idx};
+    if ismember(col, tbl.Properties.VariableNames)
+        tbl.(col) = toDateVector(tbl.(col));
+    end
 end
 
 if ismember('case_id', tbl.Properties.VariableNames)
