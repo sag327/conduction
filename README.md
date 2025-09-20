@@ -48,3 +48,17 @@ Use `config = conduction.configureOptimization(...)` to build an options struct,
 config = conduction.configureOptimization('NumLabs',5,'OptimizationMetric','operatorIdle');
 [newDaily, outcome] = conduction.optimizeDailySchedule(oldDaily, config);
 ```
+
+### Batch Optimization
+
+Use `conduction.ScheduleCollection.fromFile` to load a dataset and `conduction.batch.Optimizer` to run `optimizeDailySchedule` across each day. Example:
+
+```matlab
+collection = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
+config = conduction.configureOptimization('NumLabs',5,'OptimizationMetric','operatorIdle');
+batchOptions = conduction.batch.OptimizationOptions.fromArgs('SchedulingConfig', config, 'Parallel', true);
+optimizer = conduction.batch.Optimizer(batchOptions);
+batchResult = optimizer.run(collection);
+```
+
+`batchResult.results` is an array of `OptimizationResult` objects; `batchResult.failures` lists skipped days (e.g., missing data).

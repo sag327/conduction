@@ -32,3 +32,7 @@ conduction.visualizeDailySchedule(newSchedule, 'Title', 'Rescheduled Jan 2, 2025
 - Integrate optimization results into analytics pipeline once shared metrics module exists.
 - Add tests comparing legacy vs. refactored schedules for regression safety.
 - Refine `DailySchedule` <-> `CaseRequest` bridge so typed objects feed the optimizer directly without interim structs.
+
+## Batch Optimization
+- Added conduction.batch.Optimizer to iterate over ScheduleCollection daily schedules.
+- Supports parallel execution (set 'Parallel', true) with automatic filtering of days missing procedure durations.
