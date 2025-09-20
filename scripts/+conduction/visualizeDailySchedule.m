@@ -1,0 +1,722 @@
+function visualizeDailySchedule(scheduleInput, varargin)
+%VISUALIZEDAILYSCHEDULE Visualize lab assignments and operator timelines.
+%   visualizeDailySchedule(dailySchedule) plots the schedule stored in a
+%   conduction.DailySchedule instance. Legacy schedule/results structs are
+%   supported via visualizeDailySchedule(scheduleStruct, resultsStruct).
+%
+%   Name-value options:
+%     'Title'        - Chart title (default 'EP Lab Schedule')
+%     'ShowLabels'   - Display case labels (default true)
+%     'TimeRange'    - [start end] minutes since midnight override
+%     'FontSize'     - Base font size (default 8)
+%     'FigureSize'   - [width height] pixels (default [1200 800])
+%     'ShowTurnover' - Plot turnover segments (default false)
+%     'Debug'        - Emit summary logging to console (default false)
+%
+%   Example:
+%       daily = conduction.DailySchedule.fromLegacyStruct(schedule, results);
+%       conduction.visualizeDailySchedule(daily, 'Title', 'May 5 Schedule');
+
+    [dailySchedule, remaining] = resolveDailySchedule(scheduleInput, varargin{:});
+    opts = parseOptions(remaining{:});
+
+    labAssignments = dailySchedule.labAssignments();
+    if isempty(labAssignments) || all(cellfun(@isempty, labAssignments))
+        fprintf('No schedule data to visualize.\n');
+        return;
+    end
+
+    caseTimelines = buildCaseTimelines(dailySchedule, opts.ShowTurnover);
+    if isempty(caseTimelines)
+        fprintf('No cases available for visualization.\n');
+        return;
+    end
+
+    [scheduleStartHour, scheduleEndHour] = determineTimeWindow(caseTimelines, opts.TimeRange);
+
+    operatorNames = string({caseTimelines.operatorName});
+    uniqueOperators = unique(operatorNames, 'stable');
+
+    if isempty(uniqueOperators)
+        operatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    else
+        colorCells = num2cell(lines(numel(uniqueOperators)), 2);
+        operatorColors = containers.Map(cellstr(uniqueOperators), colorCells);
+    end
+
+    metrics = dailySchedule.metrics();
+    labLabels = resolveLabLabels(dailySchedule, numel(labAssignments));
+
+    fig = figure('Name', 'Daily Schedule Visualization', ...
+        'Position', [100, 100, opts.FigureSize(1), opts.FigureSize(2)], ...
+        'Color', 'white');
+
+    axSchedule = subplot(3, 1, [1 2], 'Parent', fig, 'Color', 'white');
+    hold(axSchedule, 'on');
+
+    plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
+
+    scheduleTitle = composeTitle(opts.Title, dailySchedule.Date, caseTimelines);
+    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold', 'Color', 'black');
+    ylabel(axSchedule, 'Time of Day', 'Color', 'black');
+
+    annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour);
+    hold(axSchedule, 'off');
+
+    axOperators = subplot(3, 1, 3, 'Parent', fig, 'Color', 'white');
+    hold(axOperators, 'on');
+
+    operatorData = calculateOperatorTimelines(caseTimelines, uniqueOperators);
+    plotOperatorTimeline(axOperators, operatorData, operatorColors, scheduleStartHour, scheduleEndHour, opts.FontSize);
+    hold(axOperators, 'off');
+
+    if opts.Debug
+        logDebugSummary(caseTimelines, metrics, operatorData);
+    end
+end
+
+function [dailySchedule, remaining] = resolveDailySchedule(scheduleInput, varargin)
+    if isa(scheduleInput, 'conduction.DailySchedule')
+        dailySchedule = scheduleInput;
+        remaining = varargin;
+        return;
+    end
+
+    resultsStruct = struct();
+    remaining = varargin;
+    if ~isempty(remaining) && isstruct(remaining{1})
+        resultsStruct = remaining{1};
+        remaining(1) = [];
+    end
+
+    if ~isstruct(scheduleInput)
+        error('visualizeDailySchedule:InvalidInput', ...
+            'Expected a conduction.DailySchedule or legacy schedule struct.');
+    end
+
+    dailySchedule = conduction.DailySchedule.fromLegacyStruct(scheduleInput, resultsStruct);
+end
+
+function opts = parseOptions(varargin)
+    p = inputParser;
+    addParameter(p, 'Title', 'EP Lab Schedule', @ischarLike);
+    addParameter(p, 'ShowLabels', true, @islogical);
+    addParameter(p, 'TimeRange', [], @(x) isempty(x) || (isnumeric(x) && numel(x) == 2));
+    addParameter(p, 'FontSize', 8, @(x) isnumeric(x) && isscalar(x) && x > 0);
+    addParameter(p, 'FigureSize', [1200, 800], @(x) isnumeric(x) && numel(x) == 2);
+    addParameter(p, 'ShowTurnover', false, @islogical);
+    addParameter(p, 'Debug', false, @islogical);
+    parse(p, varargin{:});
+    opts = p.Results;
+end
+
+function caseTimelines = buildCaseTimelines(dailySchedule, includeTurnover)
+    labAssignments = dailySchedule.labAssignments();
+    caseTimelines = repmat(struct( ...
+        'labIndex', [], 'caseId', string.empty, 'operatorName', string.empty, ...
+        'setupStart', NaN, 'procStart', NaN, 'procEnd', NaN, 'postDuration', NaN, ...
+        'turnoverDuration', NaN, 'date', NaT, 'postEnd', NaN, 'turnoverEnd', NaN, ...
+        'scheduleEnd', NaN), 0, 1);
+    counter = 0;
+
+    for labIdx = 1:numel(labAssignments)
+        labCases = labAssignments{labIdx};
+        if isempty(labCases)
+            continue;
+        end
+        labCases = labCases(:)';
+        for caseIdx = 1:numel(labCases)
+            caseItem = labCases(caseIdx);
+            counter = counter + 1;
+            caseEntry = normalizeCaseItem(caseItem, labIdx, includeTurnover, counter);
+            if counter == 1
+                caseTimelines = caseEntry;
+            else
+                caseTimelines(counter) = caseTimelines(1); %#ok<AGROW>
+                caseTimelines(counter) = caseEntry;
+            end
+        end
+    end
+end
+
+function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, sequenceId)
+    caseTimeline = struct();
+    caseTimeline.labIndex = labIdx;
+    caseTimeline.caseId = resolveCaseId(caseItem, sequenceId);
+    caseTimeline.operatorName = resolveOperatorName(caseItem);
+    caseTimeline.setupStart = getNumericField(caseItem, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
+    caseTimeline.procStart = getNumericField(caseItem, {'procStartTime', 'procedureStartTime', 'procedureStart'});
+    caseTimeline.procEnd = getNumericField(caseItem, {'procEndTime', 'procedureEndTime', 'procedureEnd'});
+    caseTimeline.postDuration = getNumericField(caseItem, {'postTime', 'postDuration', 'postProcedureDuration'});
+    caseTimeline.turnoverDuration = getNumericField(caseItem, {'turnoverTime', 'turnoverDuration'});
+    caseTimeline.date = resolveCaseDate(caseItem);
+
+    if isnan(caseTimeline.setupStart)
+        caseTimeline.setupStart = caseTimeline.procStart;
+    end
+    if isnan(caseTimeline.procStart)
+        caseTimeline.procStart = caseTimeline.setupStart;
+    end
+    if isnan(caseTimeline.procEnd)
+        durationHint = getNumericField(caseItem, {'procedureMinutes', 'procedureDuration'});
+        if ~isnan(durationHint) && ~isnan(caseTimeline.procStart)
+            caseTimeline.procEnd = caseTimeline.procStart + durationHint;
+        else
+            caseTimeline.procEnd = caseTimeline.procStart;
+        end
+    end
+
+    if isnan(caseTimeline.postDuration)
+        endTime = getNumericField(caseItem, {'endTime', 'caseEndTime'});
+        if ~isnan(endTime) && ~isnan(caseTimeline.procEnd)
+            caseTimeline.postDuration = max(0, endTime - caseTimeline.procEnd);
+        else
+            caseTimeline.postDuration = 0;
+        end
+    end
+
+    if isnan(caseTimeline.turnoverDuration)
+        caseTimeline.turnoverDuration = 0;
+    end
+
+    caseTimeline.postEnd = caseTimeline.procEnd + max(0, caseTimeline.postDuration);
+    if includeTurnover
+        caseTimeline.turnoverEnd = caseTimeline.postEnd + max(0, caseTimeline.turnoverDuration);
+    else
+        caseTimeline.turnoverEnd = caseTimeline.postEnd;
+        caseTimeline.turnoverDuration = 0;
+    end
+
+    caseTimeline.scheduleEnd = caseTimeline.turnoverEnd;
+end
+
+function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange)
+    if ~isempty(overrideRange)
+        startHour = overrideRange(1) / 60;
+        endHour = overrideRange(2) / 60;
+        return;
+    end
+
+    starts = [caseTimelines.setupStart];
+    starts = starts(~isnan(starts));
+    ends = [caseTimelines.scheduleEnd];
+    ends = ends(~isnan(ends));
+
+    if isempty(starts) || isempty(ends)
+        startHour = 6;
+        endHour = 18;
+        return;
+    end
+
+    scheduleStart = min(starts);
+    scheduleEnd = max(ends);
+
+    startHour = (scheduleStart - 60) / 60;
+    endHour = (scheduleEnd + 60) / 60;
+end
+
+function labLabels = resolveLabLabels(dailySchedule, expectedLabs)
+    labs = dailySchedule.Labs;
+    if isempty(labs) || numel(labs) ~= expectedLabs
+        labLabels = arrayfun(@(idx) sprintf('Lab %d', idx), 1:expectedLabs, 'UniformOutput', false);
+        return;
+    end
+
+    labLabels = arrayfun(@(lab) labelForLab(lab), labs, 'UniformOutput', false);
+end
+
+function label = labelForLab(lab)
+    room = char(lab.Room);
+    location = char(lab.Location);
+    if ~isempty(room)
+        if isempty(location)
+            label = room;
+        else
+            label = sprintf('%s (%s)', room, location);
+        end
+    else
+        label = char(lab.Id);
+    end
+end
+
+function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, operatorColors, opts)
+    numLabs = numel(labLabels);
+
+    set(ax, 'YDir', 'reverse');
+    ylim(ax, [startHour, endHour]);
+    xlim(ax, [0.5, numLabs + 0.5]);
+
+    addHourGrid(ax, startHour, endHour);
+
+    grayColor = [0.7, 0.7, 0.7];
+    turnoverColor = [0.9, 0.9, 0.5];
+
+    for idx = 1:numel(caseTimelines)
+        entry = caseTimelines(idx);
+        xPos = entry.labIndex;
+        barWidth = 0.8;
+
+        setupStartHour = entry.setupStart / 60;
+        procStartHour = entry.procStart / 60;
+        procEndHour = entry.procEnd / 60;
+        postEndHour = entry.postEnd / 60;
+        turnoverEndHour = entry.turnoverEnd / 60;
+
+        if ~isnan(setupStartHour) && ~isnan(procStartHour)
+            setupDuration = procStartHour - setupStartHour;
+            if setupDuration > 0
+                rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
+                    'FaceColor', grayColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+            end
+        end
+
+        if ~isnan(procStartHour) && ~isnan(procEndHour)
+            procDuration = procEndHour - procStartHour;
+            if procDuration < 0
+                procDuration = 0;
+            end
+            opKey = char(entry.operatorName);
+            if isKey(operatorColors, opKey)
+                opColor = operatorColors(opKey);
+            else
+                opColor = [0.5, 0.5, 0.5];
+            end
+            rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
+                'FaceColor', opColor, 'EdgeColor', 'black', 'LineWidth', 1);
+        end
+
+        if ~isnan(procEndHour) && ~isnan(postEndHour)
+            postDuration = postEndHour - procEndHour;
+            if postDuration > 0
+                rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
+                    'FaceColor', grayColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+            end
+        end
+
+        if opts.ShowTurnover && ~isnan(postEndHour) && ~isnan(turnoverEndHour)
+            turnoverDuration = turnoverEndHour - postEndHour;
+            if turnoverDuration > 0
+                rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
+                    'FaceColor', turnoverColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+            end
+        end
+
+        if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
+            procDuration = max(procEndHour - procStartHour, eps);
+            labelY = procStartHour + procDuration / 2;
+            text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName), ...
+                'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'middle', ...
+                'FontSize', opts.FontSize, ...
+                'FontWeight', 'bold', ...
+                'Color', 'white');
+        end
+    end
+
+    set(ax, 'XTick', 1:numLabs, 'XTickLabel', labLabels);
+    formatYAxisTimeTicks(ax, startHour, endHour);
+    ax.XAxis.Color = 'black';
+    ax.YAxis.Color = 'black';
+end
+
+function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
+    numCases = numel(caseTimelines);
+    numLabs = max([caseTimelines.labIndex]);
+    operatorNames = unique(string({caseTimelines.operatorName}));
+    numOperators = numel(operatorNames);
+
+    startCandidates = [caseTimelines.setupStart];
+    startCandidates = startCandidates(~isnan(startCandidates));
+    endCandidates = [caseTimelines.scheduleEnd];
+    endCandidates = endCandidates(~isnan(endCandidates));
+    if isempty(startCandidates) || isempty(endCandidates)
+        fallbackMakespan = (endHour - startHour) * 60;
+    else
+        fallbackMakespan = max(endCandidates) - min(startCandidates);
+    end
+    makespanHours = fetchMetric(metrics, 'makespan', fallbackMakespan) / 60;
+    meanUtilization = fetchMetric(metrics, 'meanLabUtilization', NaN) * 100;
+    totalIdleHours = fetchMetric(metrics, 'totalOperatorIdleTime', NaN) / 60;
+    totalOvertimeHours = fetchMetric(metrics, 'totalOperatorOvertime', NaN) / 60;
+
+    summaryParts = {
+        sprintf('Cases: %d', numCases), ...
+        sprintf('Labs: %d', numLabs), ...
+        sprintf('Operators: %d', numOperators), ...
+        sprintf('Makespan: %.1f hrs', makespanHours)
+    };
+
+    if ~isnan(meanUtilization)
+        summaryParts{end+1} = sprintf('Mean lab util: %.1f%%', meanUtilization); %#ok<AGROW>
+    end
+    if ~isnan(totalIdleHours)
+        summaryParts{end+1} = sprintf('Op idle: %.1f hrs', totalIdleHours); %#ok<AGROW>
+    end
+    if ~isnan(totalOvertimeHours)
+        summaryParts{end+1} = sprintf('Op overtime: %.1f hrs', totalOvertimeHours); %#ok<AGROW>
+    end
+
+    summaryText = strjoin(summaryParts, ' | ');
+
+    xLimits = xlim(ax);
+    yLimits = ylim(ax);
+    text(ax, xLimits(2) - 0.1, max(yLimits) - 0.2, summaryText, ...
+        'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
+        'FontSize', 10, 'Color', [0.4, 0.4, 0.4], ...
+        'BackgroundColor', [1, 1, 1]);
+
+    sixPMHour = 18;
+    if sixPMHour >= startHour && sixPMHour <= endHour
+        line(ax, xLimits, [sixPMHour, sixPMHour], ...
+            'Color', 'red', 'LineStyle', '--', 'LineWidth', 2, 'Parent', ax);
+        text(ax, xLimits(2) - 0.1, sixPMHour + 0.1, '6 PM', ...
+            'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
+            'FontSize', 10, 'FontWeight', 'bold', 'Color', 'red');
+    end
+end
+
+function operatorData = calculateOperatorTimelines(caseTimelines, uniqueOperators)
+    operatorData = struct('name', {}, 'cases', {}, 'workingPeriods', {}, 'idlePeriods', {}, ...
+        'totalIdle', {}, 'firstStart', {}, 'lastEnd', {});
+
+    if isempty(uniqueOperators)
+        return;
+    end
+
+    operatorNames = string({caseTimelines.operatorName});
+    for idx = 1:numel(uniqueOperators)
+        opName = uniqueOperators(idx);
+        mask = operatorNames == opName;
+        opCases = caseTimelines(mask);
+        if isempty(opCases)
+            continue;
+        end
+
+        [~, order] = sort([opCases.procStart]);
+        opCases = opCases(order);
+
+        workingPeriods = [[opCases.procStart]' [opCases.procEnd]'];
+        idlePeriods = [];
+        totalIdle = 0;
+        for j = 2:size(workingPeriods, 1)
+            gap = workingPeriods(j,1) - workingPeriods(j-1,2);
+            if gap > 3
+                idlePeriods(end+1,:) = [workingPeriods(j-1,2), workingPeriods(j,1)]; %#ok<AGROW>
+                totalIdle = totalIdle + gap;
+            end
+        end
+
+        operatorData(end+1) = struct(...
+            'name', opName, ...
+            'cases', opCases, ...
+            'workingPeriods', workingPeriods, ...
+            'idlePeriods', idlePeriods, ...
+            'totalIdle', totalIdle, ...
+            'firstStart', workingPeriods(1,1), ...
+            'lastEnd', workingPeriods(end,2)); %#ok<AGROW>
+    end
+end
+
+function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHour, fontSize)
+    numOperators = numel(operatorData);
+    if numOperators == 0
+        xlabel(ax, 'Time of Day', 'Color', 'black');
+        title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black');
+        return;
+    end
+
+    for idx = 1:numOperators
+        opInfo = operatorData(idx);
+        yPos = idx;
+        barHeight = 0.6;
+        colorKey = char(opInfo.name);
+        if isKey(operatorColors, colorKey)
+            opColor = operatorColors(colorKey);
+        else
+            opColor = [0.5, 0.5, 0.5];
+        end
+
+        for row = 1:size(opInfo.workingPeriods, 1)
+            startMin = opInfo.workingPeriods(row,1);
+            endMin = opInfo.workingPeriods(row,2);
+            if isnan(startMin) || isnan(endMin)
+                continue;
+            end
+            rectangle('Position', [startMin/60, yPos - barHeight/2, (endMin-startMin)/60, barHeight], ...
+                'FaceColor', opColor, 'EdgeColor', 'black', 'LineWidth', 1, 'Parent', ax);
+        end
+
+        for row = 1:size(opInfo.idlePeriods, 1)
+            startMin = opInfo.idlePeriods(row,1);
+            endMin = opInfo.idlePeriods(row,2);
+            if isnan(startMin) || isnan(endMin)
+                continue;
+            end
+            durationHours = (endMin - startMin) / 60;
+            rectangle('Position', [startMin/60, yPos - barHeight/2, durationHours, barHeight], ...
+                'FaceColor', [0.95, 0.95, 0.95], 'EdgeColor', [0.7, 0.7, 0.7], ...
+                'LineStyle', '--', 'Parent', ax);
+            if durationHours > 0.25
+                text(ax, (startMin + endMin) / 120, yPos, sprintf('%.1fh', durationHours), ...
+                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                    'FontSize', fontSize-1, 'Color', [0.4, 0.4, 0.4]);
+            end
+        end
+
+        if opInfo.totalIdle > 3
+            text(ax, opInfo.lastEnd/60 + 0.2, yPos, sprintf('Total Idle: %.1fh', opInfo.totalIdle/60), ...
+                'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle', ...
+                'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [0.6, 0.3, 0.3], ...
+                'BackgroundColor', [1, 1, 0.8]);
+        end
+    end
+
+    set(ax, 'YDir', 'normal');
+    xlim(ax, [startHour, endHour + 1]);
+    ylim(ax, [0.5, numOperators + 0.5]);
+
+    labels = arrayfun(@(op) extractLastName(op.name), operatorData, 'UniformOutput', false);
+    set(ax, 'YTick', 1:numOperators, 'YTickLabel', labels);
+
+    formatXAxisTimeTicks(ax, startHour, endHour);
+    xlabel(ax, 'Time of Day', 'Color', 'black');
+    title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black');
+    grid(ax, 'on');
+    set(ax, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
+
+    sixPMHour = 18;
+    if sixPMHour >= startHour && sixPMHour <= endHour
+        line(ax, [sixPMHour, sixPMHour], ylim(ax), 'Color', 'red', 'LineStyle', '--', 'LineWidth', 1);
+    end
+end
+
+function addHourGrid(ax, startHour, endHour)
+    hourTicks = floor(startHour):ceil(endHour);
+    xLimits = xlim(ax);
+    for h = hourTicks
+        line(ax, xLimits, [h, h], 'Color', [0.85, 0.85, 0.85], 'LineStyle', '-', 'LineWidth', 0.5, 'Parent', ax);
+    end
+end
+
+function formatYAxisTimeTicks(ax, startHour, endHour)
+    hourTicks = floor(startHour):ceil(endHour);
+    hourLabels = arrayfun(@hourLabel, hourTicks, 'UniformOutput', false);
+    set(ax, 'YTick', hourTicks, 'YTickLabel', hourLabels);
+end
+
+function formatXAxisTimeTicks(ax, startHour, endHour)
+    hourTicks = floor(startHour):ceil(endHour);
+    hourLabels = arrayfun(@hourLabel, hourTicks, 'UniformOutput', false);
+    set(ax, 'XTick', hourTicks, 'XTickLabel', hourLabels);
+end
+
+function label = hourLabel(hourValue)
+    displayHour = mod(hourValue, 24);
+    if hourValue >= 24
+        label = sprintf('%02d:00 (+1)', round(displayHour));
+    else
+        label = sprintf('%02d:00', round(displayHour));
+    end
+end
+
+function label = composeCaseLabel(caseId, operatorName)
+    label = sprintf('%s\n%s', char(caseId), extractLastName(operatorName));
+end
+
+function lastName = extractLastName(fullName)
+    parts = split(strtrim(string(fullName)), {',', ' '});
+    parts(parts == "") = [];
+    if isempty(parts)
+        lastName = 'Unknown';
+    else
+        lastName = char(parts(end));
+    end
+end
+
+function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
+    if nargin < 3 || isempty(caseTimelines)
+        dateCandidate = scheduleDate;
+    else
+        dates = [caseTimelines.date];
+        dates = dates(~isnat(dates));
+        if isempty(dates)
+            dateCandidate = scheduleDate;
+        else
+            dateCandidate = dates(1);
+        end
+    end
+
+    if isempty(dateCandidate) || isnat(dateCandidate)
+        titleStr = char(baseTitle);
+        return;
+    end
+
+    titleStr = sprintf('%s - %s', char(baseTitle), datestr(dateCandidate, 'mmm dd, yyyy'));
+end
+
+function logDebugSummary(caseTimelines, metrics, operatorData)
+    fprintf('\nDaily Schedule Visualization Summary:\n');
+    fprintf('  Total cases: %d\n', numel(caseTimelines));
+    fprintf('  Labs used: %d\n', max([caseTimelines.labIndex]));
+    opNames = arrayfun(@(op) char(op.name), operatorData, 'UniformOutput', false);
+    fprintf('  Operators: %d (%s)\n', numel(opNames), strjoin(opNames, ', '));
+
+    fields = {'makespan', 'meanLabUtilization', 'totalOperatorIdleTime', 'totalOperatorOvertime'};
+    for idx = 1:numel(fields)
+        key = fields{idx};
+        if isfield(metrics, key)
+            fprintf('  %s: %g\n', key, castToDouble(metrics.(key)));
+        end
+    end
+end
+
+function val = fetchMetric(metrics, field, fallback)
+    if nargin < 3
+        fallback = NaN;
+    end
+    if isempty(metrics) || ~isstruct(metrics)
+        val = fallback;
+        return;
+    end
+    if isfield(metrics, field)
+        val = castToDouble(metrics.(field));
+    else
+        val = fallback;
+    end
+end
+
+function flag = ischarLike(value)
+    flag = ischar(value) || (isstring(value) && isscalar(value));
+end
+
+function value = getNumericField(source, candidates)
+    value = NaN;
+    for idx = 1:numel(candidates)
+        name = candidates{idx};
+        if isstruct(source) && isfield(source, name)
+            raw = source.(name);
+        elseif isobject(source) && isprop(source, name)
+            raw = source.(name);
+        else
+            continue;
+        end
+        value = castToDouble(raw);
+        if ~isnan(value)
+            return;
+        end
+    end
+end
+
+function numeric = castToDouble(raw)
+    if isempty(raw)
+        numeric = NaN;
+        return;
+    end
+    if iscell(raw)
+        raw = raw{1};
+    end
+    if isnumeric(raw)
+        numeric = double(raw(1));
+    elseif isduration(raw)
+        numeric = minutes(raw(1));
+    elseif isstring(raw) || ischar(raw)
+        numeric = str2double(raw(1));
+    else
+        numeric = NaN;
+    end
+end
+
+function caseId = resolveCaseId(caseItem, fallbackIndex)
+    candidates = {'caseID', 'CaseId', 'caseId', 'id', 'CaseID'};
+    for idx = 1:numel(candidates)
+        name = candidates{idx};
+        if isstruct(caseItem) && isfield(caseItem, name)
+            candidate = asString(caseItem.(name));
+        elseif isobject(caseItem) && isprop(caseItem, name)
+            candidate = asString(caseItem.(name));
+        else
+            continue;
+        end
+        if strlength(candidate) > 0
+            caseId = candidate;
+            return;
+        end
+    end
+    caseId = string(sprintf('Case %d', fallbackIndex));
+end
+
+function operatorName = resolveOperatorName(caseItem)
+    if isstruct(caseItem)
+        fields = {'operator', 'Operator', 'attending', 'physician'};
+        for idx = 1:numel(fields)
+            name = fields{idx};
+            if isfield(caseItem, name)
+                candidate = asString(caseItem.(name));
+                if strlength(candidate) > 0
+                    operatorName = candidate;
+                    return;
+                end
+            end
+        end
+    elseif isobject(caseItem)
+        if isprop(caseItem, 'Operator') && ~isempty(caseItem.Operator)
+            operatorName = asString(caseItem.Operator.Name);
+            if strlength(operatorName) > 0
+                return;
+            end
+        end
+        if isprop(caseItem, 'operator')
+            candidate = asString(caseItem.operator);
+            if strlength(candidate) > 0
+                operatorName = candidate;
+                return;
+            end
+        end
+    end
+    operatorName = string('Unknown Operator');
+end
+
+function dt = resolveCaseDate(caseItem)
+    if isstruct(caseItem)
+        if isfield(caseItem, 'date')
+            dt = parseMaybeDate(caseItem.date);
+            return;
+        end
+    elseif isobject(caseItem)
+        if isprop(caseItem, 'Date')
+            dt = caseItem.Date;
+            return;
+        end
+    end
+    dt = NaT;
+end
+
+function str = asString(value)
+    if isstring(value)
+        str = value(1);
+    elseif ischar(value)
+        str = string(value);
+    elseif isnumeric(value) && isscalar(value)
+        str = string(value);
+    else
+        str = string.empty;
+    end
+end
+
+function dt = parseMaybeDate(value)
+    if isempty(value)
+        dt = NaT;
+        return;
+    end
+    if isa(value, 'datetime')
+        dt = value;
+    elseif isnumeric(value)
+        dt = datetime(value, 'ConvertFrom', 'datenum');
+    else
+        try
+            dt = datetime(string(value));
+        catch
+            dt = NaT;
+        end
+    end
+end
