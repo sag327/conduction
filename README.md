@@ -61,4 +61,4 @@ optimizer = conduction.batch.Optimizer(batchOptions);
 batchResult = optimizer.run(collection);
 ```
 
-`batchResult.results` is an array of `OptimizationResult` objects; `batchResult.failures` lists skipped days (e.g., missing data).
+`batchResult.results` is an array of `OptimizationResult` objects; `batchResult.failures` lists any days skipped prior to optimization. Progress messages show the number of days processed, which dates were skipped for missing procedure timestamps, and a final success/skip summary.

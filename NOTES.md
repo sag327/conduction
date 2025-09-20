@@ -1,8 +1,8 @@
 # Project Notes
 
 ## Branches
-- `main`: includes visualization refactor and scheduling framework merged from `visualization-scripts`.
-- `scheduleOptimization`: current working branch for daily schedule optimization workflow.
+- `main`: latest stable refactor (visualization + single-day optimizer).
+- `datasetOptimization`: current branch adding batch optimization across schedule collections.
 
 ## Recent Work
 - Added `conduction.DailySchedule` enhancements and adapters to store setup/procedure/post/turnover durations, priorities, lab preferences, and admission status.
@@ -34,5 +34,7 @@ conduction.visualizeDailySchedule(newSchedule, 'Title', 'Rescheduled Jan 2, 2025
 - Refine `DailySchedule` <-> `CaseRequest` bridge so typed objects feed the optimizer directly without interim structs.
 
 ## Batch Optimization
-- Added conduction.batch.Optimizer to iterate over ScheduleCollection daily schedules.
-- Supports parallel execution (set 'Parallel', true) with automatic filtering of days missing procedure durations.
+- Added `conduction.batch.Optimizer` to iterate over `ScheduleCollection` daily schedules (sequential or `parfor`).
+- Options via `conduction.batch.OptimizationOptions` (`Parallel`, `DateFilter`, `ShowProgress`, etc.).
+- Progress output reports total days, per-day completion, and a summary of successes vs. skipped days.
+- `DailySchedule` now skips rows lacking procedure start/end timestamps, so days with incomplete data are omitted at ingest.
