@@ -62,3 +62,7 @@ batchResult = optimizer.run(collection);
 ```
 
 `batchResult.results` is an array of `OptimizationResult` objects; `batchResult.failures` lists any days skipped prior to optimization. Progress messages show the number of days processed, which dates were skipped for missing procedure timestamps, and a final success/skip summary.
+
+### Analytics
+
+- `conduction.analytics.DailyAnalyzer.analyze(dailySchedule)` produces per-day metrics (case counts, lab utilization, makespan, operator idle/overtime).

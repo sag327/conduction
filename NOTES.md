@@ -38,3 +38,4 @@ conduction.visualizeDailySchedule(newSchedule, 'Title', 'Rescheduled Jan 2, 2025
 - Options via `conduction.batch.OptimizationOptions` (`Parallel`, `DateFilter`, `ShowProgress`, etc.).
 - Progress output reports total days, per-day completion, and a summary of successes vs. skipped days.
 - `DailySchedule` now skips rows lacking procedure start/end timestamps, so days with incomplete data are omitted at ingest.
+- `conduction.analytics.DailyAnalyzer` computes per-day metrics (case counts, lab utilization, makespan, operator idle/overtime).
