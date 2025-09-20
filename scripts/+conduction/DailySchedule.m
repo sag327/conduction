@@ -337,6 +337,9 @@ classdef DailySchedule
             for idx = 1:height(tableSlice)
                 row = tableSlice(idx, :);
                 caseStruct = conduction.DailySchedule.buildCaseFromRow(row);
+                if isempty(caseStruct)
+                    continue;
+                end
                 cases(end+1) = caseStruct; %#ok<AGROW>
             end
 
@@ -365,6 +368,11 @@ classdef DailySchedule
 
             procStartDt = conduction.DailySchedule.getDatetimeFromRow(row, 'procedure_start_datetime');
             procEndDt = conduction.DailySchedule.getDatetimeFromRow(row, 'procedure_complete_datetime');
+
+            if isnat(procStartDt) || isnat(procEndDt)
+                caseStruct = [];% skip cases without procedure times
+                return;
+            end
 
             procStartMinutes = conduction.DailySchedule.datetimeToMinutes(procStartDt);
             procEndMinutes = conduction.DailySchedule.datetimeToMinutes(procEndDt);
