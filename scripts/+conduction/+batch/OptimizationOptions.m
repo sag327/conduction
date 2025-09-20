@@ -6,6 +6,7 @@ classdef OptimizationOptions
         DateFilter function_handle = @(dt) true
         Parallel logical = false
         PreserveResults logical = false
+        ShowProgress logical = true
     end
 
     methods (Static)
@@ -18,11 +19,15 @@ classdef OptimizationOptions
             addParameter(parser, 'DateFilter', @(dt) true, @(f) isa(f, 'function_handle'));
             addParameter(parser, 'Parallel', false, @islogical);
             addParameter(parser, 'PreserveResults', false, @islogical);
+            addParameter(parser, 'ShowProgress', true, @islogical);
             parse(parser, varargin{:});
             results = parser.Results;
             if ~isempty(fieldnames(results.SchedulingConfig))
                 configPairs = conduction.batch.OptimizationOptions.structToPairs(results.SchedulingConfig);
                 results.SchedulingOptions = conduction.scheduling.SchedulingOptions.fromArgs(configPairs{:});
+            end
+            if isfield(results, 'SchedulingConfig')
+                results = rmfield(results, 'SchedulingConfig');
             end
             obj = conduction.batch.OptimizationOptions(results);
         end
@@ -39,10 +44,12 @@ classdef OptimizationOptions
             if ~isfield(args, 'DateFilter'); args.DateFilter = @(dt) true; end
             if ~isfield(args, 'Parallel'); args.Parallel = false; end
             if ~isfield(args, 'PreserveResults'); args.PreserveResults = false; end
+            if ~isfield(args, 'ShowProgress'); args.ShowProgress = true; end
             obj.SchedulingOptions = args.SchedulingOptions;
             obj.DateFilter = args.DateFilter;
             obj.Parallel = args.Parallel;
             obj.PreserveResults = args.PreserveResults;
+            obj.ShowProgress = args.ShowProgress;
         end
     end
 
