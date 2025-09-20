@@ -26,7 +26,7 @@ classdef SchedulingOptions
         DEFAULT_TURNOVER_TIME = 15;        % minutes
         DEFAULT_ENFORCE_MIDNIGHT = true;
         DEFAULT_PRIORITIZE_OUTPATIENT = true;
-        DEFAULT_VERBOSE = true;
+        DEFAULT_VERBOSE = false;
         DEFAULT_TIME_STEP = 10;            % minutes
 
         VALID_METRICS = ["operatorIdle", "labIdle", "makespan", "operatorOvertime"];
