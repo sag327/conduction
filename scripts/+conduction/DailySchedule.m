@@ -86,8 +86,18 @@ classdef DailySchedule
                 legacyCases(idx).operator = conduction.DailySchedule.fieldOr(src, 'operator', 'Unknown Operator');
                 legacyCases(idx).procedure = conduction.DailySchedule.fieldOr(src, 'procedure', '');
                 legacyCases(idx).setupTime = conduction.DailySchedule.fieldOr(src, 'setupTime', 0);
-                legacyCases(idx).procTime = conduction.DailySchedule.fieldOr(src, 'procTime', ...
-                    conduction.DailySchedule.fieldOr(src, 'procedureMinutes', NaN));
+                procTimeValue = conduction.DailySchedule.fieldOr(src, 'procTime', NaN);
+            if isnan(procTimeValue)
+                procStart = conduction.DailySchedule.fieldOr(src, 'procStartTime', NaN);
+                procEnd = conduction.DailySchedule.fieldOr(src, 'procEndTime', NaN);
+                if ~isnan(procStart) && ~isnan(procEnd)
+                    procTimeValue = procEnd - procStart;
+                end
+            end
+            if isnan(procTimeValue)
+                procTimeValue = conduction.DailySchedule.fieldOr(src, 'procedureMinutes', NaN);
+            end
+            legacyCases(idx).procTime = procTimeValue;
                 legacyCases(idx).postTime = conduction.DailySchedule.fieldOr(src, 'postTime', 0);
                 legacyCases(idx).turnoverTime = conduction.DailySchedule.fieldOr(src, 'turnoverTime', 0);
                 legacyCases(idx).priority = conduction.DailySchedule.fieldOr(src, 'priority', []);
