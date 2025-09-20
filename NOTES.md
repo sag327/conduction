@@ -22,7 +22,7 @@ config = conduction.configureOptimization( ...
     'PrioritizeOutpatient', true);
 
 % Load historical day and optimize
-dataset = conduction.HistoricalDataset.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
+dataset = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
 daily = dataset.dailyScheduleForDate('2025-01-02');
 [newSchedule, outcome] = conduction.optimizeDailySchedule(daily, config);
 conduction.visualizeDailySchedule(newSchedule, 'Title', 'Rescheduled Jan 2, 2025');

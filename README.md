@@ -34,7 +34,7 @@ As the refactor progresses, this README should be updated with implementation sp
 - **ScheduleDay**: aggregates all `DailyLabSchedule` instances for a calendar day, ensuring inter-lab constraints (shared operators, resources) stay consistent.
 - **ScheduleOptimizer**: strategy object that transforms a pool of `CaseRequest` instances into a `ScheduleDay` using chosen objective functions and solver backends.
 - **ScheduleAnalyzer**: computes utilization, idle/turnover ratios, flip counts, and other KPIs, replacing the reporting logic in `analyzeHistoricalData.m`.
-- **HistoricalDataset**: coordinates data ingestion/cleansing and exposes typed collections of operators, procedures, labs, and case requests for experiments.
+- **ScheduleCollection**: coordinates data ingestion/cleansing and exposes typed collections of operators, procedures, labs, and case requests for experiments.
 - **ExperimentRunner**: orchestrates end-to-end scenarios (data load, optimization run, analytics, persistence) mirroring `runSchedulingExperiment.m`.
 - **ParityValidator**: compares refactored outputs to MATLAB references to ensure behavioural fidelity during migration.
 

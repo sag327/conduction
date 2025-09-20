@@ -1,6 +1,6 @@
-classdef HistoricalDataset
+classdef ScheduleCollection
     %HISTORICALDATASET Wraps historical EP data with typed accessors.
-    %   dataset = eprefactor.HistoricalDataset() loads the default dataset and
+    %   dataset = eprefactor.ScheduleCollection() loads the default dataset and
     %   exposes both the normalized table and the strongly-typed collections
     %   used throughout the refactor.
 
@@ -19,12 +19,12 @@ classdef HistoricalDataset
             end
 
             [tableData, historicalEntities] = conduction.loadHistoricalData(filePath);
-            dataset = conduction.HistoricalDataset(tableData, historicalEntities);
+            dataset = conduction.ScheduleCollection(tableData, historicalEntities);
         end
     end
 
     methods
-        function obj = HistoricalDataset(tableData, entities)
+        function obj = ScheduleCollection(tableData, entities)
             arguments
                 tableData table
                 entities struct
@@ -249,7 +249,7 @@ classdef HistoricalDataset
                 if ~isempty(schedule)
                     count = count + 1;
                     scheduleCells{count} = schedule;
-                    indexMap(conduction.HistoricalDataset.scheduleKey(dayValue)) = count;
+                    indexMap(conduction.ScheduleCollection.scheduleKey(dayValue)) = count;
                 end
             end
 
