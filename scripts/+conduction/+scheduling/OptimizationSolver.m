@@ -14,12 +14,21 @@ classdef OptimizationSolver
 
             displayMode = 'off';
             if options.Verbose
-                displayMode = 'iter';
+                fprintf('\n[Scheduling] Solving ILP (%d cases, %d labs) ...\n', ...
+                    model.numCases, model.numLabs);
             end
 
             solverOpts = optimoptions('intlinprog', ...
-                'Display', displayMode, ...
+                'Display', 'off', ...
                 'MaxTime', conduction.scheduling.OptimizationSolver.DEFAULT_MAX_TIME);
+
+            % Quiet any HiGHS viewer / verbose diagnostics if the properties exist
+            if isprop(solverOpts, 'ViewOptimizer')
+                solverOpts.ViewOptimizer = 'off';
+            end
+            if isprop(solverOpts, 'OutputDetailedResults')
+                solverOpts.OutputDetailedResults = false;
+            end
 
             try
                 [solution, fval, exitflag, output] = intlinprog( ...
@@ -33,6 +42,10 @@ classdef OptimizationSolver
             info.objectiveValue = fval;
             info.exitflag = exitflag;
             info.output = output;
+
+            if options.Verbose
+                fprintf('[Scheduling] Solver exitflag %d, objective %.4f\n', exitflag, fval);
+            end
         end
     end
 end
