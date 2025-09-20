@@ -68,6 +68,34 @@ classdef DailySchedule
             error('DailySchedule:NotImplemented', ...
                 'Legacy visualization adapter not implemented.');
         end
+
+        function legacyCases = toOptimizationCases(obj)
+            %TOOPTIMIZATIONCASES Flatten schedule cases into optimizer-friendly structs.
+            flattened = obj.cases();
+            if isempty(flattened)
+                legacyCases = struct([]);
+                return;
+            end
+
+            template = conduction.DailySchedule.optimizationCaseTemplate();
+            legacyCases = repmat(template, numel(flattened), 1);
+
+            for idx = 1:numel(flattened)
+                src = flattened(idx);
+                legacyCases(idx).caseID = conduction.DailySchedule.fieldOr(src, 'caseID', sprintf('Case_%d', idx));
+                legacyCases(idx).operator = conduction.DailySchedule.fieldOr(src, 'operator', 'Unknown Operator');
+                legacyCases(idx).procedure = conduction.DailySchedule.fieldOr(src, 'procedure', '');
+                legacyCases(idx).setupTime = conduction.DailySchedule.fieldOr(src, 'setupTime', 0);
+                legacyCases(idx).procTime = conduction.DailySchedule.fieldOr(src, 'procTime', ...
+                    conduction.DailySchedule.fieldOr(src, 'procedureMinutes', NaN));
+                legacyCases(idx).postTime = conduction.DailySchedule.fieldOr(src, 'postTime', 0);
+                legacyCases(idx).turnoverTime = conduction.DailySchedule.fieldOr(src, 'turnoverTime', 0);
+                legacyCases(idx).priority = conduction.DailySchedule.fieldOr(src, 'priority', []);
+                legacyCases(idx).preferredLab = conduction.DailySchedule.fieldOr(src, 'preferredLab', []);
+                legacyCases(idx).admissionStatus = conduction.DailySchedule.fieldOr(src, 'admissionStatus', '');
+                legacyCases(idx).date = conduction.DailySchedule.fieldOr(src, 'date', obj.Date);
+            end
+        end
     end
 
     methods (Static)
@@ -358,6 +386,8 @@ classdef DailySchedule
                 startMinutes = max(startMinutes, 0);
             end
 
+            caseStruct.setupTime = max(setupMinutes, 0);
+            caseStruct.procTime = procedureMinutes;
             caseStruct.startTime = startMinutes;
             caseStruct.procStartTime = procStartMinutes;
             caseStruct.procEndTime = procEndMinutes;
@@ -365,12 +395,38 @@ classdef DailySchedule
             caseStruct.turnoverTime = max(turnoverMinutes, 0);
             caseStruct.procedureMinutes = procedureMinutes;
             caseStruct.procedureDuration = procedureMinutes;
+
+            if ismember('priority', row.Properties.VariableNames)
+                priorityValue = conduction.DailySchedule.getNumericFromRow(row, 'priority');
+                if isnan(priorityValue)
+                    caseStruct.priority = [];
+                else
+                    caseStruct.priority = priorityValue;
+                end
+            else
+                caseStruct.priority = [];
+            end
+
+            if ismember('preferred_lab', row.Properties.VariableNames)
+                prefValue = conduction.DailySchedule.getNumericFromRow(row, 'preferred_lab');
+                if isnan(prefValue)
+                    caseStruct.preferredLab = [];
+                else
+                    caseStruct.preferredLab = prefValue;
+                end
+            else
+                caseStruct.preferredLab = [];
+            end
+
+            caseStruct.admissionStatus = conduction.DailySchedule.getStringFromRow(row, 'admission_status');
         end
 
         function baseStruct = baseCaseStruct()
             baseStruct = struct( ...
                 'caseID', "", ...
                 'operator', "", ...
+                'setupTime', 0, ...
+                'procTime', NaN, ...
                 'startTime', NaN, ...
                 'procStartTime', NaN, ...
                 'procEndTime', NaN, ...
@@ -379,8 +435,39 @@ classdef DailySchedule
                 'procedureMinutes', NaN, ...
                 'procedureDuration', NaN, ...
                 'date', NaT, ...
-                'room', "" ...
+                'room', "", ...
+                'priority', [], ...
+                'preferredLab', [], ...
+                'admissionStatus', "" ...
             );
+        end
+
+        function template = optimizationCaseTemplate()
+            template = struct( ...
+                'caseID', '', ...
+                'operator', '', ...
+                'procedure', '', ...
+                'setupTime', 0, ...
+                'procTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'priority', [], ...
+                'preferredLab', [], ...
+                'admissionStatus', '', ...
+                'date', NaT ...
+            );
+        end
+
+        function value = fieldOr(src, fieldName, defaultValue)
+            if isstruct(src)
+                if isfield(src, fieldName) && ~isempty(src.(fieldName))
+                    value = src.(fieldName);
+                else
+                    value = defaultValue;
+                end
+            else
+                value = defaultValue;
+            end
         end
 
         function value = getNumericFromRow(row, varName)
@@ -468,4 +555,3 @@ classdef DailySchedule
         end
     end
 end
-

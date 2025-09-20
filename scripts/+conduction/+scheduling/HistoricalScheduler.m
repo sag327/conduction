@@ -166,7 +166,9 @@ classdef HistoricalScheduler
         end
 
         function cases = ensureStructArray(~, cases)
-            if isa(cases, 'conduction.CaseRequest')
+            if isa(cases, 'conduction.DailySchedule')
+                cases = cases.toOptimizationCases();
+            elseif isa(cases, 'conduction.CaseRequest')
                 error('HistoricalScheduler:UnsupportedInput', ...
                     'Convert CaseRequest objects to legacy optimization struct before scheduling.');
             end

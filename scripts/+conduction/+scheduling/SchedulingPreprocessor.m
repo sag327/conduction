@@ -61,7 +61,9 @@ classdef SchedulingPreprocessor
 
     methods (Static, Access = private)
         function cases = normaliseCaseStruct(cases)
-            if isa(cases, 'conduction.CaseRequest')
+            if isa(cases, 'conduction.DailySchedule')
+                cases = cases.toOptimizationCases();
+            elseif isa(cases, 'conduction.CaseRequest')
                 error('SchedulingPreprocessor:UnsupportedType', ...
                     ['CaseRequest to optimization bridge not implemented yet. ', ...
                      'Convert CaseRequest objects to optimization structs before scheduling.']);
