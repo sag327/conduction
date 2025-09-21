@@ -16,7 +16,7 @@ collection = resolveCollection(input);
 schedulingOptions = resolveSchedulingOptions(config);
 
 if isempty(varargin)
-    optOptions = conduction.batch.OptimizationOptions('SchedulingOptions', schedulingOptions);
+    optOptions = conduction.batch.OptimizationOptions.fromArgs('SchedulingOptions', schedulingOptions);
 elseif isa(varargin{1}, 'conduction.batch.OptimizationOptions')
     existing = varargin{1};
     optStruct = struct(existing);
@@ -27,7 +27,7 @@ elseif isa(varargin{1}, 'conduction.batch.OptimizationOptions')
             'Additional arguments ignored because an OptimizationOptions object was supplied.');
     end
 else
-    optOptions = conduction.batch.OptimizationOptions('SchedulingOptions', schedulingOptions, varargin{:});
+    optOptions = conduction.batch.OptimizationOptions.fromArgs('SchedulingOptions', schedulingOptions, varargin{:});
 end
 
 optimizer = conduction.batch.Optimizer(optOptions);
