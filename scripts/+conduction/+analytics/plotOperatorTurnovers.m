@@ -1,13 +1,18 @@
 function plotOperatorTurnovers(summary, varargin)
 %PLOTOPERATORTURNOVERS Plot operator idle/flip turnover metrics.
-%   PLOTOPERATORTURNOVERS(summary) expects the struct returned by
-%   conduction.analytics.analyzeScheduleCollection and plots the median
-%   idle minutes per turnover and median flip percentage per turnover for
-%   each operator. Pass 'Mode','aggregate' to plot the aggregate totals
-%   (total idle minutes ÷ total turnovers, and total flips ÷ total turnovers).
+%   plotOperatorTurnovers(summary) expects the struct returned by
+%   conduction.analytics.analyzeScheduleCollection and plots the aggregate
+%   idle minutes per turnover and aggregate flip percentage per turnover
+%   for each operator.  Pass 'Mode','median' to instead plot the medians of
+%   the per-day ratios.
+%
+%   Example:
+%       summary = conduction.analytics.analyzeScheduleCollection(collection);
+%       conduction.analytics.plotOperatorTurnovers(summary);
+%       conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'median');
 
 p = inputParser;
-p.addParameter('Mode', 'median', @(x) any(strcmpi(x, {'median','aggregate'})));
+p.addParameter('Mode', 'aggregate', @(x) any(strcmpi(x, {'median','aggregate'})));
 p.parse(varargin{:});
 mode = lower(string(p.Results.Mode));
 
@@ -29,24 +34,24 @@ switch mode
 
         for idx = 1:numel(operatorIds)
             opId = operatorIds{idx};
-        hasIdle = idleMap.isKey(opId) && ~isnan(idleMap(opId));
-        hasFlip = flipMap.isKey(opId) && ~isnan(flipMap(opId));
+            hasIdle = idleMap.isKey(opId) && ~isnan(idleMap(opId));
+            hasFlip = flipMap.isKey(opId) && ~isnan(flipMap(opId));
             if ~(hasIdle || hasFlip)
                 continue;
             end
 
             entry = struct();
-        entry.name = namesMap(opId);
-        if hasIdle
-            entry.idleValue = idleMap(opId);
-        else
-            entry.idleValue = NaN;
-        end
-        if hasFlip
-            entry.flipValue = flipMap(opId);
-        else
-            entry.flipValue = NaN;
-        end
+            entry.name = namesMap(opId);
+            if hasIdle
+                entry.idleValue = idleMap(opId);
+            else
+                entry.idleValue = NaN;
+            end
+            if hasFlip
+                entry.flipValue = flipMap(opId);
+            else
+                entry.flipValue = NaN;
+            end
             opStruct(end+1) = entry; %#ok<AGROW>
         end
 
@@ -94,7 +99,7 @@ flipValues = [opStruct.flipValue];
 
 figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
 subplot(2,1,1);
-idleBars = bar(categorical(labels), idleValues);
+idBars = bar(categorical(labels), idleValues);
 ylabel('Idle minutes per turnover');
 if mode == "median"
     title('Operator Idle per Turnover (Median)');
@@ -102,13 +107,13 @@ else
     title('Operator Idle per Turnover (Aggregate)');
 end
 
-ylimitIdle = ylim;
-ylim([0, ylimitIdle(2)]);
-
+maxIdle = max(idleValues, [], 'omitnan');
+if isempty(maxIdle) || isnan(maxIdle)
+    maxIdle = 1;
+end
+ylim([0, maxIdle * 1.1]);
 ytickformat('%.1f');
-text(idleBars.XEndPoints, idleBars.YEndPoints, ...
-    arrayfun(@(v) sprintf('%.1f', v), idleValues, 'UniformOutput', false), ...
-    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
+annotateBars(idBars, idleValues, '%.1f');
 
 subplot(2,1,2);
 flipPercent = 100 * flipValues;
@@ -121,12 +126,28 @@ else
     title('Operator Flip per Turnover (Aggregate)');
 end
 
-ylim([0, 100]);
+maxFlip = max(flipPercent, [], 'omitnan');
+if isempty(maxFlip) || isnan(maxFlip)
+    maxFlip = 1;
+end
+ylim([0, max(100, maxFlip * 1.1)]);
 ytickformat('%.0f');
-text(flipBars.XEndPoints, flipBars.YEndPoints, ...
-    arrayfun(@(v) sprintf('%.0f%%', v), flipPercent, 'UniformOutput', false), ...
-    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
+annotateBars(flipBars, flipPercent, '%.0f%%');
 
 conduction.plotting.applyStandardStyle(gcf);
 
+end
+
+function annotateBars(barSeries, values, fmt)
+labels = arrayfun(@(v) formatNumericLabel(v, fmt), values, 'UniformOutput', false);
+text(barSeries.XEndPoints, barSeries.YEndPoints, labels, ...
+    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
+end
+
+function label = formatNumericLabel(value, fmt)
+if isnan(value)
+    label = '';
+else
+    label = sprintf(fmt, value);
+end
 end
