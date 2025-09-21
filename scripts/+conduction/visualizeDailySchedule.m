@@ -315,9 +315,9 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
         fallbackMakespan = max(endCandidates) - min(startCandidates);
     end
     makespanHours = fetchMetric(metrics, 'makespan', fallbackMakespan) / 60;
-    meanUtilization = fetchMetric(metrics, 'meanLabUtilization', NaN) * 100;
-    totalIdleHours = fetchMetric(metrics, 'totalOperatorIdleTime', NaN) / 60;
-    totalOvertimeHours = fetchMetric(metrics, 'totalOperatorOvertime', NaN) / 60;
+    meanUtilization = fetchMetric(metrics, 'averageLabOccupancyRatio', NaN) * 100;
+    totalIdleHours = fetchMetric(metrics, 'totalOperatorIdleMinutes', NaN) / 60;
+    totalOvertimeHours = fetchMetric(metrics, 'totalOperatorOvertimeMinutes', NaN) / 60;
 
     summaryParts = {
         sprintf('Cases: %d', numCases), ...
@@ -327,7 +327,7 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
     };
 
     if ~isnan(meanUtilization)
-        summaryParts{end+1} = sprintf('Mean lab util: %.1f%%', meanUtilization); %#ok<AGROW>
+        summaryParts{end+1} = sprintf('Mean lab occupancy: %.1f%%', meanUtilization); %#ok<AGROW>
     end
     if ~isnan(totalIdleHours)
         summaryParts{end+1} = sprintf('Op idle: %.1f hrs', totalIdleHours); %#ok<AGROW>
@@ -664,12 +664,22 @@ function logDebugSummary(caseTimelines, metrics, operatorData)
     opNames = arrayfun(@(op) char(op.name), operatorData, 'UniformOutput', false);
     fprintf('  Operators: %d (%s)\n', numel(opNames), strjoin(opNames, ', '));
 
-    fields = {'makespan', 'meanLabUtilization', 'totalOperatorIdleTime', 'totalOperatorOvertime'};
-    for idx = 1:numel(fields)
-        key = fields{idx};
+    coreFields = {'makespan', 'averageLabOccupancyRatio'};
+    for idx = 1:numel(coreFields)
+        key = coreFields{idx};
         if isfield(metrics, key)
             fprintf('  %s: %g\n', key, castToDouble(metrics.(key)));
         end
+    end
+
+    idleMinutes = fetchMetric(metrics, 'totalOperatorIdleMinutes', NaN);
+    if ~isnan(idleMinutes)
+        fprintf('  totalOperatorIdleMinutes: %g\n', idleMinutes);
+    end
+
+    overtimeMinutes = fetchMetric(metrics, 'totalOperatorOvertimeMinutes', NaN);
+    if ~isnan(overtimeMinutes)
+        fprintf('  totalOperatorOvertimeMinutes: %g\n', overtimeMinutes);
     end
 end
 
@@ -681,11 +691,52 @@ function val = fetchMetric(metrics, field, fallback)
         val = fallback;
         return;
     end
+
     if isfield(metrics, field)
         val = castToDouble(metrics.(field));
-    else
-        val = fallback;
+        return;
     end
+
+    switch field
+        case 'meanLabUtilization'
+            val = fetchMetric(metrics, 'averageLabOccupancyRatio', fallback);
+            return;
+        case {'averageLabOccupancyRatio', 'makespan'}
+            % already handled above if present
+        case {'totalOperatorIdleMinutes', 'totalOperatorIdleTime'}
+            if isfield(metrics, 'departmentMetrics')
+                val = fetchMetric(metrics.departmentMetrics, 'totalOperatorIdleMinutes', fallback);
+                return;
+            end
+        case {'totalOperatorOvertimeMinutes', 'totalOperatorOvertime'}
+            if isfield(metrics, 'operatorMetrics')
+                overtimeMap = metrics.operatorMetrics.overtime;
+                if isa(overtimeMap, 'containers.Map')
+                    mapValues = values(overtimeMap);
+                    if isempty(mapValues)
+                        val = 0;
+                    else
+                        numericVals = cellfun(@castToDouble, mapValues);
+                        val = sum(numericVals);
+                    end
+                    return;
+                end
+            end
+    end
+
+    if isfield(metrics, 'departmentMetrics') && isstruct(metrics.departmentMetrics) && ...
+            isfield(metrics.departmentMetrics, field)
+        val = castToDouble(metrics.departmentMetrics.(field));
+        return;
+    end
+
+    if isfield(metrics, 'operatorMetrics') && isstruct(metrics.operatorMetrics) && ...
+            isfield(metrics.operatorMetrics, field)
+        val = castToDouble(metrics.operatorMetrics.(field));
+        return;
+    end
+
+    val = fallback;
 end
 
 function flag = ischarLike(value)
