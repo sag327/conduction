@@ -16,9 +16,8 @@ classdef DailyAnalyzer
             if isempty(caseStructs)
                 metrics.caseCount = 0;
                 metrics.labUtilization = zeros(numel(labAssignments),1);
-                metrics.meanLabUtilization = 0;
-                metrics.operatorIdleTime = struct();
-                metrics.operatorOvertime = struct();
+                metrics.averageLabOccupancyRatio = 0;
+                metrics.labIdleMinutes = 0;
                 metrics.makespanMinutes = 0;
                 metrics.firstCaseStart = NaN;
                 metrics.lastCaseEnd = NaN;
@@ -54,11 +53,12 @@ classdef DailyAnalyzer
                     metrics.labUtilization(labIdx) = labUtil(labIdx) / labDurations(labIdx);
                 end
             end
+            % Average occupancy across labs (procedure minutes ÷ active window)
             validUtil = metrics.labUtilization(~isnan(metrics.labUtilization));
             if isempty(validUtil)
-                metrics.meanLabUtilization = 0;
+                metrics.averageLabOccupancyRatio = 0;
             else
-                metrics.meanLabUtilization = mean(validUtil);
+                metrics.averageLabOccupancyRatio = mean(validUtil);
             end
 
             % Time range
@@ -68,31 +68,31 @@ classdef DailyAnalyzer
             metrics.lastCaseEnd = max(allEnds);
             metrics.makespanMinutes = metrics.lastCaseEnd - metrics.firstCaseStart;
 
-            % Operator idle/overtime
-            operatorNames = {caseStructs.operator};
-            uniqueOps = unique(operatorNames);
-            idleMap = containers.Map('KeyType','char','ValueType','double');
-            overtimeMap = containers.Map('KeyType','char','ValueType','double');
+            % Lab idle time across the department
+            labIdleTotal = 0;
+            for labIdx = 1:numel(labAssignments)
+                labCases = labAssignments{labIdx};
+                if numel(labCases) <= 1
+                    continue;
+                end
 
-            for idx = 1:numel(uniqueOps)
-                opName = uniqueOps{idx};
-                opCases = caseStructs(strcmp(operatorNames, opName));
-                [sortedStart, order] = sort([opCases.procStartTime]);
-                opCases = opCases(order);
-                procEndTimes = arrayfun(@conduction.analytics.DailyAnalyzer.procEnd, opCases);
+                [~, labOrder] = sort([labCases.procStartTime]);
+                labCases = labCases(labOrder);
 
-                % Idle time between procedures (> 0 minutes)
-                idle = sum(max(0, sortedStart(2:end) - procEndTimes(1:end-1)));
-                idleMap(opName) = idle;
+                for caseIdx = 2:numel(labCases)
+                    prevEnd = conduction.analytics.DailyAnalyzer.caseEnd(labCases(caseIdx - 1));
+                    nextStart = conduction.analytics.DailyAnalyzer.caseStartForLab(labCases(caseIdx));
+                    if isnan(prevEnd) || isnan(nextStart)
+                        continue;
+                    end
 
-                % Overtime beyond eight hours (480 minutes)
-                totalProc = sum([opCases.procTime]);
-                overtime = max(0, totalProc - 480);
-                overtimeMap(opName) = overtime;
+                    gap = nextStart - prevEnd;
+                    if gap > 0
+                        labIdleTotal = labIdleTotal + gap;
+                    end
+                end
             end
-
-            metrics.operatorIdleTime = idleMap;
-            metrics.operatorOvertime = overtimeMap;
+            metrics.labIdleMinutes = labIdleTotal;
         end
     end
 
@@ -122,6 +122,13 @@ classdef DailyAnalyzer
                 value = caseStruct.(fieldName);
             else
                 value = defaultValue;
+            end
+        end
+
+        function startTime = caseStartForLab(caseStruct)
+            startTime = conduction.analytics.DailyAnalyzer.fieldOr(caseStruct, 'startTime', NaN);
+            if isnan(startTime)
+                startTime = conduction.analytics.DailyAnalyzer.fieldOr(caseStruct, 'procStartTime', NaN);
             end
         end
     end

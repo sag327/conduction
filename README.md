@@ -65,4 +65,12 @@ batchResult = optimizer.run(collection);
 
 ### Analytics
 
-- `conduction.analytics.DailyAnalyzer.analyze(dailySchedule)` produces per-day metrics (case counts, lab utilization, makespan, operator idle/overtime).
+- `conduction.analytics.DailyAnalyzer.analyze(dailySchedule)` produces per-day metrics (case counts, average lab occupancy ratio = procedure minutes ÷ active window) and lab idle minutes.
+- `conduction.analytics.OperatorAnalyzer.analyze(dailySchedule)` returns `operatorMetrics` (per-operator idle, overtime, flip/idle ratios) and `departmentMetrics` (turnover samples, totals, aggregate ratios).
+- `conduction.analytics.ProcedureAnalyzer.analyze(dailySchedule)` captures raw procedure duration samples per procedure and per operator; pair it with `conduction.analytics.ProcedureMetricsAggregator` to accumulate days and compute mean/median/P70/P90 statistics.
+- `conduction.analytics.ScheduleCollectionAnalyzer.run(schedules)` orchestrates analyzers across many days; by default it produces `procedureMetrics` via the procedure aggregator, and you can register additional analyzers as needed.
+- `conduction.analytics.runProcedureAnalysis(collection)` wraps the collection analyzer for the common case of aggregating procedure metrics across an entire dataset.
+- `conduction.analytics.analyzeDailySchedule(dailySchedule)` bundles all per-day analyzers into a single call, returning daily/operator/procedure results.
+- `conduction.analytics.analyzeScheduleCollection(collection)` iterates every day in a schedule collection (or array of schedules) and returns consolidated procedure, operator (including per-operator turnover ratios), and daily summaries.
+- `conduction.analytics.plotOperatorTurnovers(summary)` plots median idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`.
+- `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.

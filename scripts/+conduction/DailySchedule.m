@@ -84,7 +84,7 @@ classdef DailySchedule
                 src = flattened(idx);
                 legacyCases(idx).caseID = conduction.DailySchedule.fieldOr(src, 'caseID', sprintf('Case_%d', idx));
                 legacyCases(idx).operator = conduction.DailySchedule.fieldOr(src, 'operator', 'Unknown Operator');
-                legacyCases(idx).procedure = conduction.DailySchedule.fieldOr(src, 'procedure', '');
+                legacyCases(idx).procedure = conduction.DailySchedule.fieldOr(src, 'procedureName', '');
                 legacyCases(idx).setupTime = conduction.DailySchedule.fieldOr(src, 'setupTime', 0);
                 procTimeValue = conduction.DailySchedule.fieldOr(src, 'procTime', NaN);
             if isnan(procTimeValue)
@@ -359,10 +359,13 @@ classdef DailySchedule
             caseIdValue = conduction.DailySchedule.getStringFromRow(row, 'case_id');
             operatorValue = conduction.DailySchedule.getStringFromRow(row, 'surgeon');
             roomValue = conduction.DailySchedule.getStringFromRow(row, 'room');
+            procedureValue = conduction.DailySchedule.getStringFromRow(row, 'procedure');
 
             caseStruct.caseID = char(caseIdValue);
             caseStruct.operator = char(operatorValue);
             caseStruct.room = char(roomValue);
+            caseStruct.procedureName = char(procedureValue);
+            caseStruct.procedureId = char(conduction.Procedure.canonicalId(procedureValue));
 
             caseStruct.date = conduction.DailySchedule.getDatetimeFromRow(row, 'date');
 
@@ -443,6 +446,8 @@ classdef DailySchedule
             baseStruct = struct( ...
                 'caseID', "", ...
                 'operator', "", ...
+                'procedureName', "", ...
+                'procedureId', "", ...
                 'setupTime', 0, ...
                 'procTime', NaN, ...
                 'startTime', NaN, ...
