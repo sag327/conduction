@@ -76,4 +76,4 @@ batchResult = optimizer.run(collection);
 - `conduction.analytics.analyzeScheduleCollection(collection)` iterates every day in a schedule collection (or array of schedules) and returns consolidated procedure, operator (including per-operator turnover ratios), and daily summaries.
 - `conduction.analytics.plotOperatorTurnovers(summary, 'Mode', mode)` plots idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`; use `Mode='median'` (default) or `'aggregate'` to switch between day medians and overall collection percentages.
 - `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.
-- `conduction.optimizeScheduleCollection(collection, ...)` wraps the batch optimizer so you can optimize every day in a collection (or load from file) with a single call.
+- `conduction.optimizeScheduleCollection(collection, config, ...)` wraps the batch optimizer so you can optimize every day in a collection (or load from file) with a single call; `config` is the struct returned by `conduction.configureOptimization`.

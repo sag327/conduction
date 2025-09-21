@@ -139,7 +139,8 @@ conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 ```matlab
 addpath(genpath('scripts'));
 collection = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
-batchResult = conduction.optimizeScheduleCollection(collection, 'Parallel', true, 'ShowProgress', true);
+config = conduction.configureOptimization('OptimizationMetric', 'makespan');
+batchResult = conduction.optimizeScheduleCollection(collection, config, 'Parallel', true, 'ShowProgress', true);
 
 numDays = numel(batchResult.results) + numel(batchResult.failures);
 fprintf('Days optimized: %d (failures: %d)\n', numDays, numel(batchResult.failures));
