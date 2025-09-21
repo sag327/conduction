@@ -1,89 +1,130 @@
-function plotOperatorTurnovers(summary)
-%PLOTOPERATORTURNOVERS Visualize operator flip/idle ratios from analyzed data.
+function plotOperatorTurnovers(summary, varargin)
+%PLOTOPERATORTURNOVERS Plot operator idle/flip turnover metrics.
 %   PLOTOPERATORTURNOVERS(summary) expects the struct returned by
-%   conduction.analytics.analyzeScheduleCollection (must contain
-%   operatorSummary and dailyResults). The function produces bar charts for
-%   median idle-per-turnover and median flip-per-turnover per operator.
+%   conduction.analytics.analyzeScheduleCollection and plots the median
+%   idle minutes per turnover and median flip percentage per turnover for
+%   each operator. Pass 'Mode','aggregate' to plot the aggregate totals
+%   (total idle minutes ÷ total turnovers, and total flips ÷ total turnovers).
 
+p = inputParser;
+p.addParameter('Mode', 'median', @(x) any(strcmpi(x, {'median','aggregate'})));
+p.parse(varargin{:});
+mode = lower(string(p.Results.Mode));
+
+hasDailyResults = isstruct(summary) && isfield(summary, 'dailyResults');
 if ~(isstruct(summary) && isfield(summary, 'operatorSummary') && ...
-        isfield(summary, 'dailyResults'))
+        (strcmp(mode, "aggregate") || hasDailyResults))
     error('plotOperatorTurnovers:InvalidInput', ...
         'Provide the summary struct returned by analyzeScheduleCollection.');
 end
 
 operatorIds = summary.operatorSummary.operatorNames.keys;
-dailyResults = summary.dailyResults;
+opStruct = struct('name', {}, 'idleValue', {}, 'flipValue', {});
 
-opStruct = struct('id', {}, 'name', {}, 'idleMedian', {}, 'flipMedian', {});
+switch mode
+    case "aggregate"
+        idleMap = summary.operatorSummary.operatorTotalIdleMinutesPerTurnover;
+        flipMap = summary.operatorSummary.operatorFlipPerTurnoverRatio;
+        namesMap = summary.operatorSummary.operatorNames;
 
-for idx = 1:numel(operatorIds)
-    opId = operatorIds{idx};
+        for idx = 1:numel(operatorIds)
+            opId = operatorIds{idx};
+        hasIdle = idleMap.isKey(opId) && ~isnan(idleMap(opId));
+        hasFlip = flipMap.isKey(opId) && ~isnan(flipMap(opId));
+            if ~(hasIdle || hasFlip)
+                continue;
+            end
 
-    flips = [];
-    idles = [];
-
-    for dayIdx = 1:numel(dailyResults)
-        dayMetrics = dailyResults{dayIdx}.operatorMetrics;
-        if dayMetrics.flipPerTurnoverRatio.isKey(opId)
-            flips(end+1) = dayMetrics.flipPerTurnoverRatio(opId); %#ok<AGROW>
+            entry = struct();
+        entry.name = namesMap(opId);
+        if hasIdle
+            entry.idleValue = idleMap(opId);
+        else
+            entry.idleValue = NaN;
         end
-        if dayMetrics.idlePerTurnoverRatio.isKey(opId)
-            idles(end+1) = dayMetrics.idlePerTurnoverRatio(opId); %#ok<AGROW>
+        if hasFlip
+            entry.flipValue = flipMap(opId);
+        else
+            entry.flipValue = NaN;
         end
-    end
+            opStruct(end+1) = entry; %#ok<AGROW>
+        end
 
-    if isempty(flips) && isempty(idles)
-        continue;
-    end
+    otherwise % "median"
+        dailyResults = summary.dailyResults;
+        namesMap = summary.operatorSummary.operatorNames;
 
-    entry = struct();
-    entry.id = opId;
-    entry.name = summary.operatorSummary.operatorNames(opId);
-    entry.idleMedian = median(idles, 'omitnan');
-    entry.flipMedian = median(flips, 'omitnan');
+        for idx = 1:numel(operatorIds)
+            opId = operatorIds{idx};
+            flips = [];
+            idles = [];
 
-    opStruct(end+1) = entry; %#ok<AGROW>
+            for dayIdx = 1:numel(dailyResults)
+                dayMetrics = dailyResults{dayIdx}.operatorMetrics;
+                if dayMetrics.flipPerTurnoverRatio.isKey(opId)
+                    flips(end+1) = dayMetrics.flipPerTurnoverRatio(opId); %#ok<AGROW>
+                end
+                if dayMetrics.idlePerTurnoverRatio.isKey(opId)
+                    idles(end+1) = dayMetrics.idlePerTurnoverRatio(opId); %#ok<AGROW>
+                end
+            end
+
+            if isempty(flips) && isempty(idles)
+                continue;
+            end
+
+            entry = struct();
+            entry.name = namesMap(opId);
+            entry.idleValue = median(idles, 'omitnan');
+            entry.flipValue = median(flips, 'omitnan');
+            opStruct(end+1) = entry; %#ok<AGROW>
+        end
 end
 
 if isempty(opStruct)
-    warning('plotOperatorTurnovers:NoData', 'No operator turnover data available to plot.');
+    warning('plotOperatorTurnovers:NoData', ...
+        'No operator turnover data available to plot.');
     return;
 end
 
-rawOperatorNames = {opStruct.name};
-labels = conduction.plotting.formatOperatorNames(rawOperatorNames);
-idleMedians = [opStruct.idleMedian];
-flipMedians = [opStruct.flipMedian];
+rawNames = {opStruct.name};
+labels = conduction.plotting.formatOperatorNames(rawNames);
+idleValues = [opStruct.idleValue];
+flipValues = [opStruct.flipValue];
 
 figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
 subplot(2,1,1);
-idleBars = bar(categorical(labels), idleMedians);
-ylabel('Median idle minutes per turnover');
-title('Operator Idle per Turnover (Median)');
+idleBars = bar(categorical(labels), idleValues);
+ylabel('Idle minutes per turnover');
+if mode == "median"
+    title('Operator Idle per Turnover (Median)');
+else
+    title('Operator Idle per Turnover (Aggregate)');
+end
 
 ylimitIdle = ylim;
 ylim([0, ylimitIdle(2)]);
 
 ytickformat('%.1f');
-idleXTicks = idleBars.XEndPoints;
-idleYTicks = idleBars.YEndPoints;
-idleLabels = arrayfun(@(v) sprintf('%.1f', v), idleMedians, 'UniformOutput', false);
-text(idleXTicks, idleYTicks, idleLabels, ...
+text(idleBars.XEndPoints, idleBars.YEndPoints, ...
+    arrayfun(@(v) sprintf('%.1f', v), idleValues, 'UniformOutput', false), ...
     'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
 
 subplot(2,1,2);
-flipValuesPercent = 100 * flipMedians;
-flipBars = bar(categorical(labels), flipValuesPercent);
-ylabel('Median flip per turnover (%)');
+flipPercent = 100 * flipValues;
+flipBars = bar(categorical(labels), flipPercent);
+ylabel('Flip per turnover (%)');
 xlabel('Operator');
-title('Operator Flip per Turnover (Median)');
+if mode == "median"
+    title('Operator Flip per Turnover (Median)');
+else
+    title('Operator Flip per Turnover (Aggregate)');
+end
 
 ylim([0, 100]);
 ytickformat('%.0f');
-flipXTicks = flipBars.XEndPoints;
-flipYTicks = flipBars.YEndPoints;
-flipLabels = arrayfun(@(v) sprintf('%.0f%%', v), flipValuesPercent, 'UniformOutput', false);
-text(flipXTicks, flipYTicks, flipLabels, ...
+text(flipBars.XEndPoints, flipBars.YEndPoints, ...
+    arrayfun(@(v) sprintf('%.0f%%', v), flipPercent, 'UniformOutput', false), ...
     'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
 
 conduction.plotting.applyStandardStyle(gcf);

@@ -129,5 +129,8 @@ fprintf('Operator %s total overtime: %.1f minutes (flip ratio %.2f)\n', ...
 % Plotting example (requires the summary above)
 conduction.analytics.plotOperatorTurnovers(summary);
 % (Internally uses conduction.plotting.applyStandardStyle for consistent styling.)
+
+% To plot collection-wide totals rather than medians:
+conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 ```
 ```

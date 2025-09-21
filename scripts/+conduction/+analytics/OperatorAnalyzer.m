@@ -27,6 +27,7 @@ classdef OperatorAnalyzer
             operatorData.idlePerTurnoverRatio = containers.Map('KeyType','char','ValueType','double');
             operatorData.turnoverCount = containers.Map('KeyType','char','ValueType','double');
             operatorData.flipCount = containers.Map('KeyType','char','ValueType','double');
+            operatorData.turnoverIdleMinutes = containers.Map('KeyType','char','ValueType','double');
             operatorData.operatorNames = containers.Map('KeyType','char','ValueType','char');
 
             totalOperatorIdleMinutes = 0;
@@ -108,6 +109,12 @@ classdef OperatorAnalyzer
                     existingFlips = operatorData.flipCount(opName);
                 end
                 operatorData.flipCount(opName) = existingFlips + flipCount;
+
+                existingIdle = 0;
+                if operatorData.turnoverIdleMinutes.isKey(opName)
+                    existingIdle = operatorData.turnoverIdleMinutes(opName);
+                end
+                operatorData.turnoverIdleMinutes(opName) = existingIdle + idleForTurnover;
             end
 
             summary = struct();
@@ -139,6 +146,7 @@ classdef OperatorAnalyzer
                 'idlePerTurnoverRatio', containers.Map('KeyType','char','ValueType','double'), ...
                 'turnoverCount', containers.Map('KeyType','char','ValueType','double'), ...
                 'flipCount', containers.Map('KeyType','char','ValueType','double'), ...
+                'turnoverIdleMinutes', containers.Map('KeyType','char','ValueType','double'), ...
                 'operatorNames', containers.Map('KeyType','char','ValueType','char') ...
             );
         end

@@ -31,6 +31,7 @@ operatorIdleMap = containers.Map('KeyType','char','ValueType','double');
 operatorOvertimeMap = containers.Map('KeyType','char','ValueType','double');
 operatorTurnoverMap = containers.Map('KeyType','char','ValueType','double');
 operatorFlipMap = containers.Map('KeyType','char','ValueType','double');
+operatorIdleGapMap = containers.Map('KeyType','char','ValueType','double');
 operatorNamesMap = containers.Map('KeyType','char','ValueType','char');
 totalTurnovers = 0;
 totalFlipCount = 0;
@@ -100,6 +101,19 @@ for schedule = schedules
         end
     end
 
+    if isfield(opMetrics, 'turnoverIdleMinutes')
+        idleKeys = opMetrics.turnoverIdleMinutes.keys;
+        for k = 1:numel(idleKeys)
+            key = idleKeys{k};
+            value = opMetrics.turnoverIdleMinutes(key);
+            if operatorIdleGapMap.isKey(key)
+                operatorIdleGapMap(key) = operatorIdleGapMap(key) + value;
+            else
+                operatorIdleGapMap(key) = value;
+            end
+        end
+    end
+
     dept = dailyResult.operatorDepartmentMetrics;
     totalTurnovers = totalTurnovers + dept.totalTurnovers;
     totalFlipCount = totalFlipCount + dept.totalFlipCount;
@@ -155,6 +169,23 @@ operatorSummary.operatorOvertimeMinutes = operatorOvertimeMap;
 operatorSummary.operatorTurnoverCount = operatorTurnoverMap;
 operatorSummary.operatorFlipCount = operatorFlipMap;
 operatorSummary.operatorFlipPerTurnoverRatio = operatorFlipRatioMap;
+idleMeanMap = containers.Map('KeyType','char','ValueType','double');
+idleKeys = operatorIdleGapMap.keys;
+for idx = 1:numel(idleKeys)
+    key = idleKeys{idx};
+    idleSum = operatorIdleGapMap(key);
+    turns = 0;
+    if operatorTurnoverMap.isKey(key)
+        turns = operatorTurnoverMap(key);
+    end
+    if turns > 0
+        idleMeanMap(key) = idleSum / turns;
+    else
+        idleMeanMap(key) = NaN;
+    end
+end
+
+operatorSummary.operatorTotalIdleMinutesPerTurnover = idleMeanMap;
 operatorSummary.operatorNames = operatorNamesMap;
 operatorSummary.department = departmentSummary;
 
