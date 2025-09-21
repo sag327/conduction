@@ -12,17 +12,12 @@ if ~(isstruct(summary) && isfield(summary, 'operatorSummary') && ...
 end
 
 operatorIds = summary.operatorSummary.operatorNames.keys;
-numOps = numel(operatorIds);
-
-flipMedians = zeros(numOps, 1);
-idleMedians = zeros(numOps, 1);
-rawOperatorNames = cell(numOps, 1);
-
 dailyResults = summary.dailyResults;
 
-for idx = 1:numOps
+opStruct = struct('id', {}, 'name', {}, 'idleMedian', {}, 'flipMedian', {});
+
+for idx = 1:numel(operatorIds)
     opId = operatorIds{idx};
-    rawOperatorNames{idx} = summary.operatorSummary.operatorNames(opId);
 
     flips = [];
     idles = [];
@@ -37,11 +32,28 @@ for idx = 1:numOps
         end
     end
 
-    flipMedians(idx) = median(flips, 'omitnan');
-    idleMedians(idx) = median(idles, 'omitnan');
+    if isempty(flips) && isempty(idles)
+        continue;
+    end
+
+    entry = struct();
+    entry.id = opId;
+    entry.name = summary.operatorSummary.operatorNames(opId);
+    entry.idleMedian = median(idles, 'omitnan');
+    entry.flipMedian = median(flips, 'omitnan');
+
+    opStruct(end+1) = entry; %#ok<AGROW>
 end
 
+if isempty(opStruct)
+    warning('plotOperatorTurnovers:NoData', 'No operator turnover data available to plot.');
+    return;
+end
+
+rawOperatorNames = {opStruct.name};
 labels = conduction.plotting.formatOperatorNames(rawOperatorNames);
+idleMedians = [opStruct.idleMedian];
+flipMedians = [opStruct.flipMedian];
 
 figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
 subplot(2,1,1);
