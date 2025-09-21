@@ -65,6 +65,8 @@ batchResult = optimizer.run(collection);
 
 ### Analytics
 
+- Legacy vs. Refactor note: The refactored analyzers drop cases that are missing procedure start/end timestamps or lab assignments. Legacy scripts counted those rows when estimating turnovers, which tends to inflate the turnover denominator and lower flip-per-turnover ratios. Expect conduction’s aggregate ratios to be slightly higher (more accurate) in data sets with incomplete clinical rows.
+
 - `conduction.analytics.DailyAnalyzer.analyze(dailySchedule)` produces per-day metrics (case counts, average lab occupancy ratio = procedure minutes ÷ active window) and lab idle minutes.
 - `conduction.analytics.OperatorAnalyzer.analyze(dailySchedule)` returns `operatorMetrics` (per-operator idle, overtime, flip/idle ratios) and `departmentMetrics` (turnover samples, totals, aggregate ratios).
 - `conduction.analytics.ProcedureAnalyzer.analyze(dailySchedule)` captures raw procedure duration samples per procedure and per operator; pair it with `conduction.analytics.ProcedureMetricsAggregator` to accumulate days and compute mean/median/P70/P90 statistics.
