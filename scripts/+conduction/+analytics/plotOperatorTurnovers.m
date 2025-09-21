@@ -57,7 +57,7 @@ flipMedians = [opStruct.flipMedian];
 
 figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
 subplot(2,1,1);
-bar(categorical(labels), idleMedians);
+idleBars = bar(categorical(labels), idleMedians);
 ylabel('Median idle minutes per turnover');
 title('Operator Idle per Turnover (Median)');
 
@@ -65,15 +65,26 @@ ylimitIdle = ylim;
 ylim([0, ylimitIdle(2)]);
 
 ytickformat('%.1f');
+idleXTicks = idleBars.XEndPoints;
+idleYTicks = idleBars.YEndPoints;
+idleLabels = arrayfun(@(v) sprintf('%.1f', v), idleMedians, 'UniformOutput', false);
+text(idleXTicks, idleYTicks, idleLabels, ...
+    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
 
 subplot(2,1,2);
-bar(categorical(labels), 100 * flipMedians);
+flipValuesPercent = 100 * flipMedians;
+flipBars = bar(categorical(labels), flipValuesPercent);
 ylabel('Median flip per turnover (%)');
 xlabel('Operator');
 title('Operator Flip per Turnover (Median)');
 
 ylim([0, 100]);
 ytickformat('%.0f');
+flipXTicks = flipBars.XEndPoints;
+flipYTicks = flipBars.YEndPoints;
+flipLabels = arrayfun(@(v) sprintf('%.0f%%', v), flipValuesPercent, 'UniformOutput', false);
+text(flipXTicks, flipYTicks, flipLabels, ...
+    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
 
 conduction.plotting.applyStandardStyle(gcf);
 
