@@ -119,7 +119,7 @@ subplot(2,1,2);
 flipPercent = 100 * flipValues;
 flipBars = bar(categorical(labels), flipPercent);
 ylabel('Flip per turnover (%)');
-xlabel('Operator');
+xlabel('');
 if mode == "median"
     title('Operator Flip per Turnover (Median)');
 else

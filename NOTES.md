@@ -134,3 +134,15 @@ conduction.analytics.plotOperatorTurnovers(summary);
 conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 ```
 ```
+
+### Batch Optimization Example
+```matlab
+addpath(genpath('scripts'));
+collection = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
+options = conduction.batch.OptimizationOptions('Parallel', true, 'ShowProgress', true);
+optimizer = conduction.batch.Optimizer(options);
+batchResult = optimizer.run(collection);
+
+fprintf('Days optimized: %d (successes: %d, failures: %d)\n', ...
+    batchResult.summary.totalDays, batchResult.summary.optimizedDays, numel(batchResult.failures));
+```
