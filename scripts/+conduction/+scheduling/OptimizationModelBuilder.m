@@ -195,7 +195,7 @@ classdef OptimizationModelBuilder
             end
 
             % Constraint 3.5: operator availability from prior phase
-            if options.PrioritizeOutpatient && ~isempty(operatorAvailability)
+            if ~isempty(operatorAvailability) && operatorAvailability.Count > 0
                 if verbose
                     fprintf('Constraint 3.5/6: operator carryover...');
                 end
