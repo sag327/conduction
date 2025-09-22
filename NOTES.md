@@ -3,6 +3,7 @@
 ## Branches
 - `main`: latest stable refactor (visualization + single-day optimizer).
 - `datasetOptimization`: current branch adding batch optimization across schedule collections.
+- Push new feature branches to GitHub immediately after creation (e.g., `git push -u origin <branch>`), then keep them in sync after each commit.
 
 ## Recent Work
 - Added `conduction.DailySchedule` enhancements and adapters to store setup/procedure/post/turnover durations, priorities, lab preferences, and admission status.
@@ -127,11 +128,32 @@ fprintf('Operator %s total overtime: %.1f minutes (flip ratio %.2f)\n', ...
     summary.operatorSummary.operatorFlipPerTurnoverRatio(firstOperator));
 
 % Plotting example (requires the summary above)
-conduction.analytics.plotOperatorTurnovers(summary);
+conduction.plotting.plotOperatorTurnovers(summary);
 % (Internally uses conduction.plotting.applyStandardStyle for consistent styling.)
 
 % To plot collection-wide totals rather than medians:
-conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
+conduction.plotting.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
+```
+
+### Multi-Experiment Comparison Plots
+```matlab
+addpath(genpath('scripts'));
+cd('~/Documents/codeProjects/conduction');
+
+baseline = conduction.analytics.analyzeScheduleCollection(collection);
+config = conduction.configureOptimization('OptimizationMetric', 'makespan');
+optResult = conduction.optimizeScheduleCollection(collection, config, 'ShowProgress', false);
+optimized = conduction.analytics.analyzeScheduleCollection(optResult.optimizedCollection);
+
+experiments = {baseline, optimized};
+conduction.plotting.plotMultiCollectionResults(experiments, ...
+    'Metric', 'operatorIdlePerTurnover', ...
+    'ExperimentNames', {'Baseline', 'Makespan Optimised'}, ...
+    'PlotType', 'bar');
+
+conduction.plotting.plotMultiCollectionResults(experiments, ...
+    'Metric', 'operatorFlipPerTurnover', ...
+    'PlotType', 'box');
 ```
 ```
 
@@ -147,5 +169,5 @@ fprintf('Days optimized: %d (failures: %d)\n', numDays, numel(batchResult.failur
 
 % batchResult.optimizedCollection is ready for analytics
 summary = conduction.analytics.analyzeScheduleCollection(batchResult.optimizedCollection);
-conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
+conduction.plotting.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 ```

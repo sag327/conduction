@@ -8,8 +8,8 @@ function plotOperatorTurnovers(summary, varargin)
 %
 %   Example:
 %       summary = conduction.analytics.analyzeScheduleCollection(collection);
-%       conduction.analytics.plotOperatorTurnovers(summary);
-%       conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'median');
+%       conduction.plotting.plotOperatorTurnovers(summary);
+%       conduction.plotting.plotOperatorTurnovers(summary, 'Mode', 'median');
 
 p = inputParser;
 p.addParameter('Mode', 'aggregate', @(x) any(strcmpi(x, {'median','aggregate'})));
