@@ -97,7 +97,7 @@ labels = conduction.plotting.formatOperatorNames(rawNames);
 idleValues = [opStruct.idleValue];
 flipValues = [opStruct.flipValue];
 
-figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
+fig = figure('Name', 'Operator Turnover Metrics', 'Color', 'w');
 subplot(2,1,1);
 idBars = bar(categorical(labels), idleValues);
 ylabel('Idle minutes per turnover');
@@ -134,8 +134,8 @@ ylim([0, max(100, maxFlip * 1.1)]);
 ytickformat('%.0f');
 annotateBars(flipBars, flipPercent, '%.0f%%');
 
-conduction.plotting.applyStandardStyle(gcf);
-
+conduction.plotting.applyStandardStyle(fig);
+attachVersionAnnotation(fig);
 end
 
 function annotateBars(barSeries, values, fmt)
@@ -149,5 +149,38 @@ if isnan(value)
     label = '';
 else
     label = sprintf(fmt, value);
+end
+end
+
+function attachVersionAnnotation(fig)
+info = conduction.version();
+commitLabel = abbreviate(info.Commit);
+dirtyMark = ternary(info.Dirty, '*', '');
+label = sprintf('conduction %s (%s%s)', info.Version, commitLabel, dirtyMark);
+annotation(fig, 'textbox', [0.0 0.0 0.99 0.03], ...
+    'String', label, 'HorizontalAlignment', 'right', ...
+    'EdgeColor', 'none', 'Interpreter', 'none', 'FontSize', 8);
+userData = get(fig, 'UserData');
+if ~isstruct(userData)
+    userData = struct();
+end
+userData.conductionVersion = info;
+set(fig, 'UserData', userData);
+end
+
+function out = abbreviate(commit)
+if isempty(commit) || strcmpi(commit, 'unknown')
+    out = 'unknown';
+else
+    chars = char(commit);
+    out = chars(1:min(numel(chars), 7));
+end
+end
+
+function out = ternary(condition, ifTrue, ifFalse)
+if condition
+    out = ifTrue;
+else
+    out = ifFalse;
 end
 end

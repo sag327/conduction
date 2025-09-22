@@ -16,8 +16,12 @@ classdef Optimizer
         function batchResult = run(obj, scheduleCollection)
 
             schedules = scheduleCollection.dailySchedules();
+            versionInfo = conduction.version();
+            generatedAt = datetime('now','TimeZone','UTC');
+            metadata = struct('version', versionInfo, 'generatedAt', generatedAt);
             if isempty(schedules)
-                batchResult = struct('results', conduction.batch.OptimizationResult.empty, 'failures', []);
+                batchResult = struct('results', conduction.batch.OptimizationResult.empty, ...
+                    'failures', [], 'metadata', metadata);
                 return;
             end
 
@@ -26,7 +30,8 @@ classdef Optimizer
             schedules = schedules(mask);
 
             if isempty(schedules)
-                batchResult = struct('results', conduction.batch.OptimizationResult.empty, 'failures', []);
+                batchResult = struct('results', conduction.batch.OptimizationResult.empty, ...
+                    'failures', [], 'metadata', metadata);
                 return;
             end
 
@@ -73,7 +78,8 @@ classdef Optimizer
                 parfor idx = 1:numDays
                     dailySchedule = scheduleCells{idx};
                     [optSchedule, outcome] = conduction.optimizeDailySchedule(dailySchedule, schedOptions);
-                    resultCells{idx} = conduction.batch.OptimizationResult(dailySchedule, optSchedule, outcome);
+                    result = conduction.batch.OptimizationResult(dailySchedule, optSchedule, outcome);
+                    resultCells{idx} = result.withMetadata(metadata);
                     if obj.Options.ShowProgress && numDays > 0
                         send(progressQueue, idx);
                     end
@@ -82,11 +88,13 @@ classdef Optimizer
                 for idx = 1:numDays
                     try
                         [optSchedule, outcome] = conduction.optimizeDailySchedule(schedules(idx), obj.Options.SchedulingOptions);
-                        resultCells{idx} = conduction.batch.OptimizationResult(schedules(idx), optSchedule, outcome);
+                        result = conduction.batch.OptimizationResult(schedules(idx), optSchedule, outcome);
+                        resultCells{idx} = result.withMetadata(metadata);
                         if obj.Options.ShowProgress && numDays > 0; progressBar.increment(); end
                     catch ME
                         failures(end+1,1) = sprintf('%s (%s)', datestr(schedules(idx).Date), ME.message); %#ok<AGROW>
-                        resultCells{idx} = conduction.batch.OptimizationResult(schedules(idx), conduction.DailySchedule.empty, struct('error', ME));
+                        result = conduction.batch.OptimizationResult(schedules(idx), conduction.DailySchedule.empty, struct('error', ME));
+                        resultCells{idx} = result.withMetadata(metadata);
                         if obj.Options.ShowProgress && numDays > 0; progressBar.increment(); end
                     end
                 end
@@ -114,7 +122,8 @@ classdef Optimizer
             batchResult = struct('results', results, ...
                 'failures', failures, ...
                 'optimizedSchedules', optimizedSchedules, ...
-                'optimizedCollection', optimizedCollection);
+                'optimizedCollection', optimizedCollection, ...
+                'metadata', metadata);
 
             if obj.Options.ShowProgress && exist('progressBar', 'var')
                 progressBar.finish();

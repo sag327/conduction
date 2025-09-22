@@ -3,6 +3,7 @@
 ## Branches
 - `main`: latest stable refactor (visualization + single-day optimizer).
 - `datasetOptimization`: current branch adding batch optimization across schedule collections.
+- Tag releases on `main` with semantic version numbers (`vMAJOR.MINOR.PATCH`) and update the root `VERSION` file alongside the tag.
 
 ## Recent Work
 - Added `conduction.DailySchedule` enhancements and adapters to store setup/procedure/post/turnover durations, priorities, lab preferences, and admission status.
@@ -38,6 +39,7 @@ conduction.visualizeDailySchedule(newSchedule, 'Title', 'Rescheduled Jan 2, 2025
 - Options via `conduction.batch.OptimizationOptions` (`Parallel`, `DateFilter`, `ShowProgress`, etc.).
 - Progress output reports total days, per-day completion, and a summary of successes vs. skipped days.
 - `DailySchedule` now skips rows lacking procedure start/end timestamps, so days with incomplete data are omitted at ingest.
+- Each batch run returns `batchResult.metadata` containing the refactor version (from `conduction.version()`) and the UTC timestamp of the run; every `OptimizationResult` object carries the same metadata in its `Metadata` field.
 - `conduction.analytics.DailyAnalyzer` computes per-day metrics (case counts, average lab occupancy ratio = procedure minutes ÷ active window, makespan, lab idle minutes).
 - `conduction.analytics.OperatorAnalyzer` returns `operatorMetrics` (per-operator idle/overtime/flip+idle ratios) and `departmentMetrics` (turnover samples, totals, aggregate ratios).
 - `conduction.analytics.ProcedureAnalyzer` + `ProcedureMetricsAggregator` capture per-procedure samples and aggregate mean/median/P70/P90 durations for overall and per-operator views.
@@ -144,6 +146,10 @@ batchResult = conduction.optimizeScheduleCollection(collection, config, 'Paralle
 
 numDays = numel(batchResult.results) + numel(batchResult.failures);
 fprintf('Days optimized: %d (failures: %d)\n', numDays, numel(batchResult.failures));
+fprintf('Run metadata: version %s (%s) at %s UTC\n', ...
+    batchResult.metadata.version.Version, ...
+    batchResult.metadata.version.Commit, ...
+    string(batchResult.metadata.generatedAt));
 
 % batchResult.optimizedCollection is ready for analytics
 summary = conduction.analytics.analyzeScheduleCollection(batchResult.optimizedCollection);

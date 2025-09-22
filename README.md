@@ -17,6 +17,13 @@ Understanding these behaviours is the baseline for the refactor: each new module
 - `clinicalData/` – Sample datasets, lab mappings, and historical experiment outputs the refactor will use for parity testing.
 - `scripts/` – Placeholder for new refactored code (language/architecture to be defined as the project evolves). Legacy MATLAB scripts remain in the original project at `../epScheduling/scripts` and can be referenced via `addpath` when comparisons are needed.
 
+## Versioning
+
+- The refactor uses [Semantic Versioning](https://semver.org/) with Git tags in the format `vMAJOR.MINOR.PATCH` applied to `main`. Create an annotated tag when you cut a release (for example `git tag -a v0.1.0 -m "Initial release"`) and push it with `git push origin <tag>`.
+- The current base version is stored in the root `VERSION` file; update it whenever you bump the version and create a new tag.
+- Call `conduction.version()` to retrieve the semantic version, the short commit hash, the latest tag (when available), and a dirty flag. This helper does not error out when Git is unavailable and can be used in logs or metadata.
+- Batch optimisation results (`conduction.batch.Optimizer.run` and top-level wrappers such as `conduction.optimizeScheduleCollection`) include this information under `metadata.version`, along with a `metadata.generatedAt` timestamp. Plotting helpers add a footer annotation with the same version stamp.
+
 ## Refactor objectives
 - Document and modularise the functional areas above before porting them into the new stack.
 - Create automated tests and parity checks that compare refactored outputs to the MATLAB references.
@@ -74,6 +81,9 @@ batchResult = optimizer.run(collection);
 - `conduction.analytics.runProcedureAnalysis(collection)` wraps the collection analyzer for the common case of aggregating procedure metrics across an entire dataset.
 - `conduction.analytics.analyzeDailySchedule(dailySchedule)` bundles all per-day analyzers into a single call, returning daily/operator/procedure results.
 - `conduction.analytics.analyzeScheduleCollection(collection)` iterates every day in a schedule collection (or array of schedules) and returns consolidated procedure, operator (including per-operator turnover ratios), and daily summaries.
-- `conduction.analytics.plotOperatorTurnovers(summary, 'Mode', mode)` plots idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`; use `Mode='median'` (default) or `'aggregate'` to switch between day medians and overall collection percentages.
-- `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.
 - `conduction.optimizeScheduleCollection(collection, config, ...)` wraps the batch optimizer so you can optimize every day in a collection (or load from file) with a single call; `config` is the struct returned by `conduction.configureOptimization`. The result struct now includes `optimizedSchedules` (array of `DailySchedule`) and `optimizedCollection` (a `ScheduleCollection` view over those schedules) so you can pass the output straight into analytics.
+
+### Plotting
+
+- `conduction.plotting.plotOperatorTurnovers(summary, 'Mode', mode)` plots idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`; use `Mode='median'` (default) or `'aggregate'` to switch between day medians and overall collection percentages. The generated figure includes a footer showing the refactor version and commit hash used to produce it.
+- `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.
