@@ -3,7 +3,7 @@
 ## Branches
 - `main`: latest stable refactor (visualization + single-day optimizer).
 - `datasetOptimization`: current branch adding batch optimization across schedule collections.
-- Tag releases on `main` with semantic version numbers (`vMAJOR.MINOR.PATCH`) and update the root `VERSION` file alongside the tag.
+- Tag releases on `main` with semantic version numbers (`vMAJOR.MINOR.PATCH`) and update the root `VERSION` file alongside the tag. Use `conduction.bumpVersion('patch'|'minor'|'major')` to automate the bump/commit/tag steps (add `'DryRun', true` to preview, `'Push', true` to push immediately).
 
 ## Recent Work
 - Added `conduction.DailySchedule` enhancements and adapters to store setup/procedure/post/turnover durations, priorities, lab preferences, and admission status.

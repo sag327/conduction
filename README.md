@@ -21,6 +21,7 @@ Understanding these behaviours is the baseline for the refactor: each new module
 
 - The refactor uses [Semantic Versioning](https://semver.org/) with Git tags in the format `vMAJOR.MINOR.PATCH` applied to `main`. Create an annotated tag when you cut a release (for example `git tag -a v0.1.0 -m "Initial release"`) and push it with `git push origin <tag>`.
 - The current base version is stored in the root `VERSION` file; update it whenever you bump the version and create a new tag.
+- Run `conduction.bumpVersion('patch')` (or `'minor'`, `'major'`) to update the `VERSION` file, commit the change, and create the corresponding tag automatically. Pass `'DryRun', true` to preview, or `'Push', true` to push the branch/tag immediately.
 - Call `conduction.version()` to retrieve the semantic version, the short commit hash, the latest tag (when available), and a dirty flag. This helper does not error out when Git is unavailable and can be used in logs or metadata.
 - Batch optimisation results (`conduction.batch.Optimizer.run` and top-level wrappers such as `conduction.optimizeScheduleCollection`) include this information under `metadata.version`, along with a `metadata.generatedAt` timestamp. Plotting helpers add a footer annotation with the same version stamp.
 
