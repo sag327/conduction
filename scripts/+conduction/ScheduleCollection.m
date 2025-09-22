@@ -12,6 +12,10 @@ classdef ScheduleCollection
         CaseRequests conduction.CaseRequest
     end
 
+    properties (Access = private)
+        DailyScheduleCache conduction.DailySchedule = conduction.DailySchedule.empty
+    end
+
     methods (Static)
         function dataset = fromFile(filePath)
             arguments
@@ -20,6 +24,28 @@ classdef ScheduleCollection
 
             [tableData, historicalEntities] = conduction.loadHistoricalData(filePath);
             dataset = conduction.ScheduleCollection(tableData, historicalEntities);
+        end
+
+        function dataset = fromSchedules(dailySchedules)
+            arguments
+                dailySchedules (:,:) conduction.DailySchedule
+            end
+
+            if isempty(dailySchedules)
+                dailySchedules = conduction.DailySchedule.empty(1,0);
+            elseif ~isrow(dailySchedules)
+                dailySchedules = dailySchedules(:)';
+            end
+
+            emptyTable = table();
+            emptyEntities = struct();
+            emptyEntities.procedures = containers.Map('KeyType','char','ValueType','any');
+            emptyEntities.operators = containers.Map('KeyType','char','ValueType','any');
+            emptyEntities.labs = containers.Map('KeyType','char','ValueType','any');
+            emptyEntities.caseRequests = conduction.CaseRequest.empty;
+
+            dataset = conduction.ScheduleCollection(emptyTable, emptyEntities);
+            dataset.DailyScheduleCache = dailySchedules;
         end
     end
 
@@ -78,8 +104,19 @@ classdef ScheduleCollection
                 targetDate
             end
 
-            if isempty(obj.Table)
+            if isempty(obj.Table) && isempty(obj.DailyScheduleCache)
                 schedule = conduction.DailySchedule.empty;
+                return;
+            end
+
+            if ~isempty(obj.DailyScheduleCache)
+                dayValue = dateshift(datetime(targetDate), 'start', 'day');
+                matches = arrayfun(@(ds) dateshift(ds.Date, 'start', 'day') == dayValue, obj.DailyScheduleCache);
+                if any(matches)
+                    schedule = obj.DailyScheduleCache(matches);
+                else
+                    schedule = conduction.DailySchedule.empty;
+                end
                 return;
             end
 
@@ -96,6 +133,11 @@ classdef ScheduleCollection
         end
 
         function schedules = dailySchedules(obj)
+            if ~isempty(obj.DailyScheduleCache)
+                schedules = obj.DailyScheduleCache;
+                return;
+            end
+
             if isempty(obj.Table)
                 schedules = conduction.DailySchedule.empty;
                 return;

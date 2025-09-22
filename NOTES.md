@@ -140,8 +140,12 @@ conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 addpath(genpath('scripts'));
 collection = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
 config = conduction.configureOptimization('OptimizationMetric', 'makespan');
-batchResult = conduction.optimizeScheduleCollection(collection, config, 'Parallel', true, 'ShowProgress', true);
+batchResult = conduction.optimizeScheduleCollection(collection, config, 'Parallel', false, 'ShowProgress', true);
 
 numDays = numel(batchResult.results) + numel(batchResult.failures);
 fprintf('Days optimized: %d (failures: %d)\n', numDays, numel(batchResult.failures));
+
+% batchResult.optimizedCollection is ready for analytics
+summary = conduction.analytics.analyzeScheduleCollection(batchResult.optimizedCollection);
+conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'aggregate');
 ```

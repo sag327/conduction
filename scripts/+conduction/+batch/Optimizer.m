@@ -33,10 +33,6 @@ classdef Optimizer
             numDays = numel(schedules);
             failures = strings(0,1);
 
-            if obj.Options.ShowProgress
-                fprintf('Optimizing %d day(s)...\n', numDays);
-            end
-
             validMask = true(numDays,1);
             for idx = 1:numDays
                 try
@@ -51,27 +47,34 @@ classdef Optimizer
                 end
             end
 
-            if obj.Options.ShowProgress && any(~validMask)
-                fprintf('  Skipping %d day(s) due to missing procedure durations.\n', sum(~validMask));
-            end
-
+            skippedCount = sum(~validMask);
             schedules = schedules(validMask);
             numDays = numel(schedules);
             resultCells = cell(numDays, 1);
 
+            if obj.Options.ShowProgress
+                if skippedCount > 0
+                    fprintf('Skipping %d day(s) due to missing procedure durations.\n', skippedCount);
+                end
+                fprintf('Optimizing %d day(s)...\n', numDays);
+                if numDays > 0
+                    progressBar = conduction.internal.util.ProgressBar(numDays);
+                end
+            end
+
             if obj.Options.Parallel
                 scheduleCells = num2cell(schedules);
                 schedOptions = obj.Options.SchedulingOptions;
-                if obj.Options.ShowProgress
+                progressQueue = [];
+                if obj.Options.ShowProgress && numDays > 0
                     progressQueue = parallel.pool.DataQueue;
-                    progressCount = 0; %#ok<NASGU>
-                    afterEach(progressQueue, @updateProgress);
+                    afterEach(progressQueue, @(~) progressBar.increment());
                 end
                 parfor idx = 1:numDays
                     dailySchedule = scheduleCells{idx};
                     [optSchedule, outcome] = conduction.optimizeDailySchedule(dailySchedule, schedOptions);
                     resultCells{idx} = conduction.batch.OptimizationResult(dailySchedule, optSchedule, outcome);
-                    if obj.Options.ShowProgress
+                    if obj.Options.ShowProgress && numDays > 0
                         send(progressQueue, idx);
                     end
                 end
@@ -80,33 +83,41 @@ classdef Optimizer
                     try
                         [optSchedule, outcome] = conduction.optimizeDailySchedule(schedules(idx), obj.Options.SchedulingOptions);
                         resultCells{idx} = conduction.batch.OptimizationResult(schedules(idx), optSchedule, outcome);
-                        if obj.Options.ShowProgress
-                            fprintf('  (%d/%d) %s\n', idx, numDays, datestr(schedules(idx).Date));
-                        end
+                        if obj.Options.ShowProgress && numDays > 0; progressBar.increment(); end
                     catch ME
                         failures(end+1,1) = sprintf('%s (%s)', datestr(schedules(idx).Date), ME.message); %#ok<AGROW>
                         resultCells{idx} = conduction.batch.OptimizationResult(schedules(idx), conduction.DailySchedule.empty, struct('error', ME));
-                        if obj.Options.ShowProgress
-                            fprintf('  (%d/%d) %s [skipped]\n', idx, numDays, datestr(schedules(idx).Date));
-                        end
+                        if obj.Options.ShowProgress && numDays > 0; progressBar.increment(); end
                     end
                 end
             end
             results = [resultCells{:}]';
-            batchResult = struct('results', results, 'failures', failures);
 
-            function updateProgress(dayIdx)
-                persistent count total
-                if isempty(count)
-                    count = 0;
-                    total = numDays;
+            optimizedSchedules = conduction.DailySchedule.empty(1,0);
+            if ~isempty(results)
+                scheduleCells = cell(numel(results),1);
+                count = 0;
+                for idxResult = 1:numel(results)
+                    candidate = results(idxResult).OptimizedSchedule;
+                    if ~isempty(candidate)
+                        count = count + 1;
+                        scheduleCells{count} = candidate;
+                    end
                 end
-                count = count + 1;
-                fprintf('  (%d/%d) %s\n', count, total, datestr(schedules(dayIdx).Date));
-                if count == total
-                    count = [];
-                    total = [];
+                if count > 0
+                    optimizedSchedules = [scheduleCells{1:count}];
                 end
+            end
+
+            optimizedCollection = conduction.ScheduleCollection.fromSchedules(optimizedSchedules);
+
+            batchResult = struct('results', results, ...
+                'failures', failures, ...
+                'optimizedSchedules', optimizedSchedules, ...
+                'optimizedCollection', optimizedCollection);
+
+            if obj.Options.ShowProgress && exist('progressBar', 'var')
+                progressBar.finish();
             end
         end
     end
