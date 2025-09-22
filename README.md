@@ -1,7 +1,7 @@
 # EP Scheduling Refactor
 
 ## Overview
-This repository tracks the refactor of a mature MATLAB workflow used to plan and analyze electrophysiology (EP) lab schedules. The legacy code in `oldScripts/` loads historical case data, rebuilds day-by-day lab schedules, optimizes future schedules with integer programming, and produces analytics on lab utilization, operator idle time, and procedure throughput. The goal of this project is to replace that MATLAB toolchain with a modern, modular implementation while preserving the validated behaviour and outputs.
+This repository tracks the refactor of a mature MATLAB workflow used to plan and analyze electrophysiology (EP) lab schedules. The legacy code lives in the separate `epScheduling` project (kept one directory up) and contains the historical scripts that load case data, rebuild day-by-day lab schedules, optimise future schedules with integer programming, and produce analytics on lab utilisation, operator idle time, and procedure throughput. The goal of this project is to replace that MATLAB toolchain with a modern, modular implementation while preserving the validated behaviour and outputs.
 
 ## What the legacy MATLAB suite does
 - **Data ingestion** – `loadHistoricalDataFromFile.m` reads historical procedure datasets and supporting lab metadata into rich MATLAB structures keyed by case, operator, and date.
@@ -13,7 +13,6 @@ This repository tracks the refactor of a mature MATLAB workflow used to plan and
 Understanding these behaviours is the baseline for the refactor: each new module must accept the same inputs, produce comparable metrics, and support the same experiment flows.
 
 ## Repository layout
-- `oldScripts/` – Reference MATLAB implementation to be dissected and rewritten.
 - `clinicalData/` – Sample datasets, lab mappings, and historical experiment outputs the refactor will use for parity testing.
 - `scripts/` – Placeholder for new refactored code (language/architecture to be defined as the project evolves). Legacy MATLAB scripts remain in the original project at `../epScheduling/scripts` and can be referenced via `addpath` when comparisons are needed.
 
