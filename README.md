@@ -86,4 +86,5 @@ batchResult = optimizer.run(collection);
 ### Plotting
 
 - `conduction.plotting.plotOperatorTurnovers(summary, 'Mode', mode)` plots idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`; use `Mode='median'` (default) or `'aggregate'` to switch between day medians and overall collection percentages. The generated figure includes a footer showing the refactor version and commit hash used to produce it.
+- `conduction.plotting.plotMultiCollectionResults(experiments, ...)` compares metrics (operator idle, flip ratios, department totals, makespan, utilisation) across multiple collection analyses; accepts `Metric`, `PlotType`, and `ExperimentNames` options. Every chart is annotated with the current refactor version via `conduction.version()`.
 - `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.
