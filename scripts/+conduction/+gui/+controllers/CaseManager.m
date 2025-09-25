@@ -14,6 +14,8 @@ classdef CaseManager < handle
     properties (Dependent)
         CaseCount
         CaseList
+        OperatorCount
+        ProcedureCount
     end
 
     methods
@@ -38,6 +40,22 @@ classdef CaseManager < handle
                 return;
             end
             list = arrayfun(@(c) c.getDisplayName(), obj.Cases, 'UniformOutput', false);
+        end
+
+        function count = get.OperatorCount(obj)
+            if isempty(obj.KnownOperators)
+                count = 0;
+            else
+                count = obj.KnownOperators.Count;
+            end
+        end
+
+        function count = get.ProcedureCount(obj)
+            if isempty(obj.KnownProcedures)
+                count = 0;
+            else
+                count = obj.KnownProcedures.Count;
+            end
         end
 
         function addCase(obj, operatorName, procedureName, customDuration)

@@ -416,8 +416,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function updateDataStatus(app)
             if app.CaseManager.hasClinicalData()
-                opCount = app.CaseManager.KnownOperators.Count;
-                procCount = app.CaseManager.KnownProcedures.Count;
+                opCount = app.CaseManager.OperatorCount;
+                procCount = app.CaseManager.ProcedureCount;
                 app.DataStatusLabel.Text = sprintf('Loaded: %d operators, %d procedures', opCount, procCount);
                 app.DataStatusLabel.FontColor = [0 0.6 0]; % Green
             else
