@@ -6,7 +6,7 @@ classdef CaseManager < handle
         KnownOperators containers.Map % id -> Operator
         KnownProcedures containers.Map % id -> Procedure
         TargetDate datetime
-        ChangeListeners function_handle = function_handle.empty
+        ChangeListeners cell = {}
         HistoricalCollection conduction.ScheduleCollection
         ProcedureAnalytics struct % Contains operator-specific procedure stats
     end
@@ -139,7 +139,7 @@ classdef CaseManager < handle
                 obj
                 listener (1,1) function_handle
             end
-            obj.ChangeListeners(end+1) = listener;
+            obj.ChangeListeners{end+1} = listener;
         end
 
         function clearAllCases(obj)
@@ -236,8 +236,8 @@ classdef CaseManager < handle
             % First try operator-specific procedure statistics
             stats = obj.getOperatorProcedureStats(operatorName, procedureName);
             if stats.available && stats.count >= 3 % Need at least 3 cases for reliability
-                % Use mean duration from historical data
-                duration = stats.mean;
+                % Use median duration from historical data
+                duration = stats.median;
                 return;
             end
 
@@ -247,8 +247,8 @@ classdef CaseManager < handle
                 if isfield(obj.ProcedureAnalytics, 'procedures') && ...
                    obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
                     procData = obj.ProcedureAnalytics.procedures(char(procedureId));
-                    if ~isnan(procData.overall.mean) && procData.overall.count >= 3
-                        duration = procData.overall.mean;
+                    if ~isnan(procData.overall.median) && procData.overall.count >= 3
+                        duration = procData.overall.median;
                         return;
                     end
                 end
@@ -266,6 +266,44 @@ classdef CaseManager < handle
                 duration = 45;  % 45 minutes
             else
                 duration = 60;  % 1 hour default
+            end
+        end
+
+        function allStats = getAllStatistics(obj, operatorName, procedureName)
+            % Get complete statistics for operator-procedure combination
+            % Returns struct with median, mean, p70, p90, count, and data source info
+
+            allStats = struct();
+            allStats.medianDuration = obj.estimateDuration(operatorName, procedureName);
+
+            % Get detailed operator-specific stats if available
+            opStats = obj.getOperatorProcedureStats(operatorName, procedureName);
+            if opStats.available
+                allStats.operatorSpecific = opStats;
+                allStats.dataSource = 'operator-specific';
+            else
+                allStats.operatorSpecific = struct();
+            end
+
+            % Get procedure-only stats if available
+            if obj.hasClinicalData()
+                procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
+                if isfield(obj.ProcedureAnalytics, 'procedures') && ...
+                   obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
+                    procData = obj.ProcedureAnalytics.procedures(char(procedureId));
+                    allStats.procedureOverall = procData.overall;
+                    if ~opStats.available
+                        allStats.dataSource = 'procedure-average';
+                    end
+                else
+                    allStats.procedureOverall = struct();
+                    if ~opStats.available
+                        allStats.dataSource = 'heuristic';
+                    end
+                end
+            else
+                allStats.procedureOverall = struct();
+                allStats.dataSource = 'heuristic';
             end
         end
     end

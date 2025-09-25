@@ -120,7 +120,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
 
             app.DurationLabel = uilabel(leftGrid);
-            app.DurationLabel.Text = 'Duration:';
+            app.DurationLabel.Text = 'Median Duration:';
             app.DurationLabel.Layout.Row = 10;
             app.DurationLabel.Layout.Column = 1;
 
