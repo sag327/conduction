@@ -54,7 +54,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Create MainGridLayout
             app.MainGridLayout = uigridlayout(app.UIFigure);
-            app.MainGridLayout.ColumnWidth = {300, '1x'};
+            app.MainGridLayout.ColumnWidth = {400, '1x'};
             app.MainGridLayout.RowHeight = {'1x'};
 
             % Create LeftPanel
@@ -120,7 +120,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
 
             app.DurationLabel = uilabel(leftGrid);
-            app.DurationLabel.Text = 'Median Duration:';
+            app.DurationLabel.Text = 'Median Duration (min):';
             app.DurationLabel.Layout.Row = 10;
             app.DurationLabel.Layout.Column = 1;
 
@@ -132,7 +132,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationSpinner.Layout.Column = 1;
 
             app.DurationUnitsLabel = uilabel(leftGrid);
-            app.DurationUnitsLabel.Text = 'minutes';
+            app.DurationUnitsLabel.Text = '';
             app.DurationUnitsLabel.Layout.Row = 11;
             app.DurationUnitsLabel.Layout.Column = 2;
 
@@ -151,7 +151,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.CasesTable = uitable(leftGrid);
             app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration'};
-            app.CasesTable.ColumnWidth = {80, 100, 60};
+            app.CasesTable.ColumnWidth = {100, 140, 70};
             app.CasesTable.RowName = {};
             app.CasesTable.Layout.Row = 14;
             app.CasesTable.Layout.Column = [1 2];
@@ -380,12 +380,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 if app.CaseManager.hasClinicalData()
                     stats = app.CaseManager.getOperatorProcedureStats(operatorName, procedureName);
                     if stats.available && stats.count >= 3
-                        app.DurationUnitsLabel.Text = sprintf('min (from %d cases)', stats.count);
+                        app.DurationUnitsLabel.Text = sprintf('(from %d cases)', stats.count);
                     else
-                        app.DurationUnitsLabel.Text = 'min (estimated)';
+                        app.DurationUnitsLabel.Text = '(estimated)';
                     end
                 else
-                    app.DurationUnitsLabel.Text = 'min (default)';
+                    app.DurationUnitsLabel.Text = '(default)';
                 end
             end
         end
