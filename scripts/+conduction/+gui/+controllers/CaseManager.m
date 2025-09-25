@@ -7,6 +7,8 @@ classdef CaseManager < handle
         KnownProcedures containers.Map % id -> Procedure
         TargetDate datetime
         ChangeListeners function_handle = function_handle.empty
+        HistoricalCollection conduction.ScheduleCollection
+        ProcedureAnalytics struct % Contains operator-specific procedure stats
     end
 
     properties (Dependent)
@@ -126,6 +128,89 @@ classdef CaseManager < handle
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
             obj.notifyChange();
         end
+
+        function success = loadClinicalData(obj, filePath)
+            arguments
+                obj
+                filePath (1,1) string
+            end
+
+            try
+                % Load the clinical dataset
+                fprintf('Loading clinical data from %s...\n', filePath);
+                obj.HistoricalCollection = conduction.ScheduleCollection.fromFile(filePath);
+
+                % Update known entities
+                obj.loadKnownEntities(obj.HistoricalCollection);
+
+                % Compute procedure analytics for operator-specific durations
+                obj.computeProcedureAnalytics();
+
+                fprintf('Successfully loaded %d operators, %d procedures\n', ...
+                    obj.KnownOperators.Count, obj.KnownProcedures.Count);
+
+                success = true;
+                obj.notifyChange();
+
+            catch ME
+                warning('CaseManager:LoadFailed', ...
+                    'Failed to load clinical data: %s', ME.message);
+                success = false;
+            end
+        end
+
+        function success = loadClinicalDataInteractive(obj)
+            % Show file picker dialog for loading clinical data
+            [fileName, pathName] = uigetfile( ...
+                {'*.xlsx;*.xls;*.csv', 'Spreadsheet Files (*.xlsx, *.xls, *.csv)'; ...
+                 '*.xlsx', 'Excel Files (*.xlsx)'; ...
+                 '*.xls', 'Excel 97-2003 Files (*.xls)'; ...
+                 '*.csv', 'CSV Files (*.csv)'; ...
+                 '*.*', 'All Files (*.*)'}, ...
+                'Select Clinical Data File');
+
+            if isequal(fileName, 0)
+                success = false; % User canceled
+                return;
+            end
+
+            fullPath = fullfile(pathName, fileName);
+            success = obj.loadClinicalData(string(fullPath));
+        end
+
+        function hasData = hasClinicalData(obj)
+            hasData = ~isempty(obj.HistoricalCollection) && ...
+                     ~isempty(obj.ProcedureAnalytics);
+        end
+
+        function stats = getOperatorProcedureStats(obj, operatorName, procedureName)
+            % Get operator-specific procedure statistics if available
+            stats = struct('available', false, 'mean', NaN, 'median', NaN, 'p70', NaN, 'p90', NaN, 'count', 0);
+
+            if ~obj.hasClinicalData()
+                return;
+            end
+
+            % Look up in procedure analytics
+            procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
+            if ~isfield(obj.ProcedureAnalytics, 'procedures') || ...
+               ~obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
+                return;
+            end
+
+            procData = obj.ProcedureAnalytics.procedures(char(procedureId));
+            operatorId = conduction.Operator.canonicalId(operatorName);
+
+            if procData.operators.isKey(char(operatorId))
+                opStats = procData.operators(char(operatorId));
+                stats.available = true;
+                stats.mean = opStats.stats.mean;
+                stats.median = opStats.stats.median;
+                stats.p70 = opStats.stats.p70;
+                stats.p90 = opStats.stats.p90;
+                stats.count = opStats.stats.count;
+            end
+        end
     end
 
     methods (Access = private)
@@ -167,11 +252,31 @@ classdef CaseManager < handle
         end
 
         function duration = estimateDuration(obj, operatorName, procedureName)
-            % TODO: Implement smart duration estimation using historical data
-            % For now, return reasonable defaults based on procedure type
+            % Smart duration estimation using historical data when available
 
+            % First try operator-specific procedure statistics
+            stats = obj.getOperatorProcedureStats(operatorName, procedureName);
+            if stats.available && stats.count >= 3 % Need at least 3 cases for reliability
+                % Use mean duration from historical data
+                duration = stats.mean;
+                return;
+            end
+
+            % Try procedure-only statistics (any operator)
+            if obj.hasClinicalData()
+                procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
+                if isfield(obj.ProcedureAnalytics, 'procedures') && ...
+                   obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
+                    procData = obj.ProcedureAnalytics.procedures(char(procedureId));
+                    if ~isnan(procData.overall.mean) && procData.overall.count >= 3
+                        duration = procData.overall.mean;
+                        return;
+                    end
+                end
+            end
+
+            % Fall back to heuristic defaults based on procedure type
             procedureLower = lower(procedureName);
-
             if contains(procedureLower, ["ablation", "afib"])
                 duration = 180; % 3 hours
             elseif contains(procedureLower, ["pci", "angioplasty"])
@@ -182,6 +287,23 @@ classdef CaseManager < handle
                 duration = 45;  % 45 minutes
             else
                 duration = 60;  % 1 hour default
+            end
+        end
+
+        function computeProcedureAnalytics(obj)
+            % Compute procedure analytics from historical collection
+            if isempty(obj.HistoricalCollection)
+                obj.ProcedureAnalytics = struct();
+                return;
+            end
+
+            try
+                % Run procedure analysis on the collection
+                obj.ProcedureAnalytics = conduction.analytics.runProcedureAnalysis(obj.HistoricalCollection);
+            catch ME
+                warning('CaseManager:AnalyticsFailed', ...
+                    'Failed to compute procedure analytics: %s', ME.message);
+                obj.ProcedureAnalytics = struct();
             end
         end
 

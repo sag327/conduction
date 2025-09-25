@@ -52,9 +52,15 @@ try
     fprintf('Prospective Scheduler GUI launched for %s\n', datestr(targetDate, 'mmm dd, yyyy'));
 
     if isempty(historicalCollection)
-        fprintf('Note: No historical data loaded. Only "Other..." options will be available.\n');
-        fprintf('To load historical data, use:\n');
-        fprintf('  conduction.launchSchedulerGUI(date, ''path/to/data.xlsx'')\n');
+        fprintf('\nNo historical data loaded initially.\n');
+        fprintf('• Use "Load Data File..." button in GUI to select clinical data\n');
+        fprintf('• Or pass file path: conduction.launchSchedulerGUI(date, ''data.xlsx'')\n');
+        fprintf('• Clinical data enables operator-specific procedure duration estimates\n');
+    else
+        fprintf('\nClinical data loaded successfully:\n');
+        fprintf('• %d operators available\n', historicalCollection.Operators.Count);
+        fprintf('• %d procedures available\n', historicalCollection.Procedures.Count);
+        fprintf('• Duration estimates will use historical statistics\n');
     end
 
 catch ME
