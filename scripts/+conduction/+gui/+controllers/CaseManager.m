@@ -229,6 +229,45 @@ classdef CaseManager < handle
                 stats.count = opStats.stats.count;
             end
         end
+
+        function duration = estimateDuration(obj, operatorName, procedureName)
+            % Smart duration estimation using historical data when available
+
+            % First try operator-specific procedure statistics
+            stats = obj.getOperatorProcedureStats(operatorName, procedureName);
+            if stats.available && stats.count >= 3 % Need at least 3 cases for reliability
+                % Use mean duration from historical data
+                duration = stats.mean;
+                return;
+            end
+
+            % Try procedure-only statistics (any operator)
+            if obj.hasClinicalData()
+                procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
+                if isfield(obj.ProcedureAnalytics, 'procedures') && ...
+                   obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
+                    procData = obj.ProcedureAnalytics.procedures(char(procedureId));
+                    if ~isnan(procData.overall.mean) && procData.overall.count >= 3
+                        duration = procData.overall.mean;
+                        return;
+                    end
+                end
+            end
+
+            % Fall back to heuristic defaults based on procedure type
+            procedureLower = lower(procedureName);
+            if contains(procedureLower, ["ablation", "afib"])
+                duration = 180; % 3 hours
+            elseif contains(procedureLower, ["pci", "angioplasty"])
+                duration = 90;  % 1.5 hours
+            elseif contains(procedureLower, ["device", "pacemaker", "icd"])
+                duration = 120; % 2 hours
+            elseif contains(procedureLower, ["diagnostic", "cath"])
+                duration = 45;  % 45 minutes
+            else
+                duration = 60;  % 1 hour default
+            end
+        end
     end
 
     methods (Access = private)
@@ -269,44 +308,6 @@ classdef CaseManager < handle
             isKnown = obj.KnownProcedures.isKey(char(procedureId));
         end
 
-        function duration = estimateDuration(obj, operatorName, procedureName)
-            % Smart duration estimation using historical data when available
-
-            % First try operator-specific procedure statistics
-            stats = obj.getOperatorProcedureStats(operatorName, procedureName);
-            if stats.available && stats.count >= 3 % Need at least 3 cases for reliability
-                % Use mean duration from historical data
-                duration = stats.mean;
-                return;
-            end
-
-            % Try procedure-only statistics (any operator)
-            if obj.hasClinicalData()
-                procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
-                if isfield(obj.ProcedureAnalytics, 'procedures') && ...
-                   obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
-                    procData = obj.ProcedureAnalytics.procedures(char(procedureId));
-                    if ~isnan(procData.overall.mean) && procData.overall.count >= 3
-                        duration = procData.overall.mean;
-                        return;
-                    end
-                end
-            end
-
-            % Fall back to heuristic defaults based on procedure type
-            procedureLower = lower(procedureName);
-            if contains(procedureLower, ["ablation", "afib"])
-                duration = 180; % 3 hours
-            elseif contains(procedureLower, ["pci", "angioplasty"])
-                duration = 90;  % 1.5 hours
-            elseif contains(procedureLower, ["device", "pacemaker", "icd"])
-                duration = 120; % 2 hours
-            elseif contains(procedureLower, ["diagnostic", "cath"])
-                duration = 45;  % 45 minutes
-            else
-                duration = 60;  % 1 hour default
-            end
-        end
 
         function computeProcedureAnalytics(obj)
             % Compute procedure analytics from historical collection
