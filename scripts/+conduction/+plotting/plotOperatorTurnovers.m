@@ -8,8 +8,8 @@ function plotOperatorTurnovers(summary, varargin)
 %
 %   Example:
 %       summary = conduction.analytics.analyzeScheduleCollection(collection);
-%       conduction.analytics.plotOperatorTurnovers(summary);
-%       conduction.analytics.plotOperatorTurnovers(summary, 'Mode', 'median');
+%       conduction.plotting.plotOperatorTurnovers(summary);
+%       conduction.plotting.plotOperatorTurnovers(summary, 'Mode', 'median');
 
 p = inputParser;
 p.addParameter('Mode', 'aggregate', @(x) any(strcmpi(x, {'median','aggregate'})));
@@ -93,7 +93,7 @@ if isempty(opStruct)
 end
 
 rawNames = {opStruct.name};
-labels = conduction.plotting.formatOperatorNames(rawNames);
+labels = conduction.plotting.utils.formatOperatorNames(rawNames);
 idleValues = [opStruct.idleValue];
 flipValues = [opStruct.flipValue];
 
@@ -134,8 +134,8 @@ ylim([0, max(100, maxFlip * 1.1)]);
 ytickformat('%.0f');
 annotateBars(flipBars, flipPercent, '%.0f%%');
 
-conduction.plotting.applyStandardStyle(fig);
-attachVersionAnnotation(fig);
+conduction.plotting.utils.applyStandardStyle(fig);
+conduction.plotting.utils.attachVersionAnnotation(fig);
 end
 
 function annotateBars(barSeries, values, fmt)
@@ -149,38 +149,5 @@ if isnan(value)
     label = '';
 else
     label = sprintf(fmt, value);
-end
-end
-
-function attachVersionAnnotation(fig)
-info = conduction.version();
-commitLabel = abbreviate(info.Commit);
-dirtyMark = ternary(info.Dirty, '*', '');
-label = sprintf('conduction %s (%s%s)', info.Version, commitLabel, dirtyMark);
-annotation(fig, 'textbox', [0.0 0.0 0.99 0.03], ...
-    'String', label, 'HorizontalAlignment', 'right', ...
-    'EdgeColor', 'none', 'Interpreter', 'none', 'FontSize', 8);
-userData = get(fig, 'UserData');
-if ~isstruct(userData)
-    userData = struct();
-end
-userData.conductionVersion = info;
-set(fig, 'UserData', userData);
-end
-
-function out = abbreviate(commit)
-if isempty(commit) || strcmpi(commit, 'unknown')
-    out = 'unknown';
-else
-    chars = char(commit);
-    out = chars(1:min(numel(chars), 7));
-end
-end
-
-function out = ternary(condition, ifTrue, ifFalse)
-if condition
-    out = ifTrue;
-else
-    out = ifFalse;
 end
 end

@@ -14,7 +14,7 @@ function fig = plotMultiCollectionResults(experiments, varargin)
 %       'ExperimentNames': override names for each experiment
 %       'Title'         : custom figure title
 %
-%   The generated figure is styled via conduction.plotting.applyStandardStyle
+%   The generated figure is styled via conduction.plotting.utils.applyStandardStyle
 %   and contains a footer annotation with the refactor version metadata from
 %   conduction.version().
 
@@ -50,7 +50,7 @@ else
     fig = plotBox(metricData, experiments, customTitle);
 end
 
-attachVersionAnnotation(fig);
+conduction.plotting.utils.attachVersionAnnotation(fig);
 end
 
 % -------------------------------------------------------------------------
@@ -199,7 +199,7 @@ for idx = 1:numel(values)
         'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom');
 end
 
-conduction.plotting.applyStandardStyle(fig, ax);
+conduction.plotting.utils.applyStandardStyle(fig, ax);
 grid(ax, 'on');
 
 annotation(fig, 'textbox', [0.01 0.96 0.3 0.03], 'String', ...
@@ -228,7 +228,7 @@ ax.XTickLabelRotation = 20;
 ax.YLabel.String = labelWithUnit(metricData.label, metricData.unit);
 ax.Title.String = titleOrDefault(customTitle, metricData.label);
 
-conduction.plotting.applyStandardStyle(fig, ax);
+conduction.plotting.utils.applyStandardStyle(fig, ax);
 grid(ax, 'on');
 hold(ax, 'off');
 end
@@ -286,37 +286,3 @@ end
 end
 
 % -------------------------------------------------------------------------
-function attachVersionAnnotation(fig)
-info = conduction.version();
-commitLabel = abbreviate(info.Commit);
-dirtyMark = ternary(info.Dirty, '*', '');
-label = sprintf('conduction %s (%s%s)', info.Version, commitLabel, dirtyMark);
-annotation(fig, 'textbox', [0.0 0.0 0.99 0.03], ...
-    'String', label, 'HorizontalAlignment', 'right', ...
-    'EdgeColor', 'none', 'Interpreter', 'none', 'FontSize', 8);
-userData = get(fig, 'UserData');
-if ~isstruct(userData)
-    userData = struct();
-end
-userData.conductionVersion = info;
-set(fig, 'UserData', userData);
-end
-
-% -------------------------------------------------------------------------
-function out = abbreviate(commit)
-if isempty(commit) || strcmpi(commit, 'unknown')
-    out = 'unknown';
-else
-    chars = char(commit);
-    out = chars(1:min(numel(chars), 7));
-end
-end
-
-% -------------------------------------------------------------------------
-function out = ternary(condition, ifTrue, ifFalse)
-if condition
-    out = ifTrue;
-else
-    out = ifFalse;
-end
-end
