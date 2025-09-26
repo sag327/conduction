@@ -473,6 +473,67 @@ classdef CaseManager < handle
 
             obj.notifyChange();
         end
+
+        function [casesStruct, metadata] = buildOptimizationCases(obj, labIds, defaults)
+            arguments
+                obj
+                labIds (1,:) double {mustBePositive}
+                defaults struct = struct()
+            end
+
+            metadata = struct();
+            metadata.labIds = labIds;
+
+            if obj.CaseCount == 0
+                casesStruct = struct([]);
+                return;
+            end
+
+            if ~isfield(defaults, 'SetupMinutes'); defaults.SetupMinutes = 0; end
+            if ~isfield(defaults, 'PostMinutes'); defaults.PostMinutes = 0; end
+            if ~isfield(defaults, 'TurnoverMinutes'); defaults.TurnoverMinutes = 0; end
+            if ~isfield(defaults, 'AdmissionStatus'); defaults.AdmissionStatus = 'unknown'; end
+
+            template = struct( ...
+                'caseID', '', ...
+                'operator', '', ...
+                'procedure', '', ...
+                'setupTime', 0, ...
+                'procTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'priority', [], ...
+                'preferredLab', [], ...
+                'admissionStatus', '', ...
+                'date', NaT);
+            casesStruct = repmat(template, obj.CaseCount, 1);
+
+            dateValue = obj.TargetDate;
+            if isempty(dateValue)
+                dateValue = datetime('today');
+            end
+
+            for idx = 1:obj.CaseCount
+                caseObj = obj.Cases(idx);
+
+                casesStruct(idx).caseID = sprintf('GUI_%03d', idx);
+                casesStruct(idx).operator = char(caseObj.OperatorName);
+                casesStruct(idx).procedure = char(caseObj.ProcedureName);
+                casesStruct(idx).setupTime = defaults.SetupMinutes;
+                durationMinutes = max(1, double(caseObj.EstimatedDurationMinutes));
+                casesStruct(idx).procTime = durationMinutes;
+                casesStruct(idx).postTime = defaults.PostMinutes;
+                casesStruct(idx).turnoverTime = defaults.TurnoverMinutes;
+                if caseObj.IsFirstCaseOfDay
+                    casesStruct(idx).priority = 1;
+                else
+                    casesStruct(idx).priority = 0;
+                end
+                casesStruct(idx).preferredLab = obj.resolvePreferredLab(caseObj.SpecificLab, labIds);
+                casesStruct(idx).admissionStatus = char(defaults.AdmissionStatus);
+                casesStruct(idx).date = dateValue;
+            end
+        end
     end
 
     methods (Access = private)
@@ -598,6 +659,29 @@ classdef CaseManager < handle
                     warning('CaseManager:ListenerError', ...
                         'Error in change listener: %s', ME.message);
                 end
+            end
+        end
+
+        function labIndex = resolvePreferredLab(~, specificLab, labIds)
+            labIndex = [];
+            if nargin < 3 || isempty(specificLab)
+                return;
+            end
+
+            specificLab = string(strtrim(specificLab));
+            if specificLab == "" || specificLab == "Any Lab"
+                return;
+            end
+
+            pattern = regexp(char(specificLab), '\d+', 'match');
+            if isempty(pattern)
+                return;
+            end
+
+            requestedLab = str2double(pattern{1});
+            matches = find(labIds == requestedLab, 1, 'first');
+            if ~isempty(matches)
+                labIndex = matches;
             end
         end
 

@@ -20,6 +20,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingRunButton            matlab.ui.control.Button
         TestingExitButton           matlab.ui.control.Button
         TestingInfoLabel            matlab.ui.control.Label
+        OptimizationSectionLabel    matlab.ui.control.Label
+        OptimizationOptionsSummaryLabel matlab.ui.control.Label
+        OptimizationOptionsButton   matlab.ui.control.Button
+        OptimizationRunButton       matlab.ui.control.Button
+        OptimizationShowPlotButton  matlab.ui.control.Button
+        OptimizationStatusLabel     matlab.ui.control.Label
 
         % Case Details Section
         CaseDetailsLabel            matlab.ui.control.Label
@@ -69,6 +75,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingAvailableDates
         CurrentTestingSummary struct = struct()
         IsSyncingTestingToggle logical = false
+        LabIds double = 1:6
+        OptimizationOptions conduction.scheduling.SchedulingOptions
+        OptimizationDefaults struct = struct()
+        OptimizedSchedule conduction.DailySchedule
+        OptimizationOutcome struct = struct()
+        IsOptimizationDirty logical = true
+        IsOptimizationRunning logical = false
+        OptimizationLastRun datetime = NaT
     end
 
     % Component initialization
@@ -98,6 +112,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.buildCaseDetailsSection(leftGrid);
             app.buildDurationSection(leftGrid);
             app.buildConstraintSection(leftGrid);
+            app.buildOptimizationSection(leftGrid);
             app.buildCaseManagementSection(leftGrid);
 
             app.configureRightPanel();
@@ -112,7 +127,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function leftGrid = configureLeftPanelLayout(app)
             leftGrid = uigridlayout(app.LeftPanel);
             leftGrid.ColumnWidth = {100, 140, 80, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 5, 22, '1x', 30};
+            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 10, 22, 26, 26, 22, 10, 22, '1x', 30};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 3;
             leftGrid.ColumnSpacing = 6;
@@ -383,8 +398,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SpecificLabLabel.Layout.Row = 18;
             app.SpecificLabLabel.Layout.Column = 1;
 
+            labItemLabels = arrayfun(@(id) sprintf('Lab %d', id), app.LabIds, 'UniformOutput', false);
             app.SpecificLabDropDown = uidropdown(leftGrid);
-            app.SpecificLabDropDown.Items = {'Any Lab', 'Lab 1', 'Lab 2', 'Lab 10', 'Lab 11', 'Lab 12', 'Lab 14'};
+            app.SpecificLabDropDown.Items = ['Any Lab', labItemLabels];
             app.SpecificLabDropDown.Value = 'Any Lab';
             app.SpecificLabDropDown.Layout.Row = 18;
             app.SpecificLabDropDown.Layout.Column = [2 4];
@@ -402,31 +418,71 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
         end
 
+        function buildOptimizationSection(app, leftGrid)
+            app.OptimizationSectionLabel = uilabel(leftGrid);
+            app.OptimizationSectionLabel.Text = 'Optimization';
+            app.OptimizationSectionLabel.FontWeight = 'bold';
+            app.OptimizationSectionLabel.Layout.Row = 22;
+            app.OptimizationSectionLabel.Layout.Column = [1 4];
+
+            app.OptimizationOptionsSummaryLabel = uilabel(leftGrid);
+            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Turnover: 15 min | Setup/Post: 0 min';
+            app.OptimizationOptionsSummaryLabel.HorizontalAlignment = 'left';
+            app.OptimizationOptionsSummaryLabel.Layout.Row = 23;
+            app.OptimizationOptionsSummaryLabel.Layout.Column = [1 3];
+
+            app.OptimizationOptionsButton = uibutton(leftGrid, 'push');
+            app.OptimizationOptionsButton.Text = 'Options...';
+            app.OptimizationOptionsButton.Layout.Row = 23;
+            app.OptimizationOptionsButton.Layout.Column = 4;
+            app.OptimizationOptionsButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
+
+            app.OptimizationRunButton = uibutton(leftGrid, 'push');
+            app.OptimizationRunButton.Text = 'Optimize Schedule';
+            app.OptimizationRunButton.Layout.Row = 24;
+            app.OptimizationRunButton.Layout.Column = [1 2];
+            app.OptimizationRunButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
+
+            app.OptimizationShowPlotButton = uibutton(leftGrid, 'push');
+            app.OptimizationShowPlotButton.Text = 'Open Schedule Plot';
+            app.OptimizationShowPlotButton.Layout.Row = 24;
+            app.OptimizationShowPlotButton.Layout.Column = [3 4];
+            app.OptimizationShowPlotButton.Enable = 'off';
+            app.OptimizationShowPlotButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationShowPlotButtonPushed, true);
+
+            app.OptimizationStatusLabel = uilabel(leftGrid);
+            app.OptimizationStatusLabel.Text = 'No optimization run yet.';
+            app.OptimizationStatusLabel.FontColor = [0.4 0.4 0.4];
+            app.OptimizationStatusLabel.Layout.Row = 25;
+            app.OptimizationStatusLabel.Layout.Column = [1 4];
+            app.OptimizationStatusLabel.WordWrap = 'on';
+        end
+
         function buildCaseManagementSection(app, leftGrid)
             app.CasesLabel = uilabel(leftGrid);
             app.CasesLabel.Text = 'Added Cases';
             app.CasesLabel.FontWeight = 'bold';
-            app.CasesLabel.Layout.Row = 22;
+            app.CasesLabel.Layout.Row = 27;
             app.CasesLabel.Layout.Column = [1 4];
 
             app.CasesTable = uitable(leftGrid);
             app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
             app.CasesTable.ColumnWidth = {100, 140, 80, 90, 80};
             app.CasesTable.RowName = {};
-            app.CasesTable.Layout.Row = 23;
+            app.CasesTable.Layout.Row = 28;
             app.CasesTable.Layout.Column = [1 4];
             app.CasesTable.SelectionType = 'row';
 
             app.RemoveSelectedButton = uibutton(leftGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
-            app.RemoveSelectedButton.Layout.Row = 24;
+            app.RemoveSelectedButton.Layout.Row = 29;
             app.RemoveSelectedButton.Layout.Column = [1 2];
             app.RemoveSelectedButton.Enable = 'off';
             app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
 
             app.ClearAllButton = uibutton(leftGrid, 'push');
             app.ClearAllButton.Text = 'Clear All';
-            app.ClearAllButton.Layout.Row = 24;
+            app.ClearAllButton.Layout.Row = 29;
             app.ClearAllButton.Layout.Column = [3 4];
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
@@ -496,6 +552,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Initialize empty schedule visualization
             app.initializeEmptySchedule();
+
+            % Initialize optimization state
+            app.initializeOptimizationState();
 
             % Update data status
             app.updateDataStatus();
@@ -654,6 +713,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function TestingExitButtonPushed(app, event)
             app.exitTestingMode();
         end
+
+        function OptimizationOptionsButtonPushed(app, event)
+            %#ok<INUSD>
+            app.showOptimizationOptionsDialog();
+        end
+
+        function OptimizationRunButtonPushed(app, event)
+            %#ok<INUSD>
+            app.executeOptimization();
+        end
+
+        function OptimizationShowPlotButtonPushed(app, event)
+            %#ok<INUSD>
+            app.openOptimizationPlot();
+        end
     end
 
     % Helper methods
@@ -681,6 +755,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.updateCasesTable();
+            app.markOptimizationDirty();
             app.updateTestingInfoText();
         end
 
@@ -1205,9 +1280,30 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function initializeEmptySchedule(app)
             % Initialize empty schedule visualization for the target date
             
-            % Create empty display for available labs (1,2,10,11,12,14)
-            labNumbers = [1, 2, 10, 11, 12, 14];
-            app.renderEmptySchedule(labNumbers);
+            app.renderEmptySchedule(app.LabIds);
+        end
+
+        function initializeOptimizationState(app)
+            numLabs = numel(app.LabIds);
+            startTimes = repmat({'08:00'}, 1, numLabs);
+            app.OptimizationOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
+                'NumLabs', numLabs, 'LabStartTimes', startTimes);
+
+            app.OptimizationDefaults = struct( ...
+                'SetupMinutes', 0, ...
+                'PostMinutes', 0, ...
+                'TurnoverMinutes', app.OptimizationOptions.TurnoverTime, ...
+                'AdmissionStatus', 'outpatient');
+
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.OptimizationOutcome = struct();
+            app.IsOptimizationDirty = true;
+            app.OptimizationLastRun = NaT;
+            app.IsOptimizationRunning = false;
+
+            app.updateOptimizationOptionsSummary();
+            app.updateOptimizationStatus();
+            app.updateOptimizationActionAvailability();
         end
 
         function renderEmptySchedule(app, labNumbers)
@@ -1340,5 +1436,512 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DataStatusLabel.FontColor = [0.6 0.6 0.6]; % Gray
             end
         end
+
+        function showOptimizationOptionsDialog(app)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            dlg = uifigure('Name', 'Optimization Options', ...
+                'Color', app.UIFigure.Color, ...
+                'Position', [app.UIFigure.Position(1:2)+[120 120], 360, 360], ...
+                'WindowStyle', 'modal');
+
+            grid = uigridlayout(dlg);
+            grid.RowHeight = {24, 32, 32, 32, 32, 32, 40};
+            grid.ColumnWidth = {160, '1x'};
+            grid.Padding = [10 10 10 10];
+            grid.RowSpacing = 6;
+            grid.ColumnSpacing = 6;
+
+            metrics = {'operatorIdle', 'labIdle', 'makespan', 'operatorOvertime'};
+            uilabel(grid, 'Text', 'Optimization metric:', 'HorizontalAlignment', 'left');
+            metricDropDown = uidropdown(grid, ...
+                'Items', metrics, ...
+                'Value', char(app.OptimizationOptions.OptimizationMetric));
+
+            uilabel(grid, 'Text', 'Case filter:', 'HorizontalAlignment', 'left');
+            filterDropDown = uidropdown(grid, ...
+                'Items', {'all', 'outpatient', 'inpatient'}, ...
+                'Value', char(app.OptimizationOptions.CaseFilter));
+
+            uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
+            turnoverSpinner = uispinner(grid, 'Limits', [0 240], ...
+                'Step', 5, 'Value', app.OptimizationOptions.TurnoverTime);
+
+            uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
+            setupSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
+                'Value', app.OptimizationDefaults.SetupMinutes);
+
+            uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
+            postSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
+                'Value', app.OptimizationDefaults.PostMinutes);
+
+            uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
+            maxOperatorSpinner = uispinner(grid, 'Limits', [60 1440], 'Step', 15, ...
+                'Value', app.OptimizationOptions.MaxOperatorTime);
+
+            toggleGrid = uigridlayout(grid, [1 2]);
+            toggleGrid.Layout.Row = 6;
+            toggleGrid.Layout.Column = [1 2];
+            toggleGrid.ColumnWidth = {'1x', '1x'};
+            toggleGrid.RowHeight = {32};
+            toggleGrid.Padding = [0 0 0 0];
+            toggleGrid.ColumnSpacing = 12;
+
+            enforceCheck = uicheckbox(toggleGrid, 'Text', 'Enforce midnight cutoff', ...
+                'Value', app.OptimizationOptions.EnforceMidnight);
+            prioritizeCheck = uicheckbox(toggleGrid, 'Text', 'Prioritize outpatient', ...
+                'Value', app.OptimizationOptions.PrioritizeOutpatient);
+
+            buttonGrid = uigridlayout(grid, [1 2]);
+            buttonGrid.Layout.Row = 7;
+            buttonGrid.Layout.Column = [1 2];
+            buttonGrid.ColumnWidth = {'1x', '1x'};
+            buttonGrid.RowHeight = {30};
+            buttonGrid.ColumnSpacing = 10;
+            buttonGrid.Padding = [0 0 0 0];
+
+            cancelButton = uibutton(buttonGrid, 'push', 'Text', 'Cancel');
+            saveButton = uibutton(buttonGrid, 'push', 'Text', 'Save', 'BackgroundColor', [0.2 0.4 0.8], 'FontColor', [1 1 1]);
+
+            cancelButton.ButtonPushedFcn = @(~,~) close(dlg);
+            saveButton.ButtonPushedFcn = @saveAndClose;
+
+            uiwait(dlg);
+
+            function saveAndClose(~, ~)
+                try
+                    newOptions = app.OptimizationOptions.with( ...
+                        'OptimizationMetric', string(metricDropDown.Value), ...
+                        'TurnoverTime', turnoverSpinner.Value, ...
+                        'CaseFilter', string(filterDropDown.Value), ...
+                        'MaxOperatorTime', maxOperatorSpinner.Value, ...
+                        'EnforceMidnight', enforceCheck.Value, ...
+                        'PrioritizeOutpatient', prioritizeCheck.Value);
+
+                    app.OptimizationOptions = newOptions;
+                    app.OptimizationDefaults.SetupMinutes = setupSpinner.Value;
+                    app.OptimizationDefaults.PostMinutes = postSpinner.Value;
+                    app.OptimizationDefaults.TurnoverMinutes = newOptions.TurnoverTime;
+
+                    app.updateOptimizationOptionsSummary();
+                    app.markOptimizationDirty();
+                catch ME
+                    uialert(app.UIFigure, sprintf('Failed to apply options: %s', ME.message), 'Optimization Options');
+                end
+                close(dlg);
+            end
+        end
+
+        function executeOptimization(app)
+            if app.IsOptimizationRunning
+                return;
+            end
+
+            if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
+                uialert(app.UIFigure, 'Add at least one case before running the optimizer.', 'Optimization');
+                return;
+            end
+
+            defaults = app.OptimizationDefaults;
+            defaults.TurnoverMinutes = app.OptimizationOptions.TurnoverTime;
+
+            try
+                [casesStruct, metadata] = app.CaseManager.buildOptimizationCases(app.LabIds, defaults);
+            catch ME
+                uialert(app.UIFigure, sprintf('Failed to prepare cases: %s', ME.message), 'Optimization');
+                return;
+            end
+
+            if isempty(casesStruct)
+                uialert(app.UIFigure, 'No valid cases available for optimization.', 'Optimization');
+                return;
+            end
+
+            app.IsOptimizationRunning = true;
+            app.updateOptimizationStatus();
+            app.updateOptimizationActionAvailability();
+            drawnow;
+
+            try
+                [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, app.OptimizationOptions);
+                app.OptimizedSchedule = dailySchedule;
+                app.OptimizationOutcome = outcome;
+                app.IsOptimizationDirty = false;
+                app.OptimizationLastRun = datetime('now');
+
+                app.renderOptimizedSchedule(dailySchedule, metadata);
+            catch ME
+                app.OptimizedSchedule = conduction.DailySchedule.empty;
+                app.OptimizationOutcome = struct();
+                app.IsOptimizationDirty = true;
+                app.OptimizationLastRun = NaT;
+                app.showOptimizationPendingPlaceholder();
+                uialert(app.UIFigure, sprintf('Failed to optimize schedule: %s', ME.message), 'Optimization');
+            end
+
+            app.IsOptimizationRunning = false;
+            app.updateOptimizationStatus();
+            app.updateOptimizationActionAvailability();
+        end
+
+        function openOptimizationPlot(app)
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                uialert(app.UIFigure, 'Run the optimizer before opening the schedule plot.', 'Optimization');
+                return;
+            end
+
+            titleText = sprintf('Prospective Schedule - %s', datestr(app.TargetDate, 'mmm dd, yyyy'));
+            conduction.visualizeDailySchedule(app.OptimizedSchedule, 'Title', titleText);
+        end
+
+        function updateOptimizationOptionsSummary(app)
+            if isempty(app.OptimizationOptionsSummaryLabel) || ~isvalid(app.OptimizationOptionsSummaryLabel)
+                return;
+            end
+
+            metricText = char(app.OptimizationOptions.OptimizationMetric);
+            turnoverText = app.OptimizationOptions.TurnoverTime;
+            setupText = app.OptimizationDefaults.SetupMinutes;
+            postText = app.OptimizationDefaults.PostMinutes;
+            summary = sprintf('Metric: %s | Turnover: %d min | Setup/Post: %d/%d min', ...
+                metricText, round(turnoverText), round(setupText), round(postText));
+            app.OptimizationOptionsSummaryLabel.Text = summary;
+        end
+
+        function updateOptimizationStatus(app)
+            if isempty(app.OptimizationStatusLabel) || ~isvalid(app.OptimizationStatusLabel)
+                return;
+            end
+
+            if app.IsOptimizationRunning
+                app.OptimizationStatusLabel.Text = 'Optimizing schedule...';
+                app.OptimizationStatusLabel.FontColor = [0.8 0.6 0];
+                return;
+            end
+
+            if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
+                app.OptimizationStatusLabel.Text = 'Add at least one case to run optimization.';
+                app.OptimizationStatusLabel.FontColor = [0.6 0.6 0.6];
+                return;
+            end
+
+            if app.IsOptimizationDirty || isempty(app.OptimizedSchedule)
+                app.OptimizationStatusLabel.Text = 'Case changes pending. Run optimization to refresh results.';
+                app.OptimizationStatusLabel.FontColor = [0.75 0.45 0];
+                app.OptimizationShowPlotButton.Enable = 'off';
+                return;
+            end
+
+            metrics = app.OptimizedSchedule.metrics();
+            makespan = NaN;
+            if isfield(metrics, 'makespan') && ~isempty(metrics.makespan)
+                makespan = metrics.makespan;
+            end
+
+            if ~isnan(makespan)
+                makespanText = sprintf('Makespan: %.0f min', makespan);
+            else
+                makespanText = 'Makespan: n/a';
+            end
+
+            objectiveText = 'Objective: n/a';
+            if isfield(app.OptimizationOutcome, 'objectiveValue') && ~isempty(app.OptimizationOutcome.objectiveValue)
+                objectiveText = sprintf('Objective: %.2f', app.OptimizationOutcome.objectiveValue);
+            end
+
+            timestampText = 'Just now';
+            if ~isnat(app.OptimizationLastRun)
+                timestampText = datestr(app.OptimizationLastRun, 'HH:MM AM');
+            end
+
+            app.OptimizationStatusLabel.Text = sprintf('Optimized %s | %s | %s', timestampText, makespanText, objectiveText);
+            app.OptimizationStatusLabel.FontColor = [0 0.5 0];
+            app.OptimizationShowPlotButton.Enable = 'on';
+        end
+
+        function updateOptimizationActionAvailability(app)
+            if isempty(app.OptimizationRunButton) || ~isvalid(app.OptimizationRunButton)
+                return;
+            end
+
+            hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
+
+            if app.IsOptimizationRunning
+                app.OptimizationRunButton.Enable = 'off';
+            elseif hasCases
+                app.OptimizationRunButton.Enable = 'on';
+            else
+                app.OptimizationRunButton.Enable = 'off';
+            end
+
+            if ~isempty(app.OptimizationOptionsButton) && isvalid(app.OptimizationOptionsButton)
+                if app.IsOptimizationRunning
+                    app.OptimizationOptionsButton.Enable = 'off';
+                else
+                    app.OptimizationOptionsButton.Enable = 'on';
+                end
+            end
+
+            if isempty(app.OptimizedSchedule) || app.IsOptimizationDirty || app.IsOptimizationRunning
+                app.OptimizationShowPlotButton.Enable = 'off';
+            end
+        end
+
+        function markOptimizationDirty(app)
+            app.IsOptimizationDirty = true;
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.OptimizationOutcome = struct();
+            app.OptimizationLastRun = NaT;
+            app.showOptimizationPendingPlaceholder();
+            app.updateOptimizationStatus();
+            app.updateOptimizationActionAvailability();
+        end
+
+        function showOptimizationPendingPlaceholder(app)
+            ax = app.ScheduleAxesMain;
+            cla(ax);
+            set(ax, 'Visible', 'off');
+            axis(ax, 'off');
+            if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
+                text(ax, 0.5, 0.5, 'No cases queued.', 'Units', 'normalized', ...
+                    'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.5 0.5 0.5]);
+            else
+                message = sprintf('%d cases ready. Run optimization to view schedule.', app.CaseManager.CaseCount);
+                text(ax, 0.5, 0.5, message, 'Units', 'normalized', ...
+                    'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.4 0.4 0.4]);
+            end
+
+            axOp = app.ScheduleAxesOperators;
+            cla(axOp);
+            set(axOp, 'Visible', 'off');
+            axis(axOp, 'off');
+            text(axOp, 0.5, 0.5, 'Operator summary available after optimization.', ...
+                'Units', 'normalized', 'HorizontalAlignment', 'center', ...
+                'FontSize', 11, 'Color', [0.5 0.5 0.5]);
+        end
+
+        function renderOptimizedSchedule(app, dailySchedule, metadata)
+            if nargin < 3
+                metadata = struct();
+            end
+
+            if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
+                app.renderEmptySchedule(app.LabIds);
+                return;
+            end
+
+            caseRows = app.collectOptimizedCaseSummary(dailySchedule, metadata);
+
+            ax = app.ScheduleAxesMain;
+            cla(ax);
+            set(ax, 'Visible', 'off');
+            axis(ax, 'off');
+
+            if isempty(caseRows)
+                text(ax, 0.5, 0.5, 'No scheduled cases returned.', ...
+                    'Units', 'normalized', 'HorizontalAlignment', 'center', ...
+                    'FontSize', 12, 'Color', [0.4 0.4 0.4]);
+            else
+                lineHeight = 1 / (numel(caseRows) + 1);
+                for idx = 1:numel(caseRows)
+                    row = caseRows(idx);
+                    operatorName = char(string(row.operator));
+                    procedureName = char(string(row.procedure));
+                    label = sprintf('Lab %d | %s | %s | %s - %s (%d min)', ...
+                        row.labId, operatorName, procedureName, row.startLabel, row.endLabel, row.durationMinutes);
+                    text(ax, 0.02, 1 - idx * lineHeight, label, ...
+                        'Units', 'normalized', 'HorizontalAlignment', 'left', ...
+                        'FontSize', 11, 'Color', [0.2 0.2 0.2]);
+                end
+            end
+
+            axOp = app.ScheduleAxesOperators;
+            cla(axOp);
+            set(axOp, 'Visible', 'off');
+            axis(axOp, 'off');
+
+            if ~isempty(caseRows)
+                operators = string({caseRows.operator});
+                uniqueOperators = unique(operators, 'stable');
+                totals = zeros(numel(uniqueOperators), 1);
+                durations = [caseRows.durationMinutes];
+                for idx = 1:numel(uniqueOperators)
+                    totals(idx) = sum(durations(operators == uniqueOperators(idx)));
+                end
+                [totals, order] = sort(totals, 'descend');
+                uniqueOperators = uniqueOperators(order);
+                lineHeight = 1 / (numel(uniqueOperators) + 1);
+                for idx = 1:numel(uniqueOperators)
+                    operatorName = uniqueOperators(idx);
+                    totalMinutes = totals(idx);
+                    text(axOp, 0.02, 1 - idx * lineHeight, ...
+                        sprintf('%s: %.0f min scheduled', operatorName, totalMinutes), ...
+                        'Units', 'normalized', 'HorizontalAlignment', 'left', ...
+                        'FontSize', 11, 'Color', [0.25 0.25 0.25]);
+                end
+            else
+                text(axOp, 0.5, 0.5, 'No operator assignments to display.', ...
+                    'Units', 'normalized', 'HorizontalAlignment', 'center', ...
+                    'FontSize', 11, 'Color', [0.4 0.4 0.4]);
+            end
+
+            app.updateOptimizationStatus();
+            app.updateOptimizationActionAvailability();
+        end
+
+        function rows = collectOptimizedCaseSummary(app, dailySchedule, metadata)
+            assignments = dailySchedule.labAssignments();
+            labIds = app.LabIds;
+            if isfield(metadata, 'labIds') && ~isempty(metadata.labIds)
+                labIds = metadata.labIds;
+            end
+            if numel(labIds) ~= numel(assignments)
+                labIds = 1:numel(assignments);
+            end
+
+            rows = struct('labId', {}, 'operator', {}, 'procedure', {}, ...
+                'startMinutes', {}, 'endMinutes', {}, 'durationMinutes', {}, ...
+                'startLabel', {}, 'endLabel', {});
+
+            counter = 0;
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    caseStruct = labCases(caseIdx);
+
+                    startMinutes = app.extractNumericField(caseStruct, ...
+                        {'procStartTime', 'startTime', 'scheduleStartTime'});
+                    if isnan(startMinutes)
+                        startMinutes = 8 * 60;
+                    end
+
+                    endMinutes = app.extractNumericField(caseStruct, ...
+                        {'procEndTime', 'endTime'});
+                    if isnan(endMinutes)
+                        durationHint = app.extractNumericField(caseStruct, {'procTime', 'procedureMinutes'});
+                        if isnan(durationHint)
+                            durationHint = 60;
+                        end
+                        endMinutes = startMinutes + durationHint;
+                    end
+
+                    operatorName = app.extractStringField(caseStruct, {'operator', 'operatorName'});
+                    if strlength(operatorName) == 0
+                        operatorName = "Unknown Operator";
+                    end
+
+                    procedureName = app.extractStringField(caseStruct, {'procedure', 'procedureName'});
+                    if strlength(procedureName) == 0
+                        procedureName = "Unknown Procedure";
+                    end
+
+                    counter = counter + 1;
+                    rows(counter).labId = labIds(min(labIdx, numel(labIds)));
+                    rows(counter).operator = char(operatorName);
+                    rows(counter).procedure = char(procedureName);
+                    rows(counter).startMinutes = startMinutes;
+                    rows(counter).endMinutes = endMinutes;
+                    rows(counter).durationMinutes = max(1, round(endMinutes - startMinutes));
+                    rows(counter).startLabel = app.formatMinutesLabel(startMinutes);
+                    rows(counter).endLabel = app.formatMinutesLabel(endMinutes);
+                end
+            end
+
+            if isempty(rows)
+                return;
+            end
+
+            rows = struct2table(rows);
+            rows = sortrows(rows, {'startMinutes', 'labId'});
+            rows = table2struct(rows);
+        end
+
+        function value = extractNumericField(app, caseStruct, fieldNames)
+            value = NaN;
+            for idx = 1:numel(fieldNames)
+                name = fieldNames{idx};
+                if isfield(caseStruct, name)
+                    candidate = caseStruct.(name);
+                    candidate = app.normalizeNumeric(candidate);
+                    if ~isnan(candidate)
+                        value = candidate;
+                        return;
+                    end
+                end
+            end
+            if isfield(caseStruct, 'caseInfo') && isstruct(caseStruct.caseInfo)
+                value = app.extractNumericField(caseStruct.caseInfo, fieldNames);
+            end
+        end
+
+        function value = normalizeNumeric(~, candidate)
+            value = NaN;
+            if isempty(candidate)
+                return;
+            end
+            if isnumeric(candidate)
+                value = double(candidate(1));
+            elseif iscell(candidate) && ~isempty(candidate)
+                inner = candidate{1};
+                if isnumeric(inner)
+                    value = double(inner);
+                else
+                    value = str2double(inner);
+                end
+            elseif isstring(candidate) || ischar(candidate)
+                value = str2double(candidate);
+            end
+            if isnan(value)
+                value = NaN;
+            end
+        end
+
+        function value = extractStringField(app, caseStruct, fieldNames)
+            value = "";
+            for idx = 1:numel(fieldNames)
+                name = fieldNames{idx};
+                if isfield(caseStruct, name)
+                    candidate = caseStruct.(name);
+                    candidate = app.normalizeString(candidate);
+                    if strlength(candidate) > 0
+                        value = candidate;
+                        return;
+                    end
+                end
+            end
+            if isfield(caseStruct, 'caseInfo') && isstruct(caseStruct.caseInfo)
+                value = app.extractStringField(caseStruct.caseInfo, fieldNames);
+            end
+        end
+
+        function str = normalizeString(~, value)
+            if isa(value, 'string')
+                str = value(1);
+            elseif ischar(value)
+                str = string(value);
+            elseif iscell(value) && ~isempty(value)
+                str = string(value{1});
+            else
+                str = "";
+            end
+            str = strtrim(str);
+        end
+
+        function label = formatMinutesLabel(~, minutesValue)
+            if isnan(minutesValue)
+                label = 'n/a';
+                return;
+            end
+            minutesValue = max(0, minutesValue);
+            hours = floor(minutesValue / 60);
+            minutes = round(mod(minutesValue, 60));
+            label = sprintf('%02d:%02d', hours, minutes);
+        end
+
     end
 end
