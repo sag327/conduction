@@ -398,9 +398,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SpecificLabLabel.Layout.Row = 18;
             app.SpecificLabLabel.Layout.Column = 1;
 
-            labItemLabels = arrayfun(@(id) sprintf('Lab %d', id), app.LabIds, 'UniformOutput', false);
             app.SpecificLabDropDown = uidropdown(leftGrid);
-            app.SpecificLabDropDown.Items = ['Any Lab', labItemLabels];
+            app.SpecificLabDropDown.Items = {'Any Lab'};
             app.SpecificLabDropDown.Value = 'Any Lab';
             app.SpecificLabDropDown.Layout.Row = 18;
             app.SpecificLabDropDown.Layout.Column = [2 4];
@@ -416,6 +415,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AddCaseButton.Layout.Row = 20;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
+            app.refreshSpecificLabDropdown();
         end
 
         function buildOptimizationSection(app, leftGrid)
@@ -426,7 +426,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationSectionLabel.Layout.Column = [1 4];
 
             app.OptimizationOptionsSummaryLabel = uilabel(leftGrid);
-            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Turnover: 30 min | Setup/Post: 15 min';
+            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Labs: 6 | Turnover: 30 min | Setup/Post: 15 min';
             app.OptimizationOptionsSummaryLabel.HorizontalAlignment = 'left';
             app.OptimizationOptionsSummaryLabel.Layout.Row = 23;
             app.OptimizationOptionsSummaryLabel.Layout.Column = [1 3];
@@ -1301,6 +1301,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationLastRun = NaT;
             app.IsOptimizationRunning = false;
 
+            app.refreshSpecificLabDropdown();
             app.updateOptimizationOptionsSummary();
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
@@ -1449,41 +1450,59 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'WindowStyle', 'modal');
 
             grid = uigridlayout(dlg);
-            grid.RowHeight = {24, 32, 32, 32, 32, 32, 40};
+            grid.RowHeight = {24, 32, 32, 32, 32, 32, 32, 40};
             grid.ColumnWidth = {160, '1x'};
             grid.Padding = [10 10 10 10];
             grid.RowSpacing = 6;
             grid.ColumnSpacing = 6;
 
             metrics = {'operatorIdle', 'labIdle', 'makespan', 'operatorOvertime'};
-            uilabel(grid, 'Text', 'Optimization metric:', 'HorizontalAlignment', 'left');
+            metricLabel = uilabel(grid, 'Text', 'Optimization metric:', 'HorizontalAlignment', 'left');
+            metricLabel.Layout.Row = 1; metricLabel.Layout.Column = 1;
             metricDropDown = uidropdown(grid, ...
                 'Items', metrics, ...
                 'Value', char(app.OptimizationOptions.OptimizationMetric));
+            metricDropDown.Layout.Row = 1; metricDropDown.Layout.Column = 2;
 
-            uilabel(grid, 'Text', 'Case filter:', 'HorizontalAlignment', 'left');
+            labLabel = uilabel(grid, 'Text', 'Number of labs:', 'HorizontalAlignment', 'left');
+            labLabel.Layout.Row = 2; labLabel.Layout.Column = 1;
+            labSpinner = uispinner(grid, 'Limits', [1 12], 'Step', 1, ...
+                'Value', app.OptimizationOptions.NumLabs);
+            labSpinner.Layout.Row = 2; labSpinner.Layout.Column = 2;
+
+            filterLabel = uilabel(grid, 'Text', 'Case filter:', 'HorizontalAlignment', 'left');
+            filterLabel.Layout.Row = 3; filterLabel.Layout.Column = 1;
             filterDropDown = uidropdown(grid, ...
                 'Items', {'all', 'outpatient', 'inpatient'}, ...
                 'Value', char(app.OptimizationOptions.CaseFilter));
+            filterDropDown.Layout.Row = 3; filterDropDown.Layout.Column = 2;
 
-            uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
+            turnoverLabel = uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
+            turnoverLabel.Layout.Row = 4; turnoverLabel.Layout.Column = 1;
             turnoverSpinner = uispinner(grid, 'Limits', [0 240], ...
                 'Step', 5, 'Value', app.OptimizationOptions.TurnoverTime);
+            turnoverSpinner.Layout.Row = 4; turnoverSpinner.Layout.Column = 2;
 
-            uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
+            setupLabel = uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
+            setupLabel.Layout.Row = 5; setupLabel.Layout.Column = 1;
             setupSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.OptimizationDefaults.SetupMinutes);
+            setupSpinner.Layout.Row = 5; setupSpinner.Layout.Column = 2;
 
-            uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
+            postLabel = uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
+            postLabel.Layout.Row = 6; postLabel.Layout.Column = 1;
             postSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.OptimizationDefaults.PostMinutes);
+            postSpinner.Layout.Row = 6; postSpinner.Layout.Column = 2;
 
-            uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
+            maxOperatorLabel = uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
+            maxOperatorLabel.Layout.Row = 7; maxOperatorLabel.Layout.Column = 1;
             maxOperatorSpinner = uispinner(grid, 'Limits', [60 1440], 'Step', 15, ...
                 'Value', app.OptimizationOptions.MaxOperatorTime);
+            maxOperatorSpinner.Layout.Row = 7; maxOperatorSpinner.Layout.Column = 2;
 
             toggleGrid = uigridlayout(grid, [1 2]);
-            toggleGrid.Layout.Row = 6;
+            toggleGrid.Layout.Row = 8;
             toggleGrid.Layout.Column = [1 2];
             toggleGrid.ColumnWidth = {'1x', '1x'};
             toggleGrid.RowHeight = {32};
@@ -1496,7 +1515,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Value', app.OptimizationOptions.PrioritizeOutpatient);
 
             buttonGrid = uigridlayout(grid, [1 2]);
-            buttonGrid.Layout.Row = 7;
+            buttonGrid.Layout.Row = 9;
             buttonGrid.Layout.Column = [1 2];
             buttonGrid.ColumnWidth = {'1x', '1x'};
             buttonGrid.RowHeight = {30};
@@ -1513,8 +1532,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             function saveAndClose(~, ~)
                 try
+                    numLabsValue = labSpinner.Value;
+                    startTimes = repmat({'08:00'}, 1, numLabsValue);
                     newOptions = app.OptimizationOptions.with( ...
                         'OptimizationMetric', string(metricDropDown.Value), ...
+                        'NumLabs', numLabsValue, ...
+                        'LabStartTimes', startTimes, ...
                         'TurnoverTime', turnoverSpinner.Value, ...
                         'CaseFilter', string(filterDropDown.Value), ...
                         'MaxOperatorTime', maxOperatorSpinner.Value, ...
@@ -1525,6 +1548,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.OptimizationDefaults.SetupMinutes = setupSpinner.Value;
                     app.OptimizationDefaults.PostMinutes = postSpinner.Value;
                     app.OptimizationDefaults.TurnoverMinutes = newOptions.TurnoverTime;
+
+                    app.LabIds = 1:numLabsValue;
+                    app.refreshSpecificLabDropdown();
+                    if isempty(app.OptimizedSchedule) || app.IsOptimizationDirty
+                        app.showOptimizationPendingPlaceholder();
+                    end
 
                     app.updateOptimizationOptionsSummary();
                     app.markOptimizationDirty();
@@ -1603,11 +1632,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             metricText = char(app.OptimizationOptions.OptimizationMetric);
+            labsCount = app.OptimizationOptions.NumLabs;
             turnoverText = app.OptimizationOptions.TurnoverTime;
             setupText = app.OptimizationDefaults.SetupMinutes;
             postText = app.OptimizationDefaults.PostMinutes;
-            summary = sprintf('Metric: %s | Turnover: %d min | Setup/Post: %d/%d min', ...
-                metricText, round(turnoverText), round(setupText), round(postText));
+            summary = sprintf('Metric: %s | Labs: %d | Turnover: %d min | Setup/Post: %d/%d min', ...
+                metricText, labsCount, round(turnoverText), round(setupText), round(postText));
             app.OptimizationOptionsSummaryLabel.Text = summary;
         end
 
@@ -1790,6 +1820,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
+        end
+
+        function refreshSpecificLabDropdown(app)
+            if isempty(app.SpecificLabDropDown) || ~isvalid(app.SpecificLabDropDown)
+                return;
+            end
+
+            labLabels = arrayfun(@(id) sprintf('Lab %d', id), app.LabIds, 'UniformOutput', false);
+            items = ['Any Lab', labLabels];
+            previousValue = app.SpecificLabDropDown.Value;
+            app.SpecificLabDropDown.Items = items;
+            if ismember(previousValue, items)
+                app.SpecificLabDropDown.Value = previousValue;
+            else
+                app.SpecificLabDropDown.Value = 'Any Lab';
+            end
         end
 
         function rows = collectOptimizedCaseSummary(app, dailySchedule, metadata)
