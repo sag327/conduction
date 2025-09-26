@@ -160,58 +160,89 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationStatsLabel.Layout.Row = 9;
             app.DurationStatsLabel.Layout.Column = [1 4];
 
-            % Create the ButtonGroup first; radios must be direct children
+            % Create the ButtonGroup with consistent styling
             app.DurationButtonGroup = uibuttongroup(leftGrid);
             app.DurationButtonGroup.BorderType = 'none';
             app.DurationButtonGroup.Layout.Row = 10;
             app.DurationButtonGroup.Layout.Column = [1 4];
             app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
+            app.DurationButtonGroup.BackgroundColor = app.LeftPanel.BackgroundColor;
 
-            % Use a grid layout as a child of the group to position labels;
-            % radios remain direct children of the ButtonGroup.
             durationGrid = uigridlayout(app.DurationButtonGroup);
-            durationGrid.ColumnWidth = {'1x', 90};
+            durationGrid.ColumnWidth = {110, '1x'};
             durationGrid.RowHeight = {22, 22, 22, 22, 18};
             durationGrid.Padding = [0 0 0 0];
             durationGrid.RowSpacing = 3;
             durationGrid.ColumnSpacing = 6;
+            durationGrid.BackgroundColor = app.LeftPanel.BackgroundColor;
 
-            % Create radios as direct children of the ButtonGroup
-            app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
+            bgColor = app.LeftPanel.BackgroundColor;
+
+            medianPanel = uipanel(durationGrid);
+            medianPanel.BorderType = 'none';
+            medianPanel.BackgroundColor = bgColor;
+            medianPanel.Layout.Row = 1;
+            medianPanel.Layout.Column = 1;
+            medianPanel.AutoResizeChildren = 'off';
+            app.MedianRadioButton = uiradiobutton(medianPanel);
             app.MedianRadioButton.Text = 'Median';
             app.MedianRadioButton.Tag = 'median';
-            app.MedianRadioButton.Position = [5, durationGrid.InnerPosition(4)-22, 100, 22];
+            app.MedianRadioButton.Position = [0 0 110 22];
+            app.MedianRadioButton.BackgroundColor = bgColor;
 
-            app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
+            p70Panel = uipanel(durationGrid);
+            p70Panel.BorderType = 'none';
+            p70Panel.BackgroundColor = bgColor;
+            p70Panel.Layout.Row = 2;
+            p70Panel.Layout.Column = 1;
+            p70Panel.AutoResizeChildren = 'off';
+            app.P70RadioButton = uiradiobutton(p70Panel);
             app.P70RadioButton.Text = 'P70';
             app.P70RadioButton.Tag = 'p70';
-            app.P70RadioButton.Position = [5, durationGrid.InnerPosition(4)-22*2-3, 100, 22];
+            app.P70RadioButton.Position = [0 0 110 22];
+            app.P70RadioButton.BackgroundColor = bgColor;
 
-            app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
+            p90Panel = uipanel(durationGrid);
+            p90Panel.BorderType = 'none';
+            p90Panel.BackgroundColor = bgColor;
+            p90Panel.Layout.Row = 3;
+            p90Panel.Layout.Column = 1;
+            p90Panel.AutoResizeChildren = 'off';
+            app.P90RadioButton = uiradiobutton(p90Panel);
             app.P90RadioButton.Text = 'P90';
             app.P90RadioButton.Tag = 'p90';
-            app.P90RadioButton.Position = [5, durationGrid.InnerPosition(4)-22*3-6, 100, 22];
+            app.P90RadioButton.Position = [0 0 110 22];
+            app.P90RadioButton.BackgroundColor = bgColor;
 
-            app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
+            customPanel = uipanel(durationGrid);
+            customPanel.BorderType = 'none';
+            customPanel.BackgroundColor = bgColor;
+            customPanel.Layout.Row = 4;
+            customPanel.Layout.Column = 1;
+            customPanel.AutoResizeChildren = 'off';
+            app.CustomRadioButton = uiradiobutton(customPanel);
             app.CustomRadioButton.Text = 'Custom';
             app.CustomRadioButton.Tag = 'custom';
-            app.CustomRadioButton.Position = [5, durationGrid.InnerPosition(4)-22*4-9, 100, 22];
+            app.CustomRadioButton.Position = [0 0 110 22];
+            app.CustomRadioButton.BackgroundColor = bgColor;
 
-            % Value labels and spinner inside the grid for alignment
             app.MedianValueLabel = uilabel(durationGrid);
             app.MedianValueLabel.Text = '-';
             app.MedianValueLabel.Layout.Row = 1;
             app.MedianValueLabel.Layout.Column = 2;
+            app.MedianValueLabel.HorizontalAlignment = 'left';
 
             app.P70ValueLabel = uilabel(durationGrid);
             app.P70ValueLabel.Text = '-';
             app.P70ValueLabel.Layout.Row = 2;
             app.P70ValueLabel.Layout.Column = 2;
+            app.P70ValueLabel.HorizontalAlignment = 'left';
 
             app.P90ValueLabel = uilabel(durationGrid);
             app.P90ValueLabel.Text = '-';
             app.P90ValueLabel.Layout.Row = 3;
             app.P90ValueLabel.Layout.Column = 2;
+            app.P90ValueLabel.HorizontalAlignment = 'left';
 
             app.CustomDurationSpinner = uispinner(durationGrid);
             app.CustomDurationSpinner.Limits = [15 480];
