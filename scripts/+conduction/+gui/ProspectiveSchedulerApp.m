@@ -19,6 +19,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingDateDropDown         matlab.ui.control.DropDown
         TestingRunButton            matlab.ui.control.Button
         TestingExitButton           matlab.ui.control.Button
+        TestingAdmissionStatusLabel matlab.ui.control.Label
+        TestingAdmissionStatusDropDown matlab.ui.control.DropDown
         TestingInfoLabel            matlab.ui.control.Label
         OptimizationSectionLabel    matlab.ui.control.Label
         OptimizationOptionsSummaryLabel matlab.ui.control.Label
@@ -51,6 +53,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SpecificLabLabel            matlab.ui.control.Label
         SpecificLabDropDown         matlab.ui.control.DropDown
         FirstCaseCheckBox           matlab.ui.control.CheckBox
+        AdmissionStatusLabel        matlab.ui.control.Label
+        AdmissionStatusDropDown     matlab.ui.control.DropDown
         
         AddCaseButton               matlab.ui.control.Button
 
@@ -75,6 +79,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingAvailableDates
         CurrentTestingSummary struct = struct()
         IsSyncingTestingToggle logical = false
+        TestingAdmissionDefault string = "outpatient"
         LabIds double = 1:6
         OptimizationOptions conduction.scheduling.SchedulingOptions
         OptimizationDefaults struct = struct()
@@ -127,7 +132,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function leftGrid = configureLeftPanelLayout(app)
             leftGrid = uigridlayout(app.LeftPanel);
             leftGrid.ColumnWidth = {100, 140, 80, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 10, 22, 26, 26, 22, 10, 22, '1x', 30};
+            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 26, 10, 22, 26, 26, 22, 10, 22, '1x', 30};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 3;
             leftGrid.ColumnSpacing = 6;
@@ -200,10 +205,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingExitButton.Layout.Column = [3 4];
             app.TestingExitButton.ButtonPushedFcn = createCallbackFcn(app, @TestingExitButtonPushed, true);
 
+            app.TestingAdmissionStatusLabel = uilabel(leftGrid);
+            app.TestingAdmissionStatusLabel.Text = 'Default admission:';
+            app.TestingAdmissionStatusLabel.Layout.Row = 8;
+            app.TestingAdmissionStatusLabel.Layout.Column = 1;
+
+            app.TestingAdmissionStatusDropDown = uidropdown(leftGrid);
+            app.TestingAdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
+            app.TestingAdmissionStatusDropDown.Value = app.TestingAdmissionDefault;
+            app.TestingAdmissionStatusDropDown.Layout.Row = 8;
+            app.TestingAdmissionStatusDropDown.Layout.Column = [2 4];
+            app.TestingAdmissionStatusDropDown.ValueChangedFcn = createCallbackFcn(app, @TestingAdmissionStatusDropDownValueChanged, true);
+
             app.TestingInfoLabel = uilabel(leftGrid);
             app.TestingInfoLabel.Text = 'Testing mode disabled.';
             app.TestingInfoLabel.FontColor = [0.4 0.4 0.4];
-            app.TestingInfoLabel.Layout.Row = 8;
+            app.TestingInfoLabel.Layout.Row = 9;
             app.TestingInfoLabel.Layout.Column = [1 4];
             app.TestingInfoLabel.WordWrap = 'on';
         end
@@ -410,9 +427,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.FirstCaseCheckBox.Layout.Row = 19;
             app.FirstCaseCheckBox.Layout.Column = [1 4];
 
+            app.AdmissionStatusLabel = uilabel(leftGrid);
+            app.AdmissionStatusLabel.Text = 'Admission:';
+            app.AdmissionStatusLabel.Layout.Row = 20;
+            app.AdmissionStatusLabel.Layout.Column = 1;
+
+            app.AdmissionStatusDropDown = uidropdown(leftGrid);
+            app.AdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
+            app.AdmissionStatusDropDown.Value = 'outpatient';
+            app.AdmissionStatusDropDown.Layout.Row = 20;
+            app.AdmissionStatusDropDown.Layout.Column = [2 4];
+
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 20;
+            app.AddCaseButton.Layout.Row = 21;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
             app.refreshSpecificLabDropdown();
@@ -466,8 +494,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel.Layout.Column = [1 4];
 
             app.CasesTable = uitable(leftGrid);
-            app.CasesTable.ColumnName = {'#', 'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
-            app.CasesTable.ColumnWidth = {60, 100, 140, 80, 90, 80};
+            app.CasesTable.ColumnName = {'#', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
+            app.CasesTable.ColumnWidth = {60, 100, 140, 80, 100, 90, 80};
             app.CasesTable.RowName = {};
             app.CasesTable.Layout.Row = 28;
             app.CasesTable.Layout.Column = [1 4];
@@ -629,14 +657,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
+            admissionStatus = app.getSelectedAdmissionStatus();
+
             try
-                app.CaseManager.addCase(operatorName, procedureName, duration, specificLab, isFirstCase);
+                app.CaseManager.addCase(operatorName, procedureName, duration, specificLab, isFirstCase, admissionStatus);
 
                 % Reset form
                 app.OperatorDropDown.Value = app.OperatorDropDown.Items{1};
                 app.ProcedureDropDown.Value = app.ProcedureDropDown.Items{1};
                 app.SpecificLabDropDown.Value = 'Any Lab';
                 app.FirstCaseCheckBox.Value = false;
+                app.AdmissionStatusDropDown.Value = 'outpatient';
                 app.refreshDurationOptions(); % Refresh the display
 
             catch ME
@@ -712,6 +743,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function TestingExitButtonPushed(app, event)
             app.exitTestingMode();
+        end
+
+        function TestingAdmissionStatusDropDownValueChanged(app, event)
+            %#ok<INUSD>
+            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
+                app.TestingAdmissionDefault = string(app.TestingAdmissionStatusDropDown.Value);
+            end
         end
 
         function OptimizationOptionsButtonPushed(app, event)
@@ -960,6 +998,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.TestingDateDropDown.Value = items{2};
             end
 
+            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
+                app.TestingAdmissionStatusDropDown.Value = app.TestingAdmissionDefault;
+            end
+
             app.CurrentTestingSummary = struct();
             app.updateTestingActionStates();
             app.updateTestingInfoText();
@@ -1048,8 +1090,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             preference = app.getSelectedDurationPreference();
+            admissionDefault = app.getTestingAdmissionStatus();
             result = app.CaseManager.applyTestingScenario(selectedDate, ...
-                'durationPreference', preference, 'resetExisting', true);
+                'durationPreference', preference, 'resetExisting', true, ...
+                'admissionStatus', admissionDefault);
 
             app.CurrentTestingSummary = result;
             app.updateTestingInfoText();
@@ -1072,6 +1116,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 preference = "median";
             else
                 preference = lower(tagValue);
+            end
+        end
+
+        function status = getSelectedAdmissionStatus(app)
+            status = "outpatient";
+            if isempty(app.AdmissionStatusDropDown) || ~isvalid(app.AdmissionStatusDropDown)
+                return;
+            end
+            status = string(app.AdmissionStatusDropDown.Value);
+        end
+
+        function status = getTestingAdmissionStatus(app)
+            status = app.TestingAdmissionDefault;
+            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
+                status = string(app.TestingAdmissionStatusDropDown.Value);
             end
         end
 
@@ -1399,26 +1458,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Build table data
-            tableData = cell(caseCount, 6);
+            tableData = cell(caseCount, 7);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
                 tableData{i, 1} = i;
                 tableData{i, 2} = char(caseObj.OperatorName);
                 tableData{i, 3} = char(caseObj.ProcedureName);
                 tableData{i, 4} = round(caseObj.EstimatedDurationMinutes);
+                tableData{i, 5} = char(caseObj.AdmissionStatus);
 
                 % Lab constraint
                 if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
-                    tableData{i, 5} = 'Any';
+                    tableData{i, 6} = 'Any';
                 else
-                    tableData{i, 5} = char(caseObj.SpecificLab);
+                    tableData{i, 6} = char(caseObj.SpecificLab);
                 end
 
                 % First case constraint
                 if caseObj.IsFirstCaseOfDay
-                    tableData{i, 6} = 'Yes';
+                    tableData{i, 7} = 'Yes';
                 else
-                    tableData{i, 6} = 'No';
+                    tableData{i, 7} = 'No';
                 end
             end
 

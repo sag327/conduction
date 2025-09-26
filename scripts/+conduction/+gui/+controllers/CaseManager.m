@@ -68,7 +68,7 @@ classdef CaseManager < handle
             end
         end
 
-        function addCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay)
+        function addCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay, admissionStatus)
             arguments
                 obj
                 operatorName (1,1) string
@@ -76,10 +76,11 @@ classdef CaseManager < handle
                 customDuration (1,1) double = NaN
                 specificLab (1,1) string = ""
                 isFirstCaseOfDay (1,1) logical = false
+                admissionStatus (1,1) string = "outpatient"
             end
 
             newCase = obj.constructProspectiveCase(operatorName, procedureName, ...
-                customDuration, specificLab, isFirstCaseOfDay);
+                customDuration, specificLab, isFirstCaseOfDay, admissionStatus);
 
             obj.Cases(end+1) = newCase;
             obj.notifyChange();
@@ -420,6 +421,7 @@ classdef CaseManager < handle
                 targetDate (1,1) datetime
                 options.durationPreference (1,1) string = "median"
                 options.resetExisting logical = true
+                options.admissionStatus (1,1) string = "outpatient"
             end
 
             result = struct();
@@ -456,9 +458,13 @@ classdef CaseManager < handle
 
                 summary = obj.getDurationSummary(operatorName, procedureName);
                 duration = obj.resolveDurationForPreference(summary, options.durationPreference);
+                admissionStatus = options.admissionStatus;
+                if isprop(request, 'AdmissionStatus') && strlength(request.AdmissionStatus) > 0
+                    admissionStatus = string(lower(request.AdmissionStatus));
+                end
 
                 newCases(end+1) = obj.constructProspectiveCase(operatorName, procedureName, ...
-                    duration, "Any Lab", false); %#ok<AGROW>
+                    duration, "Any Lab", false, admissionStatus); %#ok<AGROW>
             end
 
             if options.resetExisting
@@ -492,7 +498,7 @@ classdef CaseManager < handle
             if ~isfield(defaults, 'SetupMinutes'); defaults.SetupMinutes = 0; end
             if ~isfield(defaults, 'PostMinutes'); defaults.PostMinutes = 0; end
             if ~isfield(defaults, 'TurnoverMinutes'); defaults.TurnoverMinutes = 0; end
-            if ~isfield(defaults, 'AdmissionStatus'); defaults.AdmissionStatus = 'unknown'; end
+            if ~isfield(defaults, 'AdmissionStatus'); defaults.AdmissionStatus = 'outpatient'; end
 
             template = struct( ...
                 'caseID', '', ...
@@ -530,7 +536,11 @@ classdef CaseManager < handle
                     casesStruct(idx).priority = 0;
                 end
                 casesStruct(idx).preferredLab = obj.resolvePreferredLab(caseObj.SpecificLab, labIds);
-                casesStruct(idx).admissionStatus = char(defaults.AdmissionStatus);
+                statusValue = caseObj.AdmissionStatus;
+                if strlength(statusValue) == 0
+                    statusValue = defaults.AdmissionStatus;
+                end
+                casesStruct(idx).admissionStatus = char(statusValue);
                 casesStruct(idx).date = dateValue;
             end
         end
@@ -592,7 +602,7 @@ classdef CaseManager < handle
             end
         end
 
-        function caseObj = constructProspectiveCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay)
+        function caseObj = constructProspectiveCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay, admissionStatus)
             arguments
                 obj
                 operatorName (1,1) string
@@ -600,9 +610,10 @@ classdef CaseManager < handle
                 customDuration (1,1) double = NaN
                 specificLab (1,1) string = "Any Lab"
                 isFirstCaseOfDay (1,1) logical = false
+                admissionStatus (1,1) string = "outpatient"
             end
 
-            caseObj = conduction.gui.models.ProspectiveCase(operatorName, procedureName);
+            caseObj = conduction.gui.models.ProspectiveCase(operatorName, procedureName, admissionStatus);
 
             if ~obj.isKnownOperator(operatorName)
                 caseObj.IsCustomOperator = true;
@@ -626,6 +637,11 @@ classdef CaseManager < handle
             end
 
             caseObj.IsFirstCaseOfDay = isFirstCaseOfDay;
+            statusValue = string(lower(strtrim(admissionStatus)));
+            if statusValue ~= "inpatient" && statusValue ~= "outpatient"
+                statusValue = "outpatient";
+            end
+            caseObj.AdmissionStatus = statusValue;
         end
 
         function duration = resolveDurationForPreference(~, summary, preference)

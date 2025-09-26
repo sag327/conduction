@@ -15,13 +15,15 @@ classdef ProspectiveCase < handle
         % Scheduling constraints
         SpecificLab string = ""  % Required lab (empty = any lab)
         IsFirstCaseOfDay logical = false  % Must be first case of the day
+        AdmissionStatus string = "outpatient"  % Outpatient or inpatient
     end
 
     methods
-        function obj = ProspectiveCase(operatorName, procedureName)
+        function obj = ProspectiveCase(operatorName, procedureName, admissionStatus)
             arguments
                 operatorName (1,1) string = ""
                 procedureName (1,1) string = ""
+                admissionStatus (1,1) string = "outpatient"
             end
 
             obj.OperatorName = operatorName;
@@ -33,6 +35,7 @@ classdef ProspectiveCase < handle
             obj.IsCustomProcedure = false;
             obj.DateCreated = datetime('now');
             obj.Notes = "";
+            obj.AdmissionStatus = admissionStatus;
         end
 
         function displayName = getDisplayName(obj)
