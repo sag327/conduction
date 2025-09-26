@@ -426,7 +426,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationSectionLabel.Layout.Column = [1 4];
 
             app.OptimizationOptionsSummaryLabel = uilabel(leftGrid);
-            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Turnover: 15 min | Setup/Post: 0 min';
+            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Turnover: 30 min | Setup/Post: 15 min';
             app.OptimizationOptionsSummaryLabel.HorizontalAlignment = 'left';
             app.OptimizationOptionsSummaryLabel.Layout.Row = 23;
             app.OptimizationOptionsSummaryLabel.Layout.Column = [1 3];
@@ -1287,11 +1287,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             numLabs = numel(app.LabIds);
             startTimes = repmat({'08:00'}, 1, numLabs);
             app.OptimizationOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
-                'NumLabs', numLabs, 'LabStartTimes', startTimes);
+                'NumLabs', numLabs, 'LabStartTimes', startTimes, 'TurnoverTime', 30);
 
             app.OptimizationDefaults = struct( ...
-                'SetupMinutes', 0, ...
-                'PostMinutes', 0, ...
+                'SetupMinutes', 15, ...
+                'PostMinutes', 15, ...
                 'TurnoverMinutes', app.OptimizationOptions.TurnoverTime, ...
                 'AdmissionStatus', 'outpatient');
 
