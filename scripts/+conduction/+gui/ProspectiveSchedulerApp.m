@@ -22,23 +22,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         
         % Duration & Statistics Section
         DurationStatsLabel          matlab.ui.control.Label
-        
-        % Statistics with inline selection checkboxes
-        MedianLabel                 matlab.ui.control.Label
+        DurationButtonGroup         matlab.ui.container.ButtonGroup
+        MedianRadioButton           matlab.ui.control.RadioButton
         MedianValueLabel            matlab.ui.control.Label
-        UseMedianButton             matlab.ui.control.CheckBox
-        
-        P70Label                    matlab.ui.control.Label
+        P70RadioButton              matlab.ui.control.RadioButton
         P70ValueLabel               matlab.ui.control.Label
-        UseP70Button                matlab.ui.control.CheckBox
-        
-        P90Label                    matlab.ui.control.Label
+        P90RadioButton              matlab.ui.control.RadioButton
         P90ValueLabel               matlab.ui.control.Label
-        UseP90Button                matlab.ui.control.CheckBox
-        
-        CustomDurationLabel         matlab.ui.control.Label
+        CustomRadioButton           matlab.ui.control.RadioButton
         CustomDurationSpinner       matlab.ui.control.Spinner
-        UseCustomButton             matlab.ui.control.CheckBox
+        DurationSourceLabel         matlab.ui.control.Label
         
         % Scheduling Constraints Section
         ConstraintsLabel            matlab.ui.control.Label
@@ -64,7 +57,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TargetDate datetime
         IsCustomOperatorSelected logical = false
         IsCustomProcedureSelected logical = false
-        CurrentStats struct = struct()  % Current duration statistics
+        CurrentDurationSummary struct = struct()  % Current duration summary info
     end
 
     % Component initialization
@@ -78,27 +71,39 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Name = 'Prospective Scheduler';
             app.UIFigure.Resize = 'on';
 
-            % Create MainGridLayout
+            % Create main layout with left (input) and right (visualization) panels
             app.MainGridLayout = uigridlayout(app.UIFigure);
             app.MainGridLayout.ColumnWidth = {500, '1x'};
             app.MainGridLayout.RowHeight = {'1x'};
 
-            % Create LeftPanel
             app.LeftPanel = uipanel(app.MainGridLayout);
             app.LeftPanel.Title = 'Case Input';
             app.LeftPanel.Layout.Row = 1;
             app.LeftPanel.Layout.Column = 1;
 
-            % Create left panel grid with improved layout
+            leftGrid = app.configureLeftPanelLayout();
+            app.buildDataSection(leftGrid);
+            app.buildCaseDetailsSection(leftGrid);
+            app.buildDurationSection(leftGrid);
+            app.buildConstraintSection(leftGrid);
+            app.buildCaseManagementSection(leftGrid);
+
+            app.configureRightPanel();
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+
+        function leftGrid = configureLeftPanelLayout(app)
             leftGrid = uigridlayout(app.LeftPanel);
-            leftGrid.ColumnWidth = {80, 120, 60, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 10, 22, 22, 22, 10, 22, 22, 22, 22, 22, 10, 22, 22, 22, 30, 5, 22, '1x', 30};
+            leftGrid.ColumnWidth = {100, 140, 80, '1x'};
+            leftGrid.RowHeight = {22, 30, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 5, 22, '1x', 30};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 3;
+            leftGrid.ColumnSpacing = 6;
+        end
 
-            % Create components in left panel
-
-            % Data loading section
+        function buildDataSection(app, leftGrid)
             app.DataLoadingLabel = uilabel(leftGrid);
             app.DataLoadingLabel.Text = 'Clinical Data';
             app.DataLoadingLabel.FontWeight = 'bold';
@@ -116,7 +121,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DataStatusLabel.FontColor = [0.6 0.6 0.6];
             app.DataStatusLabel.Layout.Row = 3;
             app.DataStatusLabel.Layout.Column = [1 4];
+        end
 
+        function buildCaseDetailsSection(app, leftGrid)
             app.CaseDetailsLabel = uilabel(leftGrid);
             app.CaseDetailsLabel.Text = 'Case Details';
             app.CaseDetailsLabel.FontWeight = 'bold';
@@ -144,161 +151,158 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ProcedureDropDown.Layout.Row = 7;
             app.ProcedureDropDown.Layout.Column = [2 4];
             app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
+        end
 
-            % Historical Durations Section
+        function buildDurationSection(app, leftGrid)
             app.DurationStatsLabel = uilabel(leftGrid);
-            app.DurationStatsLabel.Text = 'Historical Durations';
+            app.DurationStatsLabel.Text = 'Duration Options';
             app.DurationStatsLabel.FontWeight = 'bold';
             app.DurationStatsLabel.Layout.Row = 9;
             app.DurationStatsLabel.Layout.Column = [1 4];
 
-            % Note: Using individual radio buttons with manual mutual exclusivity
+            % Create the ButtonGroup first; radios must be direct children
+            app.DurationButtonGroup = uibuttongroup(leftGrid);
+            app.DurationButtonGroup.BorderType = 'none';
+            app.DurationButtonGroup.Layout.Row = 10;
+            app.DurationButtonGroup.Layout.Column = [1 4];
+            app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
 
-            % Median row: Label | Checkbox | Value
-            app.MedianLabel = uilabel(leftGrid);
-            app.MedianLabel.Text = 'Median:';
-            app.MedianLabel.Layout.Row = 10;
-            app.MedianLabel.Layout.Column = 1;
+            % Use a grid layout as a child of the group to position labels;
+            % radios remain direct children of the ButtonGroup.
+            durationGrid = uigridlayout(app.DurationButtonGroup);
+            durationGrid.ColumnWidth = {'1x', 90};
+            durationGrid.RowHeight = {22, 22, 22, 22, 18};
+            durationGrid.Padding = [0 0 0 0];
+            durationGrid.RowSpacing = 3;
+            durationGrid.ColumnSpacing = 6;
 
-            app.UseMedianButton = uicheckbox(leftGrid);
-            app.UseMedianButton.Text = '';
-            app.UseMedianButton.Layout.Row = 10;
-            app.UseMedianButton.Layout.Column = 2;
-            app.UseMedianButton.ValueChangedFcn = createCallbackFcn(app, @DurationSelectionChanged, true);
+            % Create radios as direct children of the ButtonGroup
+            app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.MedianRadioButton.Text = 'Median';
+            app.MedianRadioButton.Tag = 'median';
+            app.MedianRadioButton.Position = [5, durationGrid.InnerPosition(4)-22, 100, 22];
 
-            app.MedianValueLabel = uilabel(leftGrid);
-            app.MedianValueLabel.Text = '- min';
-            app.MedianValueLabel.Layout.Row = 10;
-            app.MedianValueLabel.Layout.Column = 3;
+            app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.P70RadioButton.Text = 'P70';
+            app.P70RadioButton.Tag = 'p70';
+            app.P70RadioButton.Position = [5, durationGrid.InnerPosition(4)-22*2-3, 100, 22];
 
-            % P70 row
-            app.P70Label = uilabel(leftGrid);
-            app.P70Label.Text = 'P70:';
-            app.P70Label.Layout.Row = 11;
-            app.P70Label.Layout.Column = 1;
+            app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.P90RadioButton.Text = 'P90';
+            app.P90RadioButton.Tag = 'p90';
+            app.P90RadioButton.Position = [5, durationGrid.InnerPosition(4)-22*3-6, 100, 22];
 
-            app.UseP70Button = uicheckbox(leftGrid);
-            app.UseP70Button.Text = '';
-            app.UseP70Button.Layout.Row = 11;
-            app.UseP70Button.Layout.Column = 2;
-            app.UseP70Button.ValueChangedFcn = createCallbackFcn(app, @DurationSelectionChanged, true);
+            app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.CustomRadioButton.Text = 'Custom';
+            app.CustomRadioButton.Tag = 'custom';
+            app.CustomRadioButton.Position = [5, durationGrid.InnerPosition(4)-22*4-9, 100, 22];
 
-            app.P70ValueLabel = uilabel(leftGrid);
-            app.P70ValueLabel.Text = '- min';
-            app.P70ValueLabel.Layout.Row = 11;
-            app.P70ValueLabel.Layout.Column = 3;
+            % Value labels and spinner inside the grid for alignment
+            app.MedianValueLabel = uilabel(durationGrid);
+            app.MedianValueLabel.Text = '-';
+            app.MedianValueLabel.Layout.Row = 1;
+            app.MedianValueLabel.Layout.Column = 2;
 
-            % P90 row
-            app.P90Label = uilabel(leftGrid);
-            app.P90Label.Text = 'P90:';
-            app.P90Label.Layout.Row = 12;
-            app.P90Label.Layout.Column = 1;
+            app.P70ValueLabel = uilabel(durationGrid);
+            app.P70ValueLabel.Text = '-';
+            app.P70ValueLabel.Layout.Row = 2;
+            app.P70ValueLabel.Layout.Column = 2;
 
-            app.UseP90Button = uicheckbox(leftGrid);
-            app.UseP90Button.Text = '';
-            app.UseP90Button.Layout.Row = 12;
-            app.UseP90Button.Layout.Column = 2;
-            app.UseP90Button.ValueChangedFcn = createCallbackFcn(app, @DurationSelectionChanged, true);
+            app.P90ValueLabel = uilabel(durationGrid);
+            app.P90ValueLabel.Text = '-';
+            app.P90ValueLabel.Layout.Row = 3;
+            app.P90ValueLabel.Layout.Column = 2;
 
-            app.P90ValueLabel = uilabel(leftGrid);
-            app.P90ValueLabel.Text = '- min';
-            app.P90ValueLabel.Layout.Row = 12;
-            app.P90ValueLabel.Layout.Column = 3;
-
-            % Custom row
-            app.CustomDurationLabel = uilabel(leftGrid);
-            app.CustomDurationLabel.Text = 'Custom:';
-            app.CustomDurationLabel.Layout.Row = 13;
-            app.CustomDurationLabel.Layout.Column = 1;
-
-            app.UseCustomButton = uicheckbox(leftGrid);
-            app.UseCustomButton.Text = '';
-            app.UseCustomButton.Layout.Row = 13;
-            app.UseCustomButton.Layout.Column = 2;
-            app.UseCustomButton.ValueChangedFcn = createCallbackFcn(app, @DurationSelectionChanged, true);
-
-            app.CustomDurationSpinner = uispinner(leftGrid);
+            app.CustomDurationSpinner = uispinner(durationGrid);
             app.CustomDurationSpinner.Limits = [15 480];
             app.CustomDurationSpinner.Value = 60;
             app.CustomDurationSpinner.Step = 15;
             app.CustomDurationSpinner.Enable = 'off';
-            app.CustomDurationSpinner.Layout.Row = 13;
-            app.CustomDurationSpinner.Layout.Column = 3;
+            app.CustomDurationSpinner.Layout.Row = 4;
+            app.CustomDurationSpinner.Layout.Column = 2;
 
-            % Scheduling Constraints Section
+            app.DurationSourceLabel = uilabel(durationGrid);
+            app.DurationSourceLabel.Text = 'Source: --';
+            app.DurationSourceLabel.FontColor = [0.3 0.3 0.3];
+            app.DurationSourceLabel.Layout.Row = 5;
+            app.DurationSourceLabel.Layout.Column = [1 2];
+            app.DurationSourceLabel.HorizontalAlignment = 'left';
+        end
+
+        function buildConstraintSection(app, leftGrid)
             app.ConstraintsLabel = uilabel(leftGrid);
             app.ConstraintsLabel.Text = 'Scheduling Constraints';
             app.ConstraintsLabel.FontWeight = 'bold';
-            app.ConstraintsLabel.Layout.Row = 15;
+            app.ConstraintsLabel.Layout.Row = 12;
             app.ConstraintsLabel.Layout.Column = [1 4];
 
             app.SpecificLabLabel = uilabel(leftGrid);
             app.SpecificLabLabel.Text = 'Specific Lab:';
-            app.SpecificLabLabel.Layout.Row = 16;
+            app.SpecificLabLabel.Layout.Row = 13;
             app.SpecificLabLabel.Layout.Column = 1;
 
             app.SpecificLabDropDown = uidropdown(leftGrid);
             app.SpecificLabDropDown.Items = {'Any Lab', 'Lab 1', 'Lab 2', 'Lab 10', 'Lab 11', 'Lab 12', 'Lab 14'};
             app.SpecificLabDropDown.Value = 'Any Lab';
-            app.SpecificLabDropDown.Layout.Row = 16;
+            app.SpecificLabDropDown.Layout.Row = 13;
             app.SpecificLabDropDown.Layout.Column = [2 4];
 
             app.FirstCaseCheckBox = uicheckbox(leftGrid);
             app.FirstCaseCheckBox.Text = 'Must be first case of the day';
             app.FirstCaseCheckBox.Value = false;
-            app.FirstCaseCheckBox.Layout.Row = 17;
+            app.FirstCaseCheckBox.Layout.Row = 14;
             app.FirstCaseCheckBox.Layout.Column = [1 4];
 
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 18;
+            app.AddCaseButton.Layout.Row = 15;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
+        end
 
-            % Case Management Section
+        function buildCaseManagementSection(app, leftGrid)
             app.CasesLabel = uilabel(leftGrid);
             app.CasesLabel.Text = 'Added Cases';
             app.CasesLabel.FontWeight = 'bold';
-            app.CasesLabel.Layout.Row = 20;
+            app.CasesLabel.Layout.Row = 17;
             app.CasesLabel.Layout.Column = [1 4];
 
             app.CasesTable = uitable(leftGrid);
             app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
-            app.CasesTable.ColumnWidth = {100, 140, 70, 85, 85};
+            app.CasesTable.ColumnWidth = {100, 140, 80, 90, 80};
             app.CasesTable.RowName = {};
-            app.CasesTable.Layout.Row = 21;
+            app.CasesTable.Layout.Row = 18;
             app.CasesTable.Layout.Column = [1 4];
             app.CasesTable.SelectionType = 'row';
 
             app.RemoveSelectedButton = uibutton(leftGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
-            app.RemoveSelectedButton.Layout.Row = 22;
+            app.RemoveSelectedButton.Layout.Row = 19;
             app.RemoveSelectedButton.Layout.Column = [1 2];
             app.RemoveSelectedButton.Enable = 'off';
             app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
 
             app.ClearAllButton = uibutton(leftGrid, 'push');
             app.ClearAllButton.Text = 'Clear All';
-            app.ClearAllButton.Layout.Row = 22;
+            app.ClearAllButton.Layout.Row = 19;
             app.ClearAllButton.Layout.Column = [3 4];
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
+        end
 
-            % Create RightPanel (Schedule Visualization)
+        function configureRightPanel(app)
             app.RightPanel = uipanel(app.MainGridLayout);
             app.RightPanel.Title = 'Schedule View';
-            app.RightPanel.BackgroundColor = [1 1 1]; % White background
+            app.RightPanel.BackgroundColor = [1 1 1];
             app.RightPanel.Layout.Row = 1;
             app.RightPanel.Layout.Column = 2;
 
-            % Create right panel grid for schedule visualization
             rightGrid = uigridlayout(app.RightPanel);
             rightGrid.ColumnWidth = {'1x'};
-            rightGrid.RowHeight = {'2x', '1x'};  % Main schedule gets 2/3, operators get 1/3
+            rightGrid.RowHeight = {'2x', '1x'};
             rightGrid.Padding = [5 5 5 5];
-            rightGrid.BackgroundColor = [1 1 1]; % White background for grid
+            rightGrid.BackgroundColor = [1 1 1];
 
-            % Main schedule axes (labs vs time)
             app.ScheduleAxesMain = uiaxes(rightGrid);
             app.ScheduleAxesMain.Layout.Row = 1;
             app.ScheduleAxesMain.Layout.Column = 1;
@@ -306,16 +310,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxesMain.Title.FontWeight = 'bold';
             app.ScheduleAxesMain.Title.FontSize = 14;
 
-            % Operator timeline axes
             app.ScheduleAxesOperators = uiaxes(rightGrid);
             app.ScheduleAxesOperators.Layout.Row = 2;
             app.ScheduleAxesOperators.Layout.Column = 1;
             app.ScheduleAxesOperators.Title.String = 'Operator Utilization Timeline';
             app.ScheduleAxesOperators.Title.FontWeight = 'bold';
             app.ScheduleAxesOperators.Title.FontSize = 12;
-
-            % Show the figure after all components are created
-            app.UIFigure.Visible = 'on';
         end
     end
 
@@ -348,7 +348,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateDropdowns();
 
             % Initialize duration statistics
-            app.updateDurationStatistics();
+            app.refreshDurationOptions();
 
             % Initialize empty schedule visualization
             app.initializeEmptySchedule();
@@ -384,7 +384,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            app.updateDurationStatistics();
+            app.refreshDurationOptions();
         end
 
         function ProcedureDropDownValueChanged(app, event)
@@ -403,35 +403,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            app.updateDurationStatistics();
-        end
-
-        function DurationSelectionChanged(app, event)
-            % Handle duration selection change - manage mutual exclusivity manually
-            changedButton = event.Source;
-            
-            if changedButton.Value
-                % Uncheck all other buttons
-                if changedButton ~= app.UseMedianButton
-                    app.UseMedianButton.Value = false;
-                end
-                if changedButton ~= app.UseP70Button
-                    app.UseP70Button.Value = false;
-                end
-                if changedButton ~= app.UseP90Button
-                    app.UseP90Button.Value = false;
-                end
-                if changedButton ~= app.UseCustomButton
-                    app.UseCustomButton.Value = false;
-                end
-                
-                % Enable/disable custom spinner
-                if changedButton == app.UseCustomButton
-                    app.CustomDurationSpinner.Enable = 'on';
-                else
-                    app.CustomDurationSpinner.Enable = 'off';
-                end
-            end
+            app.refreshDurationOptions();
         end
 
         function AddCaseButtonPushed(app, event)
@@ -460,9 +432,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ProcedureDropDown.Value = app.ProcedureDropDown.Items{1};
                 app.SpecificLabDropDown.Value = 'Any Lab';
                 app.FirstCaseCheckBox.Value = false;
-                app.UseMedianButton.Value = true; % Reset to median
-                app.CustomDurationSpinner.Enable = 'off';
-                app.updateDurationStatistics(); % Refresh the display
+                app.refreshDurationOptions(); % Refresh the display
 
             catch ME
                 uialert(app.UIFigure, sprintf('Error adding case: %s', ME.message), 'Error');
@@ -498,7 +468,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if success
                 app.updateDataStatus();
                 app.updateDropdowns();
-                app.updateDurationStatistics(); % Refresh duration statistics with new data
+                app.refreshDurationOptions(); % Refresh duration options with new data
             else
                 app.DataStatusLabel.Text = 'No clinical data loaded';
                 app.DataStatusLabel.FontColor = [0.6 0.6 0.6];
@@ -527,122 +497,169 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
-        function updateDurationStatistics(app)
-            % Update duration statistics labels and selection based on operator/procedure
+        function refreshDurationOptions(app)
+            % Update duration option display based on selected operator/procedure
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
 
-            if operatorName ~= "" && procedureName ~= "" && ...
-               ~strcmp(operatorName, 'Other...') && ~strcmp(procedureName, 'Other...')
+            if operatorName == "" || procedureName == "" || ...
+               strcmp(operatorName, 'Other...') || strcmp(procedureName, 'Other...')
+                app.clearDurationDisplay();
+                return;
+            end
 
-                % Get comprehensive statistics
-                app.CurrentStats = app.CaseManager.getAllStatistics(operatorName, procedureName);
-                
-                % Update statistics labels
-                if app.CaseManager.hasClinicalData()
-                    opStats = app.CaseManager.getOperatorProcedureStats(operatorName, procedureName);
-                    if opStats.available && opStats.count >= 3
-                        % Use operator-specific statistics
-                        app.MedianValueLabel.Text = sprintf('%d min', round(opStats.median));
-                        app.P70ValueLabel.Text = sprintf('%d min', round(opStats.p70));
-                        app.P90ValueLabel.Text = sprintf('%d min', round(opStats.p90));
-                    else
-                        % Try procedure-only statistics
-                        procStats = app.CurrentStats.procedureOverall;
-                        if ~isempty(procStats) && isfield(procStats, 'median') && procStats.count >= 3
-                            app.MedianValueLabel.Text = sprintf('%d min', round(procStats.median));
-                            app.P70ValueLabel.Text = sprintf('%d min', round(procStats.p70));
-                            app.P90ValueLabel.Text = sprintf('%d min', round(procStats.p90));
-                        else
-                            % No historical data available
-                            app.MedianValueLabel.Text = 'No data';
-                            app.P70ValueLabel.Text = 'No data';
-                            app.P90ValueLabel.Text = 'No data';
-                        end
+            summary = app.CaseManager.getDurationSummary(operatorName, procedureName);
+            app.CurrentDurationSummary = summary;
+
+            % Update value labels and enable states
+            optionKeys = {'median', 'p70', 'p90'};
+            optionButtons = {app.MedianRadioButton, app.P70RadioButton, app.P90RadioButton};
+            optionLabels = {app.MedianValueLabel, app.P70ValueLabel, app.P90ValueLabel};
+
+            firstAvailableButton = [];
+            for idx = 1:numel(optionKeys)
+                option = app.getSummaryOption(summary, optionKeys{idx});
+                label = optionLabels{idx};
+                button = optionButtons{idx};
+
+                if option.available
+                    label.Text = app.formatDurationValue(option.value);
+                    button.Enable = 'on';
+                    if isempty(firstAvailableButton)
+                        firstAvailableButton = button;
                     end
                 else
-                    % No clinical data loaded
-                    app.MedianValueLabel.Text = 'No data';
-                    app.P70ValueLabel.Text = 'No data';
-                    app.P90ValueLabel.Text = 'No data';
+                    if strcmp(optionKeys{idx}, 'median')
+                        label.Text = sprintf('%s (est)', app.formatDurationValue(summary.estimate));
+                    else
+                        label.Text = 'No data';
+                    end
+                    button.Enable = 'off';
                 end
-
-                % Set default selection to median
-                app.UseMedianButton.Value = true;
-                app.CustomDurationSpinner.Enable = 'off';
-            else
-                % Clear statistics when no valid selection
-                app.MedianValueLabel.Text = '- min';
-                app.P70ValueLabel.Text = '- min';
-                app.P90ValueLabel.Text = '- min';
-                app.CurrentStats = struct();
             end
+
+            % Spinner defaults to heuristic estimate
+            app.CustomDurationSpinner.Value = app.clampSpinnerValue(summary.customDefault);
+            app.CustomRadioButton.Enable = 'on';
+
+            if isempty(firstAvailableButton)
+                app.DurationButtonGroup.SelectedObject = app.CustomRadioButton;
+            else
+                app.DurationButtonGroup.SelectedObject = firstAvailableButton;
+            end
+
+            app.DurationSourceLabel.Text = app.formatDurationSource(summary);
+            app.updateCustomSpinnerState();
+        end
+
+        function clearDurationDisplay(app)
+            app.CurrentDurationSummary = struct();
+            app.MedianValueLabel.Text = '-';
+            app.P70ValueLabel.Text = '-';
+            app.P90ValueLabel.Text = '-';
+            app.CustomDurationSpinner.Value = app.clampSpinnerValue(60);
+            app.DurationSourceLabel.Text = 'Source: --';
+
+            % Reset button states
+            app.MedianRadioButton.Enable = 'off';
+            app.P70RadioButton.Enable = 'off';
+            app.P90RadioButton.Enable = 'off';
+            app.CustomRadioButton.Enable = 'on';
+            app.DurationButtonGroup.SelectedObject = app.CustomRadioButton;
+            app.updateCustomSpinnerState();
         end
 
         function duration = getSelectedDuration(app)
-            % Get the currently selected duration based on radio button choice
-            if app.UseCustomButton.Value
+            % Get the currently selected duration using the summary structure
+            if isempty(app.CurrentDurationSummary)
                 duration = app.CustomDurationSpinner.Value;
-            elseif app.UseMedianButton.Value
-                duration = app.getStatisticValue('median');
-            elseif app.UseP70Button.Value
-                duration = app.getStatisticValue('p70');
-            elseif app.UseP90Button.Value
-                duration = app.getStatisticValue('p90');
+                return;
+            end
+
+            selected = app.DurationButtonGroup.SelectedObject;
+            if isempty(selected)
+                duration = app.CustomDurationSpinner.Value;
+                return;
+            end
+
+            tag = string(selected.Tag);
+            if tag == "custom"
+                duration = app.CustomDurationSpinner.Value;
+                return;
+            end
+
+            option = app.getSummaryOption(app.CurrentDurationSummary, char(tag));
+            if ~isempty(option) && option.available
+                duration = option.value;
             else
-                % Default to median if none selected
-                duration = app.getStatisticValue('median');
+                duration = app.CurrentDurationSummary.estimate;
             end
         end
 
-        function value = getStatisticValue(app, statName)
-            % Get a specific statistic value from current stats
-            if isempty(app.CurrentStats)
-                value = 60; % Default fallback
+        function option = getSummaryOption(app, summary, key)
+            option = struct('available', false, 'value', NaN, 'count', 0, 'source', 'none');
+            if isempty(summary) || ~isfield(summary, 'options') || isempty(summary.options)
                 return;
             end
-            
-            % Try operator-specific stats first
-            if isfield(app.CurrentStats, 'operatorSpecific') && ...
-               isfield(app.CurrentStats.operatorSpecific, statName)
-                value = app.CurrentStats.operatorSpecific.(statName);
+
+            matches = strcmp({summary.options.key}, key);
+            if any(matches)
+                option = summary.options(matches);
+            end
+        end
+
+        function text = formatDurationValue(~, value)
+            text = sprintf('%d min', round(value));
+        end
+
+        function value = clampSpinnerValue(app, value)
+            limits = app.CustomDurationSpinner.Limits;
+            value = max(limits(1), min(limits(2), value));
+        end
+
+        function text = formatDurationSource(~, summary)
+            count = 0;
+            if isfield(summary, 'primaryCount') && ~isempty(summary.primaryCount)
+                count = summary.primaryCount;
+            end
+
+            switch summary.dataSource
+                case 'operator'
+                    text = sprintf('Source: Operator history (n=%d)', count);
+                case 'procedure'
+                    text = sprintf('Source: Procedure average (n=%d)', count);
+                otherwise
+                    text = 'Source: Heuristic defaults';
+            end
+        end
+
+        function updateCustomSpinnerState(app)
+            selected = app.DurationButtonGroup.SelectedObject;
+            if isempty(selected)
+                app.CustomDurationSpinner.Enable = 'off';
                 return;
             end
-            
-            % Try procedure-overall stats
-            if isfield(app.CurrentStats, 'procedureOverall') && ...
-               isfield(app.CurrentStats.procedureOverall, statName)
-                value = app.CurrentStats.procedureOverall.(statName);
-                return;
+
+            if selected == app.CustomRadioButton
+                app.CustomDurationSpinner.Enable = 'on';
+            else
+                app.CustomDurationSpinner.Enable = 'off';
             end
-            
-            % Fallback to estimated duration
-            value = app.CurrentStats.medianDuration;
+        end
+
+        function DurationOptionChanged(app, ~)
+            app.updateCustomSpinnerState();
         end
 
         function initializeEmptySchedule(app)
             % Initialize empty schedule visualization for the target date
             
-            % Create empty DailySchedule with available labs (1,2,10,11,12,14)
+            % Create empty display for available labs (1,2,10,11,12,14)
             labNumbers = [1, 2, 10, 11, 12, 14];
-            labs = [];
-            for i = 1:length(labNumbers)
-                % Create basic lab objects (simplified for visualization)
-                lab = struct('Number', labNumbers(i), 'Name', sprintf('Lab %d', labNumbers(i)));
-                labs = [labs; lab]; %#ok<AGROW>
-            end
-            
-            % Create empty lab assignments (one empty cell per lab)
-            emptyAssignments = cell(1, length(labNumbers));
-            for i = 1:length(labNumbers)
-                emptyAssignments{i} = [];
-            end
-            
-            % Set up empty schedule display
-            app.displayEmptySchedule(labNumbers, emptyAssignments);
+            app.renderEmptySchedule(labNumbers);
         end
 
-        function displayEmptySchedule(app, labNumbers, emptyAssignments)
+        function renderEmptySchedule(app, labNumbers)
             % Display empty schedule with time grid and lab rows
             
             % Default time window: 6 AM to 8 PM (6 to 20 hours)

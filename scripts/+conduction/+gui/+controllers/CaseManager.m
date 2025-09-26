@@ -147,7 +147,18 @@ classdef CaseManager < handle
                 obj
                 listener (1,1) function_handle
             end
-            obj.ChangeListeners{end+1} = listener;
+            wrapped = listener;
+            try
+                numInputs = nargin(listener);
+            catch
+                numInputs = 0;
+            end
+
+            if numInputs > 0
+                wrapped = @() listener(obj);
+            end
+
+            obj.ChangeListeners{end+1} = wrapped;
         end
 
         function clearAllCases(obj)
@@ -162,9 +173,14 @@ classdef CaseManager < handle
             end
 
             try
-                % Load the clinical dataset
+                % Validate path
+                if ~isfile(filePath)
+                    error('CaseManager:FileNotFound', 'Selected file does not exist: %s', filePath);
+                end
+
+                % Load the clinical dataset with explicit call context
                 fprintf('Loading clinical data from %s...\n', filePath);
-                obj.HistoricalCollection = conduction.ScheduleCollection.fromFile(filePath);
+                obj.HistoricalCollection = conduction.ScheduleCollection.fromFile(string(filePath));
 
                 % Update known entities
                 obj.loadKnownEntities(obj.HistoricalCollection);
@@ -179,8 +195,17 @@ classdef CaseManager < handle
                 obj.notifyChange();
 
             catch ME
-                warning('CaseManager:LoadFailed', ...
-                    'Failed to load clinical data: %s', ME.message);
+                % Provide clearer diagnostics, including identifier, message, and top of stack
+                if isempty(ME.stack)
+                    stackSummary = 'No stack information available.';
+                else
+                    frameSummaries = arrayfun(@(s) sprintf('%s (line %d)', s.name, s.line), ...
+                        ME.stack, 'UniformOutput', false);
+                    stackSummary = strjoin(frameSummaries, '  ->  ');
+                end
+
+                warnMsg = sprintf('Failed to load clinical data: [%s] %s', ME.identifier, ME.message);
+                warning('CaseManager:LoadFailed', '%s\n    Stack: %s', warnMsg, stackSummary);
                 success = false;
             end
         end
@@ -201,6 +226,7 @@ classdef CaseManager < handle
             end
 
             fullPath = fullfile(pathName, fileName);
+            fprintf('Selected clinical data file: %s\n', fullPath);
             success = obj.loadClinicalData(string(fullPath));
         end
 
@@ -277,41 +303,87 @@ classdef CaseManager < handle
             end
         end
 
-        function allStats = getAllStatistics(obj, operatorName, procedureName)
-            % Get complete statistics for operator-procedure combination
-            % Returns struct with median, mean, p70, p90, count, and data source info
+        function summary = getDurationSummary(obj, operatorName, procedureName)
+            %getDurationSummary Return normalized duration options for GUI consumption.
 
-            allStats = struct();
-            allStats.medianDuration = obj.estimateDuration(operatorName, procedureName);
-
-            % Get detailed operator-specific stats if available
-            opStats = obj.getOperatorProcedureStats(operatorName, procedureName);
-            if opStats.available
-                allStats.operatorSpecific = opStats;
-                allStats.dataSource = 'operator-specific';
-            else
-                allStats.operatorSpecific = struct();
+            arguments
+                obj
+                operatorName (1,1) string
+                procedureName (1,1) string
             end
 
-            % Get procedure-only stats if available
-            if obj.hasClinicalData()
+            % Base summary scaffold
+            summary = struct();
+            summary.operatorName = operatorName;
+            summary.procedureName = procedureName;
+            summary.hasClinicalData = obj.hasClinicalData();
+            summary.estimate = obj.estimateDuration(operatorName, procedureName);
+            summary.customDefault = summary.estimate;
+            summary.dataSource = 'heuristic';
+            summary.primaryCount = 0;
+            summary.operatorStats = struct();
+            summary.procedureStats = struct();
+
+            optionDefs = {'median','Median'; 'p70','P70'; 'p90','P90'};
+            summary.options = struct('key', {}, 'label', {}, 'value', {}, ...
+                                     'available', {}, 'count', {}, 'source', {});
+            for idx = 1:size(optionDefs, 1)
+                summary.options(idx) = struct( ...
+                    'key', optionDefs{idx, 1}, ...
+                    'label', optionDefs{idx, 2}, ...
+                    'value', NaN, ...
+                    'available', false, ...
+                    'count', 0, ...
+                    'source', 'none'); %#ok<AGROW>
+            end
+
+            % Prefer operator-specific statistics when reliable
+            opStats = obj.getOperatorProcedureStats(operatorName, procedureName);
+            if opStats.available && conduction.gui.controllers.CaseManager.isStatsReliable(opStats)
+                summary = conduction.gui.controllers.CaseManager.applyDurationStats( ...
+                    summary, opStats, 'operator');
+                summary.dataSource = 'operator';
+                summary.primaryCount = opStats.count;
+                summary.operatorStats = opStats;
+            end
+
+            % Fall back to procedure-only statistics if operator-specific unavailable
+            if strcmp(summary.dataSource, 'heuristic') && summary.hasClinicalData
                 procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
                 if isfield(obj.ProcedureAnalytics, 'procedures') && ...
                    obj.ProcedureAnalytics.procedures.isKey(char(procedureId))
                     procData = obj.ProcedureAnalytics.procedures(char(procedureId));
-                    allStats.procedureOverall = procData.overall;
-                    if ~opStats.available
-                        allStats.dataSource = 'procedure-average';
-                    end
-                else
-                    allStats.procedureOverall = struct();
-                    if ~opStats.available
-                        allStats.dataSource = 'heuristic';
+                    if isfield(procData, 'overall') && ...
+                       conduction.gui.controllers.CaseManager.isStatsReliable(procData.overall)
+                        summary = conduction.gui.controllers.CaseManager.applyDurationStats( ...
+                            summary, procData.overall, 'procedure');
+                        summary.dataSource = 'procedure';
+                        summary.primaryCount = procData.overall.count;
+                        summary.procedureStats = procData.overall;
                     end
                 end
-            else
-                allStats.procedureOverall = struct();
-                allStats.dataSource = 'heuristic';
+            end
+
+            summary.hasHistoricalOptions = any([summary.options.available]);
+        end
+
+        function allStats = getAllStatistics(obj, operatorName, procedureName)
+            %getAllStatistics Backwards-compatible wrapper around getDurationSummary.
+
+            summary = obj.getDurationSummary(operatorName, procedureName);
+
+            allStats = struct();
+            allStats.medianDuration = summary.estimate;
+            allStats.operatorSpecific = summary.operatorStats;
+            allStats.procedureOverall = summary.procedureStats;
+
+            switch summary.dataSource
+                case 'operator'
+                    allStats.dataSource = 'operator-specific';
+                case 'procedure'
+                    allStats.dataSource = 'procedure-average';
+                otherwise
+                    allStats.dataSource = 'heuristic';
             end
         end
     end
@@ -382,5 +454,48 @@ classdef CaseManager < handle
                 end
             end
         end
+
+    end
+
+    methods (Access = private, Static)
+        function summary = applyDurationStats(summary, statsStruct, sourceLabel)
+            optionKeys = {summary.options.key};
+            statNames = {'median', 'p70', 'p90'};
+
+            for idx = 1:numel(statNames)
+                statName = statNames{idx};
+                optionIdx = strcmp(optionKeys, statName);
+
+                if any(optionIdx) && isfield(statsStruct, statName)
+                    value = statsStruct.(statName);
+                    if ~isnan(value)
+                        countValue = 0;
+                        if isfield(statsStruct, 'count') && ~isempty(statsStruct.count)
+                            countValue = statsStruct.count;
+                        end
+
+                        summary.options(optionIdx).value = value;
+                        summary.options(optionIdx).available = true;
+                        summary.options(optionIdx).count = countValue;
+                        summary.options(optionIdx).source = sourceLabel;
+                    end
+                end
+            end
+        end
+
+        function tf = isStatsReliable(statsStruct)
+            if ~isfield(statsStruct, 'count') || statsStruct.count < 3
+                tf = false;
+                return;
+            end
+
+            if ~isfield(statsStruct, 'median') || isnan(statsStruct.median)
+                tf = false;
+                return;
+            end
+
+            tf = true;
+        end
+
     end
 end
