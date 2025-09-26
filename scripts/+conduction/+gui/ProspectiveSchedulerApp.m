@@ -466,8 +466,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel.Layout.Column = [1 4];
 
             app.CasesTable = uitable(leftGrid);
-            app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
-            app.CasesTable.ColumnWidth = {100, 140, 80, 90, 80};
+            app.CasesTable.ColumnName = {'#', 'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
+            app.CasesTable.ColumnWidth = {60, 100, 140, 80, 90, 80};
             app.CasesTable.RowName = {};
             app.CasesTable.Layout.Row = 28;
             app.CasesTable.Layout.Column = [1 4];
@@ -1398,25 +1398,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Build table data
-            tableData = cell(caseCount, 5);
+            tableData = cell(caseCount, 6);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
-                tableData{i, 1} = char(caseObj.OperatorName);
-                tableData{i, 2} = char(caseObj.ProcedureName);
-                tableData{i, 3} = round(caseObj.EstimatedDurationMinutes);
-                
+                tableData{i, 1} = i;
+                tableData{i, 2} = char(caseObj.OperatorName);
+                tableData{i, 3} = char(caseObj.ProcedureName);
+                tableData{i, 4} = round(caseObj.EstimatedDurationMinutes);
+
                 % Lab constraint
                 if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
-                    tableData{i, 4} = 'Any';
+                    tableData{i, 5} = 'Any';
                 else
-                    tableData{i, 4} = char(caseObj.SpecificLab);
+                    tableData[i, 5] = char(caseObj.SpecificLab);
                 end
-                
+
                 % First case constraint
                 if caseObj.IsFirstCaseOfDay
-                    tableData{i, 5} = 'Yes';
+                    tableData{i, 6} = 'Yes';
                 else
-                    tableData{i, 5} = 'No';
+                    tableData{i, 6} = 'No';
                 end
             end
 

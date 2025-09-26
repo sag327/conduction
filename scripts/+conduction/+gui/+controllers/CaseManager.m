@@ -516,7 +516,7 @@ classdef CaseManager < handle
             for idx = 1:obj.CaseCount
                 caseObj = obj.Cases(idx);
 
-                casesStruct(idx).caseID = sprintf('GUI_%03d', idx);
+                casesStruct(idx).caseID = idx;
                 casesStruct(idx).operator = char(caseObj.OperatorName);
                 casesStruct(idx).procedure = char(caseObj.ProcedureName);
                 casesStruct(idx).setupTime = defaults.SetupMinutes;
