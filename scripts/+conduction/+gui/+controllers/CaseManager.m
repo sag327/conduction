@@ -58,12 +58,14 @@ classdef CaseManager < handle
             end
         end
 
-        function addCase(obj, operatorName, procedureName, customDuration)
+        function addCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay)
             arguments
                 obj
                 operatorName (1,1) string
                 procedureName (1,1) string
                 customDuration (1,1) double = NaN
+                specificLab (1,1) string = ""
+                isFirstCaseOfDay (1,1) logical = false
             end
 
             newCase = conduction.gui.models.ProspectiveCase(operatorName, procedureName);
@@ -84,6 +86,12 @@ classdef CaseManager < handle
                 estimatedDuration = obj.estimateDuration(operatorName, procedureName);
                 newCase.updateDuration(estimatedDuration);
             end
+
+            % Set scheduling constraints
+            if specificLab ~= "Any Lab"
+                newCase.SpecificLab = specificLab;
+            end
+            newCase.IsFirstCaseOfDay = isFirstCaseOfDay;
 
             obj.Cases(end+1) = newCase;
             obj.notifyChange();

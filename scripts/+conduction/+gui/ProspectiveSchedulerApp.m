@@ -21,6 +21,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DurationLabel               matlab.ui.control.Label
         DurationSpinner             matlab.ui.control.Spinner
         DurationUnitsLabel          matlab.ui.control.Label
+        
+        % Scheduling constraints
+        ConstraintsLabel            matlab.ui.control.Label
+        SpecificLabLabel            matlab.ui.control.Label
+        SpecificLabDropDown         matlab.ui.control.DropDown
+        FirstCaseCheckBox           matlab.ui.control.CheckBox
+        
         AddCaseButton               matlab.ui.control.Button
 
         CasesLabel                  matlab.ui.control.Label
@@ -34,7 +41,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     % App state properties
-    properties (Access = private)
+    properties (Access = public)
         CaseManager conduction.gui.controllers.CaseManager
         TargetDate datetime
         IsCustomOperatorSelected logical = false
@@ -48,13 +55,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
-            app.UIFigure.Position = [100 100 900 600];
+            app.UIFigure.Position = [100 100 1200 800];
             app.UIFigure.Name = 'Prospective Scheduler';
             app.UIFigure.Resize = 'on';
 
             % Create MainGridLayout
             app.MainGridLayout = uigridlayout(app.UIFigure);
-            app.MainGridLayout.ColumnWidth = {400, '1x'};
+            app.MainGridLayout.ColumnWidth = {500, '1x'};
             app.MainGridLayout.RowHeight = {'1x'};
 
             % Create LeftPanel
@@ -66,7 +73,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create left panel grid
             leftGrid = uigridlayout(app.LeftPanel);
             leftGrid.ColumnWidth = {'1x', '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 10, 22, 22, 22, 22, 22, 22, 22, 30, 30, '1x', 30, 30};
+            leftGrid.RowHeight = {22, 30, 22, 10, 22, 22, 22, 22, 22, 22, 22, 10, 22, 22, 22, 22, 30, 30, '1x', 30, 30};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 5;
 
@@ -136,9 +143,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationUnitsLabel.Layout.Row = 11;
             app.DurationUnitsLabel.Layout.Column = 2;
 
+            % Scheduling constraints section
+            app.ConstraintsLabel = uilabel(leftGrid);
+            app.ConstraintsLabel.Text = 'Scheduling Constraints';
+            app.ConstraintsLabel.FontWeight = 'bold';
+            app.ConstraintsLabel.Layout.Row = 13;
+            app.ConstraintsLabel.Layout.Column = [1 2];
+
+            app.SpecificLabLabel = uilabel(leftGrid);
+            app.SpecificLabLabel.Text = 'Specific Lab:';
+            app.SpecificLabLabel.Layout.Row = 14;
+            app.SpecificLabLabel.Layout.Column = 1;
+
+            app.SpecificLabDropDown = uidropdown(leftGrid);
+            app.SpecificLabDropDown.Items = {'Any Lab', 'Lab 1', 'Lab 2', 'Lab 10', 'Lab 11', 'Lab 12', 'Lab 14'};
+            app.SpecificLabDropDown.Value = 'Any Lab';
+            app.SpecificLabDropDown.Layout.Row = 15;
+            app.SpecificLabDropDown.Layout.Column = [1 2];
+
+            app.FirstCaseCheckBox = uicheckbox(leftGrid);
+            app.FirstCaseCheckBox.Text = 'Must be first case of the day';
+            app.FirstCaseCheckBox.Value = false;
+            app.FirstCaseCheckBox.Layout.Row = 16;
+            app.FirstCaseCheckBox.Layout.Column = [1 2];
+
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 12;
+            app.AddCaseButton.Layout.Row = 17;
             app.AddCaseButton.Layout.Column = [1 2];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
 
@@ -146,27 +177,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel = uilabel(leftGrid);
             app.CasesLabel.Text = 'Added Cases';
             app.CasesLabel.FontWeight = 'bold';
-            app.CasesLabel.Layout.Row = 13;
+            app.CasesLabel.Layout.Row = 18;
             app.CasesLabel.Layout.Column = [1 2];
 
             app.CasesTable = uitable(leftGrid);
-            app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration'};
-            app.CasesTable.ColumnWidth = {100, 140, 70};
+            app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
+            app.CasesTable.ColumnWidth = {100, 140, 70, 85, 85};
             app.CasesTable.RowName = {};
-            app.CasesTable.Layout.Row = 14;
+            app.CasesTable.Layout.Row = 19;
             app.CasesTable.Layout.Column = [1 2];
             app.CasesTable.SelectionType = 'row';
 
             app.RemoveSelectedButton = uibutton(leftGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
-            app.RemoveSelectedButton.Layout.Row = 15;
+            app.RemoveSelectedButton.Layout.Row = 20;
             app.RemoveSelectedButton.Layout.Column = 1;
             app.RemoveSelectedButton.Enable = 'off';
             app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
 
             app.ClearAllButton = uibutton(leftGrid, 'push');
             app.ClearAllButton.Text = 'Clear All';
-            app.ClearAllButton.Layout.Row = 15;
+            app.ClearAllButton.Layout.Row = 20;
             app.ClearAllButton.Layout.Column = 2;
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
@@ -287,6 +318,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
             duration = app.DurationSpinner.Value;
+            specificLab = string(app.SpecificLabDropDown.Value);
+            isFirstCase = app.FirstCaseCheckBox.Value;
 
             if operatorName == "" || procedureName == ""
                 uialert(app.UIFigure, 'Please select both operator and procedure.', 'Invalid Input');
@@ -294,12 +327,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             try
-                app.CaseManager.addCase(operatorName, procedureName, duration);
+                app.CaseManager.addCase(operatorName, procedureName, duration, specificLab, isFirstCase);
 
                 % Reset form
                 app.OperatorDropDown.Value = app.OperatorDropDown.Items{1};
                 app.ProcedureDropDown.Value = app.ProcedureDropDown.Items{1};
                 app.DurationSpinner.Value = 60;
+                app.SpecificLabDropDown.Value = 'Any Lab';
+                app.FirstCaseCheckBox.Value = false;
 
             catch ME
                 uialert(app.UIFigure, sprintf('Error adding case: %s', ME.message), 'Error');
@@ -401,12 +436,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Build table data
-            tableData = cell(caseCount, 3);
+            tableData = cell(caseCount, 5);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
                 tableData{i, 1} = char(caseObj.OperatorName);
                 tableData{i, 2} = char(caseObj.ProcedureName);
                 tableData{i, 3} = caseObj.EstimatedDurationMinutes;
+                
+                % Lab constraint
+                if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
+                    tableData{i, 4} = 'Any';
+                else
+                    tableData{i, 4} = char(caseObj.SpecificLab);
+                end
+                
+                % First case constraint
+                if caseObj.IsFirstCaseOfDay
+                    tableData{i, 5} = 'Yes';
+                else
+                    tableData{i, 5} = 'No';
+                end
             end
 
             app.CasesTable.Data = tableData;

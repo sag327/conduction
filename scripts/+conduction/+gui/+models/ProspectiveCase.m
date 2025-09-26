@@ -11,6 +11,10 @@ classdef ProspectiveCase < handle
         IsCustomProcedure logical
         DateCreated datetime
         Notes string
+        
+        % Scheduling constraints
+        SpecificLab string = ""  % Required lab (empty = any lab)
+        IsFirstCaseOfDay logical = false  % Must be first case of the day
     end
 
     methods
