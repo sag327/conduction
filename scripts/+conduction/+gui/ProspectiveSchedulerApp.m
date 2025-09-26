@@ -53,9 +53,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         RemoveSelectedButton        matlab.ui.control.Button
         ClearAllButton              matlab.ui.control.Button
 
-        % Right Panel Components (Schedule View - placeholder for now)
-        ScheduleLabel               matlab.ui.control.Label
-        SchedulePlaceholder         matlab.ui.control.Label
+        % Right Panel Components (Schedule Visualization)
+        ScheduleAxesMain            matlab.ui.control.UIAxes
+        ScheduleAxesOperators       matlab.ui.control.UIAxes
     end
 
     % App state properties
@@ -284,31 +284,35 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
 
-            % Create RightPanel (Schedule view - placeholder for now)
+            % Create RightPanel (Schedule Visualization)
             app.RightPanel = uipanel(app.MainGridLayout);
             app.RightPanel.Title = 'Schedule View';
+            app.RightPanel.BackgroundColor = [1 1 1]; % White background
             app.RightPanel.Layout.Row = 1;
             app.RightPanel.Layout.Column = 2;
 
-            % Create right panel grid
+            % Create right panel grid for schedule visualization
             rightGrid = uigridlayout(app.RightPanel);
             rightGrid.ColumnWidth = {'1x'};
-            rightGrid.RowHeight = {22, '1x'};
-            rightGrid.Padding = [10 10 10 10];
+            rightGrid.RowHeight = {'2x', '1x'};  % Main schedule gets 2/3, operators get 1/3
+            rightGrid.Padding = [5 5 5 5];
+            rightGrid.BackgroundColor = [1 1 1]; % White background for grid
 
-            app.ScheduleLabel = uilabel(rightGrid);
-            app.ScheduleLabel.Text = 'Schedule Optimization (Coming Soon)';
-            app.ScheduleLabel.FontWeight = 'bold';
-            app.ScheduleLabel.Layout.Row = 1;
-            app.ScheduleLabel.Layout.Column = 1;
+            % Main schedule axes (labs vs time)
+            app.ScheduleAxesMain = uiaxes(rightGrid);
+            app.ScheduleAxesMain.Layout.Row = 1;
+            app.ScheduleAxesMain.Layout.Column = 1;
+            app.ScheduleAxesMain.Title.String = 'EP Lab Schedule';
+            app.ScheduleAxesMain.Title.FontWeight = 'bold';
+            app.ScheduleAxesMain.Title.FontSize = 14;
 
-            app.SchedulePlaceholder = uilabel(rightGrid);
-            app.SchedulePlaceholder.Text = {'This panel will show:', '', ...
-                '• Timeline visualization', '• Lab assignments', '• Optimization metrics', '', ...
-                'Cases will be optimized in real-time as they are added.'};
-            app.SchedulePlaceholder.VerticalAlignment = 'top';
-            app.SchedulePlaceholder.Layout.Row = 2;
-            app.SchedulePlaceholder.Layout.Column = 1;
+            % Operator timeline axes
+            app.ScheduleAxesOperators = uiaxes(rightGrid);
+            app.ScheduleAxesOperators.Layout.Row = 2;
+            app.ScheduleAxesOperators.Layout.Column = 1;
+            app.ScheduleAxesOperators.Title.String = 'Operator Utilization Timeline';
+            app.ScheduleAxesOperators.Title.FontWeight = 'bold';
+            app.ScheduleAxesOperators.Title.FontSize = 12;
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
@@ -345,6 +349,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Initialize duration statistics
             app.updateDurationStatistics();
+
+            % Initialize empty schedule visualization
+            app.initializeEmptySchedule();
 
             % Update data status
             app.updateDataStatus();
@@ -611,6 +618,109 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             
             % Fallback to estimated duration
             value = app.CurrentStats.medianDuration;
+        end
+
+        function initializeEmptySchedule(app)
+            % Initialize empty schedule visualization for the target date
+            
+            % Create empty DailySchedule with available labs (1,2,10,11,12,14)
+            labNumbers = [1, 2, 10, 11, 12, 14];
+            labs = [];
+            for i = 1:length(labNumbers)
+                % Create basic lab objects (simplified for visualization)
+                lab = struct('Number', labNumbers(i), 'Name', sprintf('Lab %d', labNumbers(i)));
+                labs = [labs; lab]; %#ok<AGROW>
+            end
+            
+            % Create empty lab assignments (one empty cell per lab)
+            emptyAssignments = cell(1, length(labNumbers));
+            for i = 1:length(labNumbers)
+                emptyAssignments{i} = [];
+            end
+            
+            % Set up empty schedule display
+            app.displayEmptySchedule(labNumbers, emptyAssignments);
+        end
+
+        function displayEmptySchedule(app, labNumbers, emptyAssignments)
+            % Display empty schedule with time grid and lab rows
+            
+            % Default time window: 6 AM to 8 PM (6 to 20 hours)
+            startHour = 6;
+            endHour = 20;
+            
+            % Set up main schedule axes
+            ax = app.ScheduleAxesMain;
+            cla(ax);
+            hold(ax, 'on');
+            
+            % Set up axes properties to match visualizeDailySchedule styling
+            set(ax, 'YDir', 'reverse', 'Color', 'white');
+            ylim(ax, [startHour, endHour]);
+            xlim(ax, [0.5, length(labNumbers) + 0.5]);
+            
+            % Add hour grid lines
+            app.addHourGridToAxes(ax, startHour, endHour, length(labNumbers));
+            
+            % Set up lab labels on x-axis
+            labLabels = arrayfun(@(num) sprintf('Lab %d', num), labNumbers, 'UniformOutput', false);
+            set(ax, 'XTick', 1:length(labNumbers), 'XTickLabel', labLabels);
+            
+            % Format y-axis with time labels
+            app.formatTimeAxisLabels(ax, startHour, endHour);
+            
+            % Add "No cases scheduled" placeholder text
+            text(ax, mean(xlim(ax)), mean(ylim(ax)), 'No cases scheduled', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                'FontSize', 16, 'FontWeight', 'bold', 'Color', [0.6, 0.6, 0.6]);
+            
+            % Set axis properties to match visualizeDailySchedule
+            set(ax, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
+            ax.XAxis.Color = 'black';
+            ax.YAxis.Color = 'black';
+            ylabel(ax, 'Time of Day', 'Color', 'black');
+            
+            hold(ax, 'off');
+            
+            % Set up operator timeline axes (empty)
+            axOp = app.ScheduleAxesOperators;
+            cla(axOp);
+            set(axOp, 'Color', 'white');
+            
+            % Empty operator display
+            xlim(axOp, [startHour, endHour + 1]);
+            ylim(axOp, [0.5, 1.5]);
+            
+            text(axOp, mean(xlim(axOp)), 1, 'No operators scheduled', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                'FontSize', 12, 'Color', [0.6, 0.6, 0.6]);
+            
+            app.formatTimeAxisLabels(axOp, startHour, endHour);
+            xlabel(axOp, 'Time of Day', 'Color', 'black');
+            
+            % Set operator axes properties to match visualizeDailySchedule
+            set(axOp, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
+            axOp.YTick = [];
+            axOp.XAxis.Color = 'black';
+            axOp.YAxis.Color = 'black';
+        end
+
+        function addHourGridToAxes(app, ax, startHour, endHour, numLabs)
+            % Add horizontal grid lines for each hour
+            hourTicks = floor(startHour):ceil(endHour);
+            xLimits = [0.5, numLabs + 0.5];
+            
+            for h = hourTicks
+                line(ax, xLimits, [h, h], 'Color', [0.85, 0.85, 0.85], ...
+                    'LineStyle', '-', 'LineWidth', 0.5);
+            end
+        end
+
+        function formatTimeAxisLabels(app, ax, startHour, endHour)
+            % Format axis with time labels (e.g., "06:00", "07:00")
+            hourTicks = floor(startHour):ceil(endHour);
+            hourLabels = arrayfun(@(h) sprintf('%02d:00', mod(h, 24)), hourTicks, 'UniformOutput', false);
+            set(ax, 'YTick', hourTicks, 'YTickLabel', hourLabels);
         end
 
         function updateCasesTable(app)
