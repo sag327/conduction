@@ -1410,7 +1410,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
                     tableData{i, 5} = 'Any';
                 else
-                    tableData[i, 5] = char(caseObj.SpecificLab);
+                    tableData{i, 5} = char(caseObj.SpecificLab);
                 end
 
                 % First case constraint
