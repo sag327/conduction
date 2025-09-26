@@ -974,7 +974,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             preference = app.getSelectedDurationPreference();
             result = app.CaseManager.applyTestingScenario(selectedDate, ...
-                struct('durationPreference', preference, 'resetExisting', true));
+                'durationPreference', preference, 'resetExisting', true);
 
             app.CurrentTestingSummary = result;
             app.updateTestingInfoText();
