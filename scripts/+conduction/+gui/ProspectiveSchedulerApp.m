@@ -12,6 +12,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DataLoadingLabel            matlab.ui.control.Label
         LoadDataButton              matlab.ui.control.Button
         DataStatusLabel             matlab.ui.control.Label
+        TestingSectionLabel         matlab.ui.control.Label
+        TestingModeCheckBox         matlab.ui.control.CheckBox
+        TestingDatasetLabel         matlab.ui.control.Label
+        TestingDateLabel            matlab.ui.control.Label
+        TestingDateDropDown         matlab.ui.control.DropDown
+        TestingRunButton            matlab.ui.control.Button
+        TestingExitButton           matlab.ui.control.Button
+        TestingInfoLabel            matlab.ui.control.Label
 
         % Case Details Section
         CaseDetailsLabel            matlab.ui.control.Label
@@ -31,8 +39,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         P90ValueLabel               matlab.ui.control.Label
         CustomRadioButton           matlab.ui.control.RadioButton
         CustomDurationSpinner       matlab.ui.control.Spinner
-        DurationSourceLabel         matlab.ui.control.Label
-        
+
         % Scheduling Constraints Section
         ConstraintsLabel            matlab.ui.control.Label
         SpecificLabLabel            matlab.ui.control.Label
@@ -58,6 +65,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCustomOperatorSelected logical = false
         IsCustomProcedureSelected logical = false
         CurrentDurationSummary struct = struct()  % Current duration summary info
+        IsTestingModeActive logical = false
+        TestingAvailableDates
+        CurrentTestingSummary struct = struct()
+        IsSyncingTestingToggle logical = false
     end
 
     % Component initialization
@@ -83,12 +94,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             leftGrid = app.configureLeftPanelLayout();
             app.buildDataSection(leftGrid);
+            app.buildTestingSection(leftGrid);
             app.buildCaseDetailsSection(leftGrid);
             app.buildDurationSection(leftGrid);
             app.buildConstraintSection(leftGrid);
             app.buildCaseManagementSection(leftGrid);
 
             app.configureRightPanel();
+
+            % Refresh theming when OS/light mode changes
+            app.UIFigure.ThemeChangedFcn = @(src, evt) app.applyDurationThemeColors();
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
@@ -97,7 +112,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function leftGrid = configureLeftPanelLayout(app)
             leftGrid = uigridlayout(app.LeftPanel);
             leftGrid.ColumnWidth = {100, 140, 80, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 5, 22, '1x', 30};
+            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 5, 22, '1x', 30};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 3;
             leftGrid.ColumnSpacing = 6;
@@ -123,32 +138,87 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DataStatusLabel.Layout.Column = [1 4];
         end
 
+        function buildTestingSection(app, leftGrid)
+            app.TestingSectionLabel = uilabel(leftGrid);
+            app.TestingSectionLabel.Text = 'Testing Mode';
+            app.TestingSectionLabel.FontWeight = 'bold';
+            app.TestingSectionLabel.Layout.Row = 4;
+            app.TestingSectionLabel.Layout.Column = [1 4];
+
+            app.TestingModeCheckBox = uicheckbox(leftGrid);
+            app.TestingModeCheckBox.Text = 'Enable testing mode';
+            app.TestingModeCheckBox.Layout.Row = 5;
+            app.TestingModeCheckBox.Layout.Column = [1 2];
+            app.TestingModeCheckBox.ValueChangedFcn = createCallbackFcn(app, @TestingModeCheckBoxValueChanged, true);
+
+            app.TestingDatasetLabel = uilabel(leftGrid);
+            app.TestingDatasetLabel.Text = 'Dataset: (none)';
+            app.TestingDatasetLabel.HorizontalAlignment = 'right';
+            app.TestingDatasetLabel.Layout.Row = 5;
+            app.TestingDatasetLabel.Layout.Column = [3 4];
+
+            app.TestingDateLabel = uilabel(leftGrid);
+            app.TestingDateLabel.Text = 'Historical day:';
+            app.TestingDateLabel.Layout.Row = 6;
+            app.TestingDateLabel.Layout.Column = 1;
+
+            app.TestingDateDropDown = uidropdown(leftGrid);
+            app.TestingDateDropDown.Items = {'Select a date'};
+            app.TestingDateDropDown.Value = 'Select a date';
+            app.TestingDateDropDown.UserData = datetime.empty;
+            app.TestingDateDropDown.Enable = 'off';
+            app.TestingDateDropDown.Layout.Row = 6;
+            app.TestingDateDropDown.Layout.Column = [2 4];
+            app.TestingDateDropDown.ValueChangedFcn = createCallbackFcn(app, @TestingDateDropDownValueChanged, true);
+
+            app.TestingRunButton = uibutton(leftGrid, 'push');
+            app.TestingRunButton.Text = 'Run Test Day';
+            app.TestingRunButton.Enable = 'off';
+            app.TestingRunButton.Layout.Row = 7;
+            app.TestingRunButton.Layout.Column = [1 2];
+            app.TestingRunButton.ButtonPushedFcn = createCallbackFcn(app, @TestingRunButtonPushed, true);
+
+            app.TestingExitButton = uibutton(leftGrid, 'push');
+            app.TestingExitButton.Text = 'Exit Testing Mode';
+            app.TestingExitButton.Enable = 'off';
+            app.TestingExitButton.Layout.Row = 7;
+            app.TestingExitButton.Layout.Column = [3 4];
+            app.TestingExitButton.ButtonPushedFcn = createCallbackFcn(app, @TestingExitButtonPushed, true);
+
+            app.TestingInfoLabel = uilabel(leftGrid);
+            app.TestingInfoLabel.Text = 'Testing mode disabled.';
+            app.TestingInfoLabel.FontColor = [0.4 0.4 0.4];
+            app.TestingInfoLabel.Layout.Row = 8;
+            app.TestingInfoLabel.Layout.Column = [1 4];
+            app.TestingInfoLabel.WordWrap = 'on';
+        end
+
         function buildCaseDetailsSection(app, leftGrid)
             app.CaseDetailsLabel = uilabel(leftGrid);
             app.CaseDetailsLabel.Text = 'Case Details';
             app.CaseDetailsLabel.FontWeight = 'bold';
-            app.CaseDetailsLabel.Layout.Row = 5;
+            app.CaseDetailsLabel.Layout.Row = 10;
             app.CaseDetailsLabel.Layout.Column = [1 4];
 
             app.OperatorLabel = uilabel(leftGrid);
             app.OperatorLabel.Text = 'Operator:';
-            app.OperatorLabel.Layout.Row = 6;
+            app.OperatorLabel.Layout.Row = 11;
             app.OperatorLabel.Layout.Column = 1;
 
             app.OperatorDropDown = uidropdown(leftGrid);
             app.OperatorDropDown.Items = {'Loading...'};
-            app.OperatorDropDown.Layout.Row = 6;
+            app.OperatorDropDown.Layout.Row = 11;
             app.OperatorDropDown.Layout.Column = [2 4];
             app.OperatorDropDown.ValueChangedFcn = createCallbackFcn(app, @OperatorDropDownValueChanged, true);
 
             app.ProcedureLabel = uilabel(leftGrid);
             app.ProcedureLabel.Text = 'Procedure:';
-            app.ProcedureLabel.Layout.Row = 7;
+            app.ProcedureLabel.Layout.Row = 12;
             app.ProcedureLabel.Layout.Column = 1;
 
             app.ProcedureDropDown = uidropdown(leftGrid);
             app.ProcedureDropDown.Items = {'Loading...'};
-            app.ProcedureDropDown.Layout.Row = 7;
+            app.ProcedureDropDown.Layout.Row = 12;
             app.ProcedureDropDown.Layout.Column = [2 4];
             app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
         end
@@ -157,136 +227,177 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationStatsLabel = uilabel(leftGrid);
             app.DurationStatsLabel.Text = 'Duration Options';
             app.DurationStatsLabel.FontWeight = 'bold';
-            app.DurationStatsLabel.Layout.Row = 9;
+            app.DurationStatsLabel.Layout.Row = 14;
             app.DurationStatsLabel.Layout.Column = [1 4];
 
-            % Create the ButtonGroup with consistent styling
+            % Create the ButtonGroup with manual positioning for tight layout
             app.DurationButtonGroup = uibuttongroup(leftGrid);
             app.DurationButtonGroup.BorderType = 'none';
-            app.DurationButtonGroup.Layout.Row = 10;
+            app.DurationButtonGroup.Layout.Row = 15;
             app.DurationButtonGroup.Layout.Column = [1 4];
             app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
-            app.DurationButtonGroup.BackgroundColor = app.LeftPanel.BackgroundColor;
+            app.DurationButtonGroup.AutoResizeChildren = 'off';
 
-            durationGrid = uigridlayout(app.DurationButtonGroup);
-            durationGrid.ColumnWidth = {110, '1x'};
-            durationGrid.RowHeight = {22, 22, 22, 22, 18};
-            durationGrid.Padding = [0 0 0 0];
-            durationGrid.RowSpacing = 3;
-            durationGrid.ColumnSpacing = 6;
-            durationGrid.BackgroundColor = app.LeftPanel.BackgroundColor;
+            startY = 68;
+            rowSpacing = 22;
+            labelX = 125;
 
-            bgColor = app.LeftPanel.BackgroundColor;
-
-            medianPanel = uipanel(durationGrid);
-            medianPanel.BorderType = 'none';
-            medianPanel.BackgroundColor = bgColor;
-            medianPanel.Layout.Row = 1;
-            medianPanel.Layout.Column = 1;
-            medianPanel.AutoResizeChildren = 'off';
-            app.MedianRadioButton = uiradiobutton(medianPanel);
+            app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.MedianRadioButton.Interpreter = 'html';
             app.MedianRadioButton.Text = 'Median';
             app.MedianRadioButton.Tag = 'median';
-            app.MedianRadioButton.Position = [0 0 110 22];
-            app.MedianRadioButton.BackgroundColor = bgColor;
+            app.MedianRadioButton.Position = [5 startY 110 22];
 
-            p70Panel = uipanel(durationGrid);
-            p70Panel.BorderType = 'none';
-            p70Panel.BackgroundColor = bgColor;
-            p70Panel.Layout.Row = 2;
-            p70Panel.Layout.Column = 1;
-            p70Panel.AutoResizeChildren = 'off';
-            app.P70RadioButton = uiradiobutton(p70Panel);
+            app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.P70RadioButton.Interpreter = 'html';
             app.P70RadioButton.Text = 'P70';
             app.P70RadioButton.Tag = 'p70';
-            app.P70RadioButton.Position = [0 0 110 22];
-            app.P70RadioButton.BackgroundColor = bgColor;
+            app.P70RadioButton.Position = [5 startY - rowSpacing 110 22];
 
-            p90Panel = uipanel(durationGrid);
-            p90Panel.BorderType = 'none';
-            p90Panel.BackgroundColor = bgColor;
-            p90Panel.Layout.Row = 3;
-            p90Panel.Layout.Column = 1;
-            p90Panel.AutoResizeChildren = 'off';
-            app.P90RadioButton = uiradiobutton(p90Panel);
+            app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.P90RadioButton.Interpreter = 'html';
             app.P90RadioButton.Text = 'P90';
             app.P90RadioButton.Tag = 'p90';
-            app.P90RadioButton.Position = [0 0 110 22];
-            app.P90RadioButton.BackgroundColor = bgColor;
+            app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 110 22];
 
-            customPanel = uipanel(durationGrid);
-            customPanel.BorderType = 'none';
-            customPanel.BackgroundColor = bgColor;
-            customPanel.Layout.Row = 4;
-            customPanel.Layout.Column = 1;
-            customPanel.AutoResizeChildren = 'off';
-            app.CustomRadioButton = uiradiobutton(customPanel);
+            app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
+            app.CustomRadioButton.Interpreter = 'html';
             app.CustomRadioButton.Text = 'Custom';
             app.CustomRadioButton.Tag = 'custom';
-            app.CustomRadioButton.Position = [0 0 110 22];
-            app.CustomRadioButton.BackgroundColor = bgColor;
+            app.CustomRadioButton.Position = [5 startY - 3 * rowSpacing 110 22];
 
-            app.MedianValueLabel = uilabel(durationGrid);
+            app.MedianValueLabel = uilabel(app.DurationButtonGroup);
             app.MedianValueLabel.Text = '-';
-            app.MedianValueLabel.Layout.Row = 1;
-            app.MedianValueLabel.Layout.Column = 2;
+            app.MedianValueLabel.Position = [labelX startY 140 22];
             app.MedianValueLabel.HorizontalAlignment = 'left';
 
-            app.P70ValueLabel = uilabel(durationGrid);
+            app.P70ValueLabel = uilabel(app.DurationButtonGroup);
             app.P70ValueLabel.Text = '-';
-            app.P70ValueLabel.Layout.Row = 2;
-            app.P70ValueLabel.Layout.Column = 2;
+            app.P70ValueLabel.Position = [labelX startY - rowSpacing 140 22];
             app.P70ValueLabel.HorizontalAlignment = 'left';
 
-            app.P90ValueLabel = uilabel(durationGrid);
+            app.P90ValueLabel = uilabel(app.DurationButtonGroup);
             app.P90ValueLabel.Text = '-';
-            app.P90ValueLabel.Layout.Row = 3;
-            app.P90ValueLabel.Layout.Column = 2;
+            app.P90ValueLabel.Position = [labelX startY - 2 * rowSpacing 140 22];
             app.P90ValueLabel.HorizontalAlignment = 'left';
 
-            app.CustomDurationSpinner = uispinner(durationGrid);
+            app.CustomDurationSpinner = uispinner(app.DurationButtonGroup);
             app.CustomDurationSpinner.Limits = [15 480];
             app.CustomDurationSpinner.Value = 60;
             app.CustomDurationSpinner.Step = 15;
             app.CustomDurationSpinner.Enable = 'off';
-            app.CustomDurationSpinner.Layout.Row = 4;
-            app.CustomDurationSpinner.Layout.Column = 2;
+            app.CustomDurationSpinner.Position = [labelX startY - 3 * rowSpacing 70 22];
 
-            app.DurationSourceLabel = uilabel(durationGrid);
-            app.DurationSourceLabel.Text = 'Source: --';
-            app.DurationSourceLabel.FontColor = [0.3 0.3 0.3];
-            app.DurationSourceLabel.Layout.Row = 5;
-            app.DurationSourceLabel.Layout.Column = [1 2];
-            app.DurationSourceLabel.HorizontalAlignment = 'left';
+            app.applyDurationThemeColors();
+        end
+
+        function applyDurationThemeColors(app)
+            % Ensure controls exist before styling
+            if isempty(app.DurationButtonGroup) || ~isvalid(app.DurationButtonGroup)
+                return;
+            end
+
+            [bgColor, primaryTextColor] = app.getDurationThemeColors();
+
+            app.DurationButtonGroup.BackgroundColor = bgColor;
+
+            buttons = [app.MedianRadioButton, app.P70RadioButton, ...
+                app.P90RadioButton, app.CustomRadioButton];
+            for idx = 1:numel(buttons)
+                if ~isempty(buttons(idx)) && isvalid(buttons(idx))
+                    buttons(idx).FontColor = primaryTextColor;
+                end
+            end
+
+            labels = [app.MedianValueLabel, app.P70ValueLabel, app.P90ValueLabel];
+            for idx = 1:numel(labels)
+                if ~isempty(labels(idx)) && isvalid(labels(idx))
+                    labels(idx).FontColor = primaryTextColor;
+                end
+            end
+
+            if ~isempty(app.CustomDurationSpinner) && isvalid(app.CustomDurationSpinner)
+                app.CustomDurationSpinner.BackgroundColor = bgColor;
+                app.CustomDurationSpinner.FontColor = primaryTextColor;
+            end
+
+            if ~isempty(app.DurationStatsLabel) && isvalid(app.DurationStatsLabel)
+                app.DurationStatsLabel.FontColor = primaryTextColor;
+            end
+
+        end
+
+        function [bgColor, primaryTextColor] = getDurationThemeColors(app)
+            defaultBg = [0.96 0.96 0.96];
+            darkBg = [0.149 0.149 0.149];
+            primaryLight = [0 0 0];
+            primaryDark = [1 1 1];
+
+            themeStyle = "light";
+            try
+                if isprop(app.UIFigure, "Theme")
+                    themeStyle = string(app.UIFigure.Theme.BaseColorStyle);
+                end
+            catch
+                % Fall back to light theme defaults if Theme is unavailable
+                themeStyle = "light";
+            end
+
+            if themeStyle == "dark"
+                bgColor = darkBg;
+                primaryTextColor = primaryDark;
+            else
+                bgColor = defaultBg;
+                primaryTextColor = primaryLight;
+            end
+        end
+
+        function updateDurationHeader(app, summary)
+            if isempty(app.DurationStatsLabel) || ~isvalid(app.DurationStatsLabel)
+                return;
+            end
+
+            baseText = 'Duration Options';
+            if nargin < 2 || isempty(summary)
+                app.DurationStatsLabel.Text = baseText;
+                return;
+            end
+
+            sourceText = string(app.formatDurationSource(summary));
+            if strlength(sourceText) > 0
+                app.DurationStatsLabel.Text = sprintf('%s (%s)', baseText, sourceText);
+            else
+                app.DurationStatsLabel.Text = baseText;
+            end
         end
 
         function buildConstraintSection(app, leftGrid)
             app.ConstraintsLabel = uilabel(leftGrid);
             app.ConstraintsLabel.Text = 'Scheduling Constraints';
             app.ConstraintsLabel.FontWeight = 'bold';
-            app.ConstraintsLabel.Layout.Row = 12;
+            app.ConstraintsLabel.Layout.Row = 17;
             app.ConstraintsLabel.Layout.Column = [1 4];
 
             app.SpecificLabLabel = uilabel(leftGrid);
             app.SpecificLabLabel.Text = 'Specific Lab:';
-            app.SpecificLabLabel.Layout.Row = 13;
+            app.SpecificLabLabel.Layout.Row = 18;
             app.SpecificLabLabel.Layout.Column = 1;
 
             app.SpecificLabDropDown = uidropdown(leftGrid);
             app.SpecificLabDropDown.Items = {'Any Lab', 'Lab 1', 'Lab 2', 'Lab 10', 'Lab 11', 'Lab 12', 'Lab 14'};
             app.SpecificLabDropDown.Value = 'Any Lab';
-            app.SpecificLabDropDown.Layout.Row = 13;
+            app.SpecificLabDropDown.Layout.Row = 18;
             app.SpecificLabDropDown.Layout.Column = [2 4];
 
             app.FirstCaseCheckBox = uicheckbox(leftGrid);
             app.FirstCaseCheckBox.Text = 'Must be first case of the day';
             app.FirstCaseCheckBox.Value = false;
-            app.FirstCaseCheckBox.Layout.Row = 14;
+            app.FirstCaseCheckBox.Layout.Row = 19;
             app.FirstCaseCheckBox.Layout.Column = [1 4];
 
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 15;
+            app.AddCaseButton.Layout.Row = 20;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
         end
@@ -295,27 +406,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel = uilabel(leftGrid);
             app.CasesLabel.Text = 'Added Cases';
             app.CasesLabel.FontWeight = 'bold';
-            app.CasesLabel.Layout.Row = 17;
+            app.CasesLabel.Layout.Row = 22;
             app.CasesLabel.Layout.Column = [1 4];
 
             app.CasesTable = uitable(leftGrid);
             app.CasesTable.ColumnName = {'Operator', 'Procedure', 'Duration', 'Lab', 'First Case'};
             app.CasesTable.ColumnWidth = {100, 140, 80, 90, 80};
             app.CasesTable.RowName = {};
-            app.CasesTable.Layout.Row = 18;
+            app.CasesTable.Layout.Row = 23;
             app.CasesTable.Layout.Column = [1 4];
             app.CasesTable.SelectionType = 'row';
 
             app.RemoveSelectedButton = uibutton(leftGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
-            app.RemoveSelectedButton.Layout.Row = 19;
+            app.RemoveSelectedButton.Layout.Row = 24;
             app.RemoveSelectedButton.Layout.Column = [1 2];
             app.RemoveSelectedButton.Enable = 'off';
             app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
 
             app.ClearAllButton = uibutton(leftGrid, 'push');
             app.ClearAllButton.Text = 'Clear All';
-            app.ClearAllButton.Layout.Row = 19;
+            app.ClearAllButton.Layout.Row = 24;
             app.ClearAllButton.Layout.Column = [3 4];
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
@@ -361,6 +472,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Initialize app state
             app.TargetDate = targetDate;
+            app.TestingAvailableDates = app.createEmptyTestingSummary();
+            app.CurrentTestingSummary = struct();
 
             % Create UIFigure and components
             createComponents(app);
@@ -373,7 +486,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Set up change listener
-            app.CaseManager.addChangeListener(@() app.updateCasesTable());
+            app.CaseManager.addChangeListener(@() app.onCaseManagerChanged());
 
             % Initialize dropdowns
             app.updateDropdowns();
@@ -386,6 +499,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Update data status
             app.updateDataStatus();
+            app.refreshTestingAvailability();
+            app.onCaseManagerChanged();
 
             % Update window title with target date
             app.UIFigure.Name = sprintf('Prospective Scheduler - %s', datestr(targetDate, 'mmm dd, yyyy'));
@@ -505,7 +620,39 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DataStatusLabel.FontColor = [0.6 0.6 0.6];
             end
 
+            app.refreshTestingAvailability();
+
             app.LoadDataButton.Enable = 'on';
+        end
+
+        function TestingModeCheckBoxValueChanged(app, event)
+            if app.IsSyncingTestingToggle
+                return;
+            end
+
+            if app.TestingModeCheckBox.Value
+                app.enterTestingMode();
+            else
+                app.exitTestingMode();
+            end
+        end
+
+        function TestingDateDropDownValueChanged(app, event)
+            %#ok<*INUSD>
+            app.updateTestingActionStates();
+            selectedDate = app.getSelectedTestingDate();
+            if app.IsTestingModeActive && isa(selectedDate, 'datetime') && ~isnat(selectedDate)
+                app.TestingInfoLabel.FontColor = [0.3 0.3 0.3];
+                app.TestingInfoLabel.Text = 'Press "Run Test Day" to load the selected historical cases.';
+            end
+        end
+
+        function TestingRunButtonPushed(app, event)
+            app.runTestingScenario();
+        end
+
+        function TestingExitButtonPushed(app, event)
+            app.exitTestingMode();
         end
     end
 
@@ -525,6 +672,350 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ProcedureDropDown.Items = procedureOptions;
             if ~isempty(procedureOptions)
                 app.ProcedureDropDown.Value = procedureOptions{1};
+            end
+        end
+
+        function onCaseManagerChanged(app)
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            app.updateCasesTable();
+            app.updateTestingInfoText();
+        end
+
+        function refreshTestingAvailability(app)
+            if isempty(app.CaseManager)
+                app.TestingAvailableDates = app.createEmptyTestingSummary();
+            else
+                app.TestingAvailableDates = app.CaseManager.getAvailableTestingDates();
+            end
+
+            app.updateTestingDatasetLabel();
+            app.populateTestingDates();
+            app.updateTestingActionStates();
+            app.updateTestingInfoText();
+        end
+
+        function updateTestingDatasetLabel(app)
+            if isempty(app.TestingDatasetLabel) || ~isvalid(app.TestingDatasetLabel)
+                return;
+            end
+
+            displayText = 'Dataset: (none)';
+
+            if ~isempty(app.CaseManager) && app.CaseManager.hasClinicalData()
+                dataPath = app.CaseManager.getClinicalDataPath();
+                if strlength(dataPath) > 0
+                    [~, name, ext] = fileparts(dataPath);
+                    displayText = sprintf('Dataset: %s%s', name, ext);
+                else
+                    displayText = 'Dataset: (active collection)';
+                end
+            end
+
+            app.TestingDatasetLabel.Text = displayText;
+        end
+
+        function populateTestingDates(app)
+            if isempty(app.TestingDateDropDown) || ~isvalid(app.TestingDateDropDown)
+                return;
+            end
+
+            placeholderText = 'Select a date';
+
+            summary = app.TestingAvailableDates;
+            hasDates = istable(summary) && ~isempty(summary) && height(summary) > 0 && ...
+                ismember('Date', summary.Properties.VariableNames);
+
+            if hasDates
+                validRows = ~ismissing(summary.Date);
+                summary = summary(validRows, :);
+                if isempty(summary)
+                    hasDates = false;
+                end
+            end
+
+            if hasDates
+                [~, order] = sort(summary.Date);
+                summary = summary(order, :);
+                if ismember('CaseCount', summary.Properties.VariableNames)
+                    displayItems = arrayfun(@(d, c) sprintf('%s (%d cases)', ...
+                        datestr(d, 'mmm dd, yyyy'), c), summary.Date, summary.CaseCount, ...
+                        'UniformOutput', false);
+                else
+                    displayItems = arrayfun(@(d) datestr(d, 'mmm dd, yyyy'), summary.Date, ...
+                        'UniformOutput', false);
+                end
+
+                items = [{placeholderText}; displayItems(:)];
+                app.TestingDateDropDown.UserData = summary.Date;
+            else
+                items = {placeholderText};
+                app.TestingDateDropDown.UserData = datetime.empty;
+            end
+
+            app.TestingDateDropDown.Items = items;
+            app.TestingDateDropDown.Value = placeholderText;
+        end
+
+        function updateTestingActionStates(app)
+            if isempty(app.TestingDateDropDown) || ~isvalid(app.TestingDateDropDown)
+                return;
+            end
+
+            userDates = app.TestingDateDropDown.UserData;
+            hasRealDates = isa(userDates, 'datetime') && ~isempty(userDates);
+            selectedDate = app.getSelectedTestingDate();
+            selectionValid = isa(selectedDate, 'datetime') && ~isnat(selectedDate);
+
+            if app.IsTestingModeActive && hasRealDates
+                app.TestingDateDropDown.Enable = 'on';
+            else
+                app.TestingDateDropDown.Enable = 'off';
+                if ~app.IsTestingModeActive
+                    app.TestingDateDropDown.Value = 'Select a date';
+                end
+            end
+
+            if ~isempty(app.TestingRunButton) && isvalid(app.TestingRunButton)
+                if app.IsTestingModeActive && selectionValid
+                    app.TestingRunButton.Enable = 'on';
+                else
+                    app.TestingRunButton.Enable = 'off';
+                end
+            end
+
+            if ~isempty(app.TestingExitButton) && isvalid(app.TestingExitButton)
+                if app.IsTestingModeActive
+                    app.TestingExitButton.Enable = 'on';
+                else
+                    app.TestingExitButton.Enable = 'off';
+                end
+            end
+        end
+
+        function updateTestingInfoText(app)
+            if isempty(app.TestingInfoLabel) || ~isvalid(app.TestingInfoLabel)
+                return;
+            end
+
+            if ~app.IsTestingModeActive
+                if ~isempty(app.CaseManager) && app.CaseManager.hasClinicalData()
+                    app.TestingInfoLabel.Text = 'Testing mode disabled.';
+                    app.TestingInfoLabel.FontColor = [0.4 0.4 0.4];
+                else
+                    app.TestingInfoLabel.Text = 'Load clinical data to enable testing mode.';
+                    app.TestingInfoLabel.FontColor = [0.6 0.4 0];
+                end
+                return;
+            end
+
+            if isempty(app.CurrentTestingSummary) || ~isfield(app.CurrentTestingSummary, 'caseCount')
+                app.TestingInfoLabel.Text = 'Select a historical day and click Run Test Day.';
+                app.TestingInfoLabel.FontColor = [0.3 0.3 0.3];
+                return;
+            end
+
+            if app.CurrentTestingSummary.caseCount > 0
+                runDate = app.CurrentTestingSummary.date;
+                if ~isa(runDate, 'datetime')
+                    runDate = datetime(runDate);
+                end
+
+                app.TestingInfoLabel.Text = sprintf('Loaded %d cases for %s (%d operators, %d procedures).', ...
+                    app.CurrentTestingSummary.caseCount, datestr(runDate, 'mmm dd, yyyy'), ...
+                    app.CurrentTestingSummary.operatorCount, app.CurrentTestingSummary.procedureCount);
+                app.TestingInfoLabel.FontColor = [0 0.5 0];
+            else
+                runDate = app.CurrentTestingSummary.date;
+                if isa(runDate, 'datetime') && ~isnat(runDate)
+                    dateText = datestr(runDate, 'mmm dd, yyyy');
+                else
+                    dateText = 'selected day';
+                end
+                app.TestingInfoLabel.Text = sprintf('No historical cases found for %s.', dateText);
+                app.TestingInfoLabel.FontColor = [0.75 0.45 0];
+            end
+        end
+
+        function enterTestingMode(app)
+            if ~isempty(app.CaseManager) && app.CaseManager.hasClinicalData()
+                app.TestingAvailableDates = app.CaseManager.getAvailableTestingDates();
+            else
+                uialert(app.UIFigure, 'Load clinical data before enabling testing mode.', 'Testing Mode');
+                app.setTestingModeCheckbox(false);
+                app.updateTestingActionStates();
+                app.updateTestingInfoText();
+                return;
+            end
+
+            if app.CaseManager.CaseCount > 0
+                answer = uiconfirm(app.UIFigure, ...
+                    'Activating testing mode clears the current case list. Continue?', ...
+                    'Testing Mode', 'Options', {'Clear Cases', 'Cancel'}, ...
+                    'DefaultOption', 'Clear Cases', 'CancelOption', 'Cancel');
+                if strcmp(answer, 'Clear Cases')
+                    app.CaseManager.clearAllCases();
+                else
+                    app.setTestingModeCheckbox(false);
+                    app.updateTestingActionStates();
+                    app.updateTestingInfoText();
+                    return;
+                end
+            end
+
+            app.populateTestingDates();
+            userDates = app.TestingDateDropDown.UserData;
+            hasDates = isa(userDates, 'datetime') && ~isempty(userDates);
+            if ~hasDates
+                uialert(app.UIFigure, 'The loaded dataset does not contain any days with historical cases.', ...
+                    'Testing Mode');
+                app.setTestingModeCheckbox(false);
+                app.updateTestingActionStates();
+                app.updateTestingInfoText();
+                return;
+            end
+
+            app.IsTestingModeActive = true;
+            app.setManualInputsEnabled(false);
+
+            items = app.TestingDateDropDown.Items;
+            if numel(items) > 1
+                app.TestingDateDropDown.Value = items{2};
+            end
+
+            app.CurrentTestingSummary = struct();
+            app.updateTestingActionStates();
+            app.updateTestingInfoText();
+        end
+
+        function exitTestingMode(app)
+            if ~app.IsTestingModeActive
+                app.setTestingModeCheckbox(false);
+                app.updateTestingActionStates();
+                app.updateTestingInfoText();
+                return;
+            end
+
+            clearCases = false;
+            if app.CaseManager.CaseCount > 0
+                answer = uiconfirm(app.UIFigure, ...
+                    'Remove the testing cases from the plan when exiting testing mode?', ...
+                    'Testing Mode', 'Options', {'Remove Cases', 'Keep Cases'}, ...
+                    'DefaultOption', 'Remove Cases', 'CancelOption', 'Keep Cases');
+                clearCases = strcmp(answer, 'Remove Cases');
+            end
+
+            app.IsTestingModeActive = false;
+            app.setTestingModeCheckbox(false);
+            app.setManualInputsEnabled(true);
+            app.refreshDurationOptions();
+
+            if clearCases
+                app.CaseManager.clearAllCases();
+            end
+
+            app.CurrentTestingSummary = struct();
+            app.populateTestingDates();
+            app.updateTestingActionStates();
+            app.updateTestingInfoText();
+        end
+
+        function setTestingModeCheckbox(app, value)
+            if isempty(app.TestingModeCheckBox) || ~isvalid(app.TestingModeCheckBox)
+                return;
+            end
+
+            app.IsSyncingTestingToggle = true;
+            app.TestingModeCheckBox.Value = logical(value);
+            app.IsSyncingTestingToggle = false;
+        end
+
+        function setManualInputsEnabled(app, isEnabled)
+            state = 'off';
+            if isEnabled
+                state = 'on';
+            end
+
+            controls = {app.OperatorDropDown, app.ProcedureDropDown, ...
+                app.SpecificLabDropDown, app.FirstCaseCheckBox, app.AddCaseButton, ...
+                app.MedianRadioButton, app.P70RadioButton, app.P90RadioButton, ...
+                app.CustomRadioButton, app.CustomDurationSpinner};
+
+            for idx = 1:numel(controls)
+                ctrl = controls{idx};
+                if ~isempty(ctrl) && isvalid(ctrl)
+                    ctrl.Enable = state;
+                end
+            end
+
+            if isEnabled
+                app.updateCustomSpinnerState();
+            end
+        end
+
+        function summary = createEmptyTestingSummary(~)
+            summary = table('Size', [0 4], ...
+                'VariableTypes', {'datetime', 'double', 'double', 'double'}, ...
+                'VariableNames', {'Date', 'CaseCount', 'UniqueOperators', 'UniqueLabs'});
+        end
+
+        function runTestingScenario(app)
+            if ~app.IsTestingModeActive
+                return;
+            end
+
+            selectedDate = app.getSelectedTestingDate();
+            if ~isa(selectedDate, 'datetime') || isnat(selectedDate)
+                uialert(app.UIFigure, 'Select a historical day before running testing mode.', 'Testing Mode');
+                return;
+            end
+
+            preference = app.getSelectedDurationPreference();
+            result = app.CaseManager.applyTestingScenario(selectedDate, ...
+                struct('durationPreference', preference, 'resetExisting', true));
+
+            app.CurrentTestingSummary = result;
+            app.updateTestingInfoText();
+            app.updateTestingActionStates();
+        end
+
+        function preference = getSelectedDurationPreference(app)
+            preference = "median";
+            if isempty(app.DurationButtonGroup) || ~isvalid(app.DurationButtonGroup)
+                return;
+            end
+
+            selected = app.DurationButtonGroup.SelectedObject;
+            if isempty(selected) || ~isvalid(selected)
+                return;
+            end
+
+            tagValue = string(selected.Tag);
+            if strlength(tagValue) == 0 || tagValue == "custom"
+                preference = "median";
+            else
+                preference = lower(tagValue);
+            end
+        end
+
+        function selectedDate = getSelectedTestingDate(app)
+            selectedDate = NaT;
+            if isempty(app.TestingDateDropDown) || ~isvalid(app.TestingDateDropDown)
+                return;
+            end
+
+            items = app.TestingDateDropDown.Items;
+            value = app.TestingDateDropDown.Value;
+            idx = find(strcmp(items, value), 1);
+            if isempty(idx) || idx == 1
+                return;
+            end
+
+            userDates = app.TestingDateDropDown.UserData;
+            if isa(userDates, 'datetime') && numel(userDates) >= (idx - 1)
+                selectedDate = userDates(idx - 1);
             end
         end
 
@@ -579,7 +1070,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DurationButtonGroup.SelectedObject = firstAvailableButton;
             end
 
-            app.DurationSourceLabel.Text = app.formatDurationSource(summary);
+            app.updateDurationHeader(summary);
             app.updateCustomSpinnerState();
         end
 
@@ -589,7 +1080,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.P70ValueLabel.Text = '-';
             app.P90ValueLabel.Text = '-';
             app.CustomDurationSpinner.Value = app.clampSpinnerValue(60);
-            app.DurationSourceLabel.Text = 'Source: --';
+            app.updateDurationHeader([]);
 
             % Reset button states
             app.MedianRadioButton.Enable = 'off';
@@ -649,18 +1140,47 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function text = formatDurationSource(~, summary)
+            if isempty(summary)
+                text = '';
+                return;
+            end
+
             count = 0;
             if isfield(summary, 'primaryCount') && ~isempty(summary.primaryCount)
                 count = summary.primaryCount;
             end
 
-            switch summary.dataSource
-                case 'operator'
-                    text = sprintf('Source: Operator history (n=%d)', count);
-                case 'procedure'
-                    text = sprintf('Source: Procedure average (n=%d)', count);
+            if isfield(summary, 'dataSource')
+                dataSource = string(summary.dataSource);
+            else
+                dataSource = "";
+            end
+
+            switch dataSource
+                case "operator"
+                    if count > 0
+                        descriptor = sprintf('%d operator-specific case%s', count, pluralSuffix(count));
+                    else
+                        descriptor = 'operator history';
+                    end
+                case "procedure"
+                    if count > 0
+                        descriptor = sprintf('%d historical procedure%s', count, pluralSuffix(count));
+                    else
+                        descriptor = 'historical procedures';
+                    end
                 otherwise
-                    text = 'Source: Heuristic defaults';
+                    descriptor = 'heuristic defaults';
+            end
+
+            text = sprintf('source: %s', descriptor);
+
+            function suffix = pluralSuffix(n)
+                if n == 1
+                    suffix = '';
+                else
+                    suffix = 's';
+                end
             end
         end
 

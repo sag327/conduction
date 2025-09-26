@@ -9,6 +9,8 @@ classdef CaseManager < handle
         ChangeListeners cell = {}
         HistoricalCollection conduction.ScheduleCollection
         ProcedureAnalytics struct % Contains operator-specific procedure stats
+        ClinicalDataPath string
+        DailySummary table
     end
 
     properties (Dependent)
@@ -27,7 +29,15 @@ classdef CaseManager < handle
 
             obj.TargetDate = targetDate;
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
+
+            obj.resetClinicalDataState();
+            obj.HistoricalCollection = historicalCollection;
             obj.loadKnownEntities(historicalCollection);
+
+            if ~isempty(historicalCollection)
+                obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
+                obj.computeProcedureAnalytics();
+            end
         end
 
         function count = get.CaseCount(obj)
@@ -68,30 +78,8 @@ classdef CaseManager < handle
                 isFirstCaseOfDay (1,1) logical = false
             end
 
-            newCase = conduction.gui.models.ProspectiveCase(operatorName, procedureName);
-
-            % Handle custom entities
-            if ~obj.isKnownOperator(operatorName)
-                newCase.IsCustomOperator = true;
-            end
-
-            if ~obj.isKnownProcedure(procedureName)
-                newCase.IsCustomProcedure = true;
-            end
-
-            % Set duration (custom or estimated)
-            if ~isnan(customDuration)
-                newCase.updateDuration(customDuration);
-            else
-                estimatedDuration = obj.estimateDuration(operatorName, procedureName);
-                newCase.updateDuration(estimatedDuration);
-            end
-
-            % Set scheduling constraints
-            if specificLab ~= "Any Lab"
-                newCase.SpecificLab = specificLab;
-            end
-            newCase.IsFirstCaseOfDay = isFirstCaseOfDay;
+            newCase = obj.constructProspectiveCase(operatorName, procedureName, ...
+                customDuration, specificLab, isFirstCaseOfDay);
 
             obj.Cases(end+1) = newCase;
             obj.notifyChange();
@@ -181,12 +169,16 @@ classdef CaseManager < handle
                 % Load the clinical dataset with explicit call context
                 fprintf('Loading clinical data from %s...\n', filePath);
                 obj.HistoricalCollection = conduction.ScheduleCollection.fromFile(string(filePath));
+                obj.ClinicalDataPath = filePath;
 
                 % Update known entities
                 obj.loadKnownEntities(obj.HistoricalCollection);
 
                 % Compute procedure analytics for operator-specific durations
                 obj.computeProcedureAnalytics();
+
+                % Cache daily summary for testing mode scenarios
+                obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
 
                 fprintf('Successfully loaded %d operators, %d procedures\n', ...
                     obj.KnownOperators.Count, obj.KnownProcedures.Count);
@@ -386,6 +378,101 @@ classdef CaseManager < handle
                     allStats.dataSource = 'heuristic';
             end
         end
+
+        function path = getClinicalDataPath(obj)
+            if isempty(obj.ClinicalDataPath)
+                path = "";
+            else
+                path = obj.ClinicalDataPath;
+            end
+        end
+
+        function summary = getAvailableTestingDates(obj)
+            if ~obj.hasClinicalData()
+                summary = conduction.gui.controllers.CaseManager.createEmptyDailySummary();
+                return;
+            end
+
+            if isempty(obj.DailySummary) || ~istable(obj.DailySummary)
+                obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
+            end
+
+            summary = obj.DailySummary;
+        end
+
+        function cases = getHistoricalCasesForDate(obj, targetDate)
+            arguments
+                obj
+                targetDate (1,1) datetime
+            end
+
+            if ~obj.hasClinicalData()
+                cases = conduction.CaseRequest.empty;
+                return;
+            end
+
+            cases = obj.HistoricalCollection.casesOnDate(targetDate);
+        end
+
+        function result = applyTestingScenario(obj, targetDate, options)
+            arguments
+                obj
+                targetDate (1,1) datetime
+                options.durationPreference (1,1) string = "median"
+                options.resetExisting logical = true
+            end
+
+            result = struct();
+            result.date = dateshift(targetDate, 'start', 'day');
+            result.durationPreference = options.durationPreference;
+            result.caseCount = 0;
+            result.operatorCount = 0;
+            result.procedureCount = 0;
+            result.dataPath = obj.getClinicalDataPath();
+
+            if ~obj.hasClinicalData()
+                return;
+            end
+
+            historicalCases = obj.getHistoricalCasesForDate(targetDate);
+            if isempty(historicalCases)
+                if options.resetExisting
+                    obj.clearAllCases();
+                end
+                return;
+            end
+
+            newCases = conduction.gui.models.ProspectiveCase.empty;
+            operatorNames = strings(1, numel(historicalCases));
+            procedureNames = strings(1, numel(historicalCases));
+
+            for idx = 1:numel(historicalCases)
+                request = historicalCases(idx);
+                operatorName = string(request.Operator.Name);
+                procedureName = string(request.Procedure.Name);
+
+                operatorNames(idx) = operatorName;
+                procedureNames(idx) = procedureName;
+
+                summary = obj.getDurationSummary(operatorName, procedureName);
+                duration = obj.resolveDurationForPreference(summary, options.durationPreference);
+
+                newCases(end+1) = obj.constructProspectiveCase(operatorName, procedureName, ...
+                    duration, "Any Lab", false); %#ok<AGROW>
+            end
+
+            if options.resetExisting
+                obj.Cases = newCases;
+            else
+                obj.Cases = [obj.Cases, newCases];
+            end
+
+            result.caseCount = numel(newCases);
+            result.operatorCount = numel(unique(operatorNames));
+            result.procedureCount = numel(unique(procedureNames));
+
+            obj.notifyChange();
+        end
     end
 
     methods (Access = private)
@@ -444,6 +531,65 @@ classdef CaseManager < handle
             end
         end
 
+        function caseObj = constructProspectiveCase(obj, operatorName, procedureName, customDuration, specificLab, isFirstCaseOfDay)
+            arguments
+                obj
+                operatorName (1,1) string
+                procedureName (1,1) string
+                customDuration (1,1) double = NaN
+                specificLab (1,1) string = "Any Lab"
+                isFirstCaseOfDay (1,1) logical = false
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase(operatorName, procedureName);
+
+            if ~obj.isKnownOperator(operatorName)
+                caseObj.IsCustomOperator = true;
+            end
+
+            if ~obj.isKnownProcedure(procedureName)
+                caseObj.IsCustomProcedure = true;
+            end
+
+            if ~isnan(customDuration)
+                caseObj.updateDuration(customDuration);
+            else
+                estimatedDuration = obj.estimateDuration(operatorName, procedureName);
+                caseObj.updateDuration(estimatedDuration);
+            end
+
+            if specificLab ~= "Any Lab" && strlength(specificLab) > 0
+                caseObj.SpecificLab = specificLab;
+            else
+                caseObj.SpecificLab = "";
+            end
+
+            caseObj.IsFirstCaseOfDay = isFirstCaseOfDay;
+        end
+
+        function duration = resolveDurationForPreference(~, summary, preference)
+            preference = lower(string(preference));
+            duration = summary.estimate;
+
+            if isfield(summary, 'options') && ~isempty(summary.options)
+                optionKeys = lower(string({summary.options.key}));
+                matches = strcmp(optionKeys, preference);
+                if any(matches) && summary.options(matches).available
+                    duration = summary.options(matches).value;
+                    return;
+                end
+            end
+
+            if isfield(summary, 'customDefault') && ~isnan(summary.customDefault)
+                duration = summary.customDefault;
+            end
+        end
+
+        function resetClinicalDataState(obj)
+            obj.ClinicalDataPath = "";
+            obj.DailySummary = conduction.gui.controllers.CaseManager.createEmptyDailySummary();
+        end
+
         function notifyChange(obj)
             for i = 1:numel(obj.ChangeListeners)
                 try
@@ -458,6 +604,12 @@ classdef CaseManager < handle
     end
 
     methods (Access = private, Static)
+        function summary = createEmptyDailySummary()
+            summary = table('Size', [0 4], ...
+                'VariableTypes', {'datetime', 'double', 'double', 'double'}, ...
+                'VariableNames', {'Date', 'CaseCount', 'UniqueOperators', 'UniqueLabs'});
+        end
+
         function summary = applyDurationStats(summary, statsStruct, sourceLabel)
             optionKeys = {summary.options.key};
             statNames = {'median', 'p70', 'p90'};
