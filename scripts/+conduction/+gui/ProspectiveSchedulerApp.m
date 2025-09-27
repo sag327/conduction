@@ -1462,6 +1462,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateOptimizationOptionsSummary();
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
+            app.resetKPIBar();
         end
 
         function renderEmptySchedule(app, labNumbers)
@@ -1906,6 +1907,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
                 app.renderEmptySchedule(app.LabIds);
+                app.resetKPIBar();
                 return;
             end
 
@@ -1917,6 +1919,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
+            app.updateKPIBar(dailySchedule);
         end
 
         function scheduleOptions = buildSchedulingOptions(app)
@@ -1932,6 +1935,106 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'TurnoverTime', app.Opts.turnover, ...
                 'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
                 'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt));
+        end
+
+        function resetKPIBar(app)
+            if isempty(app.KPI1) || ~isvalid(app.KPI1)
+                return;
+            end
+
+            app.KPI1.Text = 'Cases: --';
+            app.KPI2.Text = 'Last-out: --';
+            app.KPI3.Text = 'Op idle: --';
+            app.KPI4.Text = 'Lab idle: --';
+            app.KPI5.Text = 'Flip ratio: --';
+        end
+
+        function updateKPIBar(app, dailySchedule)
+            if isempty(app.KPI1) || ~isvalid(app.KPI1)
+                return;
+            end
+
+            if nargin < 2 || isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
+                app.resetKPIBar();
+                return;
+            end
+
+            try
+                dailyMetrics = conduction.analytics.DailyAnalyzer.analyze(dailySchedule);
+            catch
+                dailyMetrics = struct();
+            end
+
+            try
+                operatorMetrics = conduction.analytics.OperatorAnalyzer.analyze(dailySchedule);
+            catch
+                operatorMetrics = struct();
+            end
+
+            caseCount = app.safeField(dailyMetrics, 'caseCount', numel(dailySchedule.cases()));
+            app.KPI1.Text = sprintf('Cases: %d', caseCount);
+
+            lastOut = app.safeField(dailyMetrics, 'lastCaseEnd', NaN);
+            app.KPI2.Text = sprintf('Last-out: %s', app.formatMinutesClock(lastOut));
+
+            totalOpIdle = NaN;
+            if isfield(operatorMetrics, 'departmentMetrics') && isfield(operatorMetrics.departmentMetrics, 'totalOperatorIdleMinutes')
+                totalOpIdle = operatorMetrics.departmentMetrics.totalOperatorIdleMinutes;
+            end
+            app.KPI3.Text = sprintf('Op idle: %s', app.formatMinutesAsHours(totalOpIdle));
+
+            labIdle = app.safeField(dailyMetrics, 'labIdleMinutes', NaN);
+            app.KPI4.Text = sprintf('Lab idle: %s', app.formatMinutesAsHours(labIdle));
+
+            flipRatio = NaN;
+            if isfield(operatorMetrics, 'departmentMetrics') && isfield(operatorMetrics.departmentMetrics, 'flipPerTurnoverRatio')
+                flipRatio = operatorMetrics.departmentMetrics.flipPerTurnoverRatio;
+            end
+            if isempty(flipRatio) || isnan(flipRatio)
+                app.KPI5.Text = 'Flip ratio: --';
+            else
+                app.KPI5.Text = sprintf('Flip ratio: %.0f%%%%', flipRatio * 100);
+            end
+        end
+
+        function value = safeField(~, s, fieldName, defaultValue)
+            if isstruct(s) && isfield(s, fieldName) && ~isempty(s.(fieldName))
+                value = s.(fieldName);
+            else
+                value = defaultValue;
+            end
+        end
+
+        function textValue = formatMinutesClock(~, minutesValue)
+            if isempty(minutesValue) || isnan(minutesValue)
+                textValue = '--';
+                return;
+            end
+
+            totalMinutes = max(0, minutesValue);
+            dayMinutes = 24 * 60;
+            dayOffset = floor(totalMinutes / dayMinutes);
+            minuteOfDay = mod(totalMinutes, dayMinutes);
+            hour = floor(minuteOfDay / 60);
+            minute = round(minuteOfDay - hour * 60);
+            if minute >= 60
+                minute = minute - 60;
+                hour = hour + 1;
+            end
+            suffix = '';
+            if dayOffset > 0
+                suffix = sprintf(' (+%d)', dayOffset);
+            end
+            textValue = sprintf('%02d:%02d%s', hour, minute, suffix);
+        end
+
+        function textValue = formatMinutesAsHours(~, minutesValue)
+            if isempty(minutesValue) || isnan(minutesValue)
+                textValue = '--';
+                return;
+            end
+            hours = minutesValue / 60;
+            textValue = sprintf('%.1fh', hours);
         end
 
         function refreshSpecificLabDropdown(app)
