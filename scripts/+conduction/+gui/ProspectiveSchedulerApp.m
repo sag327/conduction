@@ -10,7 +10,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         BottomBarLayout             matlab.ui.container.GridLayout
 
         DatePicker                  matlab.ui.control.DatePicker
-        LabDrop                     matlab.ui.control.DropDown
         RunBtn                      matlab.ui.control.Button
         OptsBtn                     matlab.ui.control.Button
         UndoBtn                     matlab.ui.control.Button
@@ -127,7 +126,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','fit','1x'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','1x'};
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -137,23 +136,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DatePicker.Value = app.TargetDate;
             end
 
-            app.LabDrop = uidropdown(app.TopBarLayout);
-            app.LabDrop.Layout.Column = 2;
-            app.LabDrop.Items = cellstr(string(app.LabIds));
-            app.LabDrop.Value = app.LabDrop.Items{1};
-
             app.RunBtn = uibutton(app.TopBarLayout, 'push');
             app.RunBtn.Text = 'Run';
-            app.RunBtn.Layout.Column = 3;
+            app.RunBtn.Layout.Column = 2;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
             app.OptsBtn = uibutton(app.TopBarLayout, 'push');
             app.OptsBtn.Text = 'Options';
-            app.OptsBtn.Layout.Column = 4;
+            app.OptsBtn.Layout.Column = 3;
             app.OptsBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 5;
+            app.TestToggle.Layout.Column = 4;
             app.TestToggle.Items = {'Testing Off','Testing On'};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -162,7 +156,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.UndoBtn = uibutton(app.TopBarLayout, 'push');
             app.UndoBtn.Text = 'Undo';
-            app.UndoBtn.Layout.Column = 6;
+            app.UndoBtn.Layout.Column = 5;
             app.UndoBtn.Enable = 'off';
 
             % Middle layout with tabs and schedule visualization
@@ -1457,7 +1451,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.LabIds = 1:max(1, app.Opts.labs);
-            app.updateLabDropdownItems();
 
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.OptimizationOutcome = struct();
@@ -1705,7 +1698,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.TestingAdmissionDefault = string(defaultStatusDropDown.Value);
 
                     app.LabIds = 1:max(1, numLabsValue);
-                    app.updateLabDropdownItems();
                     app.refreshSpecificLabDropdown();
 
                     app.updateOptimizationOptionsSummary();
@@ -1925,26 +1917,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
-        end
-
-        function updateLabDropdownItems(app)
-            if isempty(app.LabDrop) || ~isvalid(app.LabDrop)
-                return;
-            end
-
-            items = cellstr(string(app.LabIds));
-            if isempty(items)
-                items = {'1'};
-            end
-
-            previousValue = string(app.LabDrop.Value);
-            app.LabDrop.Items = items;
-
-            if any(strcmp(previousValue, items))
-                app.LabDrop.Value = char(previousValue);
-            else
-                app.LabDrop.Value = items{1};
-            end
         end
 
         function scheduleOptions = buildSchedulingOptions(app)
