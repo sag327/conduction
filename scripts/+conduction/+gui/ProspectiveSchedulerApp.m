@@ -5,11 +5,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     properties (Access = public)
         UIFigure                    matlab.ui.Figure
         MainGridLayout              matlab.ui.container.GridLayout
-        LeftPanel                   matlab.ui.container.Panel
-        RightPanel                  matlab.ui.container.Panel
-        CasesPanel                  matlab.ui.container.Panel
+        TopBarLayout                matlab.ui.container.GridLayout
+        MiddleLayout                matlab.ui.container.GridLayout
+        BottomBarLayout             matlab.ui.container.GridLayout
 
-        % Left Panel Components (Case Input)
+        DatePicker                  matlab.ui.control.DatePicker
+        LabDrop                     matlab.ui.control.DropDown
+        RunBtn                      matlab.ui.control.Button
+        OptsBtn                     matlab.ui.control.Button
+        UndoBtn                     matlab.ui.control.Button
+
+        TabGroup                    matlab.ui.container.TabGroup
+        TabAdd                      matlab.ui.container.Tab
+        TabList                     matlab.ui.container.Tab
+        TabPresets                  matlab.ui.container.Tab
+
+        % Add/Edit Tab Components
         DataLoadingLabel            matlab.ui.control.Label
         LoadDataButton              matlab.ui.control.Button
         DataStatusLabel             matlab.ui.control.Label
@@ -23,19 +34,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingInfoLabel            matlab.ui.control.Label
         OptimizationSectionLabel    matlab.ui.control.Label
         OptimizationOptionsSummaryLabel matlab.ui.control.Label
-        OptimizationOptionsButton   matlab.ui.control.Button
-        OptimizationRunButton       matlab.ui.control.Button
         OptimizationShowPlotButton  matlab.ui.control.Button
         OptimizationStatusLabel     matlab.ui.control.Label
 
-        % Case Details Section
         CaseDetailsLabel            matlab.ui.control.Label
         OperatorLabel               matlab.ui.control.Label
         OperatorDropDown            matlab.ui.control.DropDown
         ProcedureLabel              matlab.ui.control.Label
         ProcedureDropDown           matlab.ui.control.DropDown
-        
-        % Duration & Statistics Section
+
         DurationStatsLabel          matlab.ui.control.Label
         DurationButtonGroup         matlab.ui.container.ButtonGroup
         MedianRadioButton           matlab.ui.control.RadioButton
@@ -47,24 +54,30 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CustomRadioButton           matlab.ui.control.RadioButton
         CustomDurationSpinner       matlab.ui.control.Spinner
 
-        % Scheduling Constraints Section
         ConstraintsLabel            matlab.ui.control.Label
         SpecificLabLabel            matlab.ui.control.Label
         SpecificLabDropDown         matlab.ui.control.DropDown
         FirstCaseCheckBox           matlab.ui.control.CheckBox
         AdmissionStatusLabel        matlab.ui.control.Label
         AdmissionStatusDropDown     matlab.ui.control.DropDown
-        
         AddCaseButton               matlab.ui.control.Button
 
+        % List Tab Components
         CasesLabel                  matlab.ui.control.Label
         CasesTable                  matlab.ui.control.Table
         RemoveSelectedButton        matlab.ui.control.Button
         ClearAllButton              matlab.ui.control.Button
 
-        % Right Panel Components (Schedule Visualization)
-        ScheduleAxesMain            matlab.ui.control.UIAxes
-        ScheduleAxesOperators       matlab.ui.control.UIAxes
+        % Presets Tab Components
+        PresetsInfoLabel            matlab.ui.control.Label
+
+        % Visualization & KPIs
+        ScheduleAxes                matlab.ui.control.UIAxes
+        KPI1                        matlab.ui.control.Label
+        KPI2                        matlab.ui.control.Label
+        KPI3                        matlab.ui.control.Label
+        KPI4                        matlab.ui.control.Label
+        KPI5                        matlab.ui.control.Label
     end
 
     % App state properties
@@ -92,7 +105,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % Component initialization
     methods (Access = private)
 
-        function createComponents(app)
+        function setupUI(app)
 
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
@@ -100,27 +113,108 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Name = 'Prospective Scheduler';
             app.UIFigure.Resize = 'on';
 
-            % Create main layout with left (input) and right (visualization) panels
+            % Root layout: header, content, footer
             app.MainGridLayout = uigridlayout(app.UIFigure);
-            app.MainGridLayout.ColumnWidth = {500, '1x', 360};
-            app.MainGridLayout.RowHeight = {'1x'};
+            app.MainGridLayout.RowHeight = {'fit', '1x', 'fit'};
+            app.MainGridLayout.ColumnWidth = {'1x'};
+            app.MainGridLayout.RowSpacing = 10;
+            app.MainGridLayout.ColumnSpacing = 10;
+            app.MainGridLayout.Padding = [12 12 12 12];
 
-            app.LeftPanel = uipanel(app.MainGridLayout);
-            app.LeftPanel.Title = 'Case Input';
-            app.LeftPanel.Layout.Row = 1;
-            app.LeftPanel.Layout.Column = 1;
+            % Top bar controls
+            app.TopBarLayout = uigridlayout(app.MainGridLayout);
+            app.TopBarLayout.Layout.Row = 1;
+            app.TopBarLayout.Layout.Column = 1;
+            app.TopBarLayout.RowHeight = {'fit'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','1x'};
+            app.TopBarLayout.ColumnSpacing = 12;
+            app.TopBarLayout.Padding = [0 0 0 0];
 
-            leftGrid = app.configureLeftPanelLayout();
-            app.buildDataSection(leftGrid);
-            app.buildTestingSection(leftGrid);
-            app.buildCaseDetailsSection(leftGrid);
-            app.buildDurationSection(leftGrid);
-            app.buildConstraintSection(leftGrid);
-            app.buildOptimizationSection(leftGrid);
+            app.DatePicker = uidatepicker(app.TopBarLayout);
+            app.DatePicker.Layout.Column = 1;
+            if ~isempty(app.TargetDate)
+                app.DatePicker.Value = app.TargetDate;
+            end
 
-            app.configureRightPanel();
-            casesGrid = app.configureCasePanelLayout();
-            app.buildCaseManagementSection(casesGrid);
+            app.LabDrop = uidropdown(app.TopBarLayout);
+            app.LabDrop.Layout.Column = 2;
+            app.LabDrop.Items = cellstr(string(app.LabIds));
+            app.LabDrop.Value = app.LabDrop.Items{1};
+
+            app.RunBtn = uibutton(app.TopBarLayout, 'push');
+            app.RunBtn.Text = 'Run';
+            app.RunBtn.Layout.Column = 3;
+            app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
+
+            app.OptsBtn = uibutton(app.TopBarLayout, 'push');
+            app.OptsBtn.Text = 'Options';
+            app.OptsBtn.Layout.Column = 4;
+            app.OptsBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
+
+            app.UndoBtn = uibutton(app.TopBarLayout, 'push');
+            app.UndoBtn.Text = 'Undo';
+            app.UndoBtn.Layout.Column = 5;
+            app.UndoBtn.Enable = 'off';
+
+            % Middle layout with tabs and schedule visualization
+            app.MiddleLayout = uigridlayout(app.MainGridLayout);
+            app.MiddleLayout.Layout.Row = 2;
+            app.MiddleLayout.Layout.Column = 1;
+            app.MiddleLayout.RowHeight = {'1x'};
+            app.MiddleLayout.ColumnWidth = {320, '1x'};
+            app.MiddleLayout.ColumnSpacing = 12;
+            app.MiddleLayout.Padding = [0 0 0 0];
+
+            app.TabGroup = uitabgroup(app.MiddleLayout);
+            app.TabGroup.Layout.Row = 1;
+            app.TabGroup.Layout.Column = 1;
+
+            app.TabAdd = uitab(app.TabGroup, 'Title', 'Add/Edit');
+            app.TabList = uitab(app.TabGroup, 'Title', 'List');
+            app.TabPresets = uitab(app.TabGroup, 'Title', 'Presets');
+
+            addGrid = app.configureAddTabLayout();
+            app.buildDataSection(addGrid);
+            app.buildTestingSection(addGrid);
+            app.buildCaseDetailsSection(addGrid);
+            app.buildDurationSection(addGrid);
+            app.buildConstraintSection(addGrid);
+            app.buildOptimizationSection(addGrid);
+
+            listGrid = app.configureListTabLayout();
+            app.buildCaseManagementSection(listGrid);
+
+            presetsGrid = app.configurePresetsTabLayout();
+            app.buildPresetsTab(presetsGrid);
+
+            app.ScheduleAxes = uiaxes(app.MiddleLayout);
+            app.ScheduleAxes.Layout.Row = 1;
+            app.ScheduleAxes.Layout.Column = 2;
+            app.ScheduleAxes.Title.String = 'Schedule';
+            app.ScheduleAxes.Title.FontWeight = 'bold';
+            app.ScheduleAxes.Title.FontSize = 14;
+            app.ScheduleAxes.Box = 'on';
+            app.ScheduleAxes.Color = 'white';
+
+            % Bottom KPI bar
+            app.BottomBarLayout = uigridlayout(app.MainGridLayout);
+            app.BottomBarLayout.Layout.Row = 3;
+            app.BottomBarLayout.Layout.Column = 1;
+            app.BottomBarLayout.RowHeight = {'fit'};
+            app.BottomBarLayout.ColumnWidth = {'1x','1x','1x','1x','1x'};
+            app.BottomBarLayout.ColumnSpacing = 12;
+            app.BottomBarLayout.Padding = [0 0 0 0];
+
+            app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --');
+            app.KPI1.Layout.Column = 1;
+            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Last-out: --');
+            app.KPI2.Layout.Column = 2;
+            app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --');
+            app.KPI3.Layout.Column = 3;
+            app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --');
+            app.KPI4.Layout.Column = 4;
+            app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --');
+            app.KPI5.Layout.Column = 5;
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.applyDurationThemeColors();
@@ -129,13 +223,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Visible = 'on';
         end
 
-        function leftGrid = configureLeftPanelLayout(app)
-            leftGrid = uigridlayout(app.LeftPanel);
-            leftGrid.ColumnWidth = {100, 140, 80, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 22, 28, 28, 28, 28, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
-            leftGrid.Padding = [10 10 10 10];
-            leftGrid.RowSpacing = 3;
-            leftGrid.ColumnSpacing = 6;
+        function addGrid = configureAddTabLayout(app)
+            addGrid = uigridlayout(app.TabAdd);
+            addGrid.ColumnWidth = {100, 140, 80, '1x'};
+            addGrid.RowHeight = {22, 30, 22, 22, 28, 28, 28, 28, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
+            addGrid.Padding = [10 10 10 10];
+            addGrid.RowSpacing = 3;
+            addGrid.ColumnSpacing = 6;
         end
 
         function buildDataSection(app, leftGrid)
@@ -431,7 +525,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AddCaseButton.Layout.Row = 21;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
-            app.refreshSpecificLabDropdown();
         end
 
         function buildOptimizationSection(app, leftGrid)
@@ -447,22 +540,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationOptionsSummaryLabel.Layout.Row = 23;
             app.OptimizationOptionsSummaryLabel.Layout.Column = [1 3];
 
-            app.OptimizationOptionsButton = uibutton(leftGrid, 'push');
-            app.OptimizationOptionsButton.Text = 'Options...';
-            app.OptimizationOptionsButton.Layout.Row = 23;
-            app.OptimizationOptionsButton.Layout.Column = 4;
-            app.OptimizationOptionsButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
-
-            app.OptimizationRunButton = uibutton(leftGrid, 'push');
-            app.OptimizationRunButton.Text = 'Optimize Schedule';
-            app.OptimizationRunButton.Layout.Row = 24;
-            app.OptimizationRunButton.Layout.Column = [1 2];
-            app.OptimizationRunButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
-
             app.OptimizationShowPlotButton = uibutton(leftGrid, 'push');
             app.OptimizationShowPlotButton.Text = 'Open Schedule Plot';
-            app.OptimizationShowPlotButton.Layout.Row = 24;
-            app.OptimizationShowPlotButton.Layout.Column = [3 4];
+            app.OptimizationShowPlotButton.Layout.Row = 23;
+            app.OptimizationShowPlotButton.Layout.Column = 4;
             app.OptimizationShowPlotButton.Enable = 'off';
             app.OptimizationShowPlotButton.ButtonPushedFcn = createCallbackFcn(app, @OptimizationShowPlotButtonPushed, true);
 
@@ -474,18 +555,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationStatusLabel.WordWrap = 'on';
         end
 
-        function casesGrid = configureCasePanelLayout(app)
-            app.CasesPanel = uipanel(app.MainGridLayout);
-            app.CasesPanel.Title = 'Scenario Cases';
-            app.CasesPanel.Layout.Row = 1;
-            app.CasesPanel.Layout.Column = 3;
-
-            casesGrid = uigridlayout(app.CasesPanel);
+        function casesGrid = configureListTabLayout(app)
+            casesGrid = uigridlayout(app.TabList);
             casesGrid.ColumnWidth = {'1x', '1x'};
             casesGrid.RowHeight = {24, '1x', 34};
             casesGrid.Padding = [10 10 10 10];
             casesGrid.RowSpacing = 6;
             casesGrid.ColumnSpacing = 10;
+        end
+
+        function presetsGrid = configurePresetsTabLayout(app)
+            presetsGrid = uigridlayout(app.TabPresets);
+            presetsGrid.ColumnWidth = {'1x'};
+            presetsGrid.RowHeight = {'fit', '1x'};
+            presetsGrid.Padding = [10 10 10 10];
+            presetsGrid.RowSpacing = 6;
         end
 
         function buildCaseManagementSection(app, casesGrid)
@@ -518,33 +602,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
         end
 
-        function configureRightPanel(app)
-            app.RightPanel = uipanel(app.MainGridLayout);
-            app.RightPanel.Title = 'Schedule View';
-            app.RightPanel.BackgroundColor = [1 1 1];
-            app.RightPanel.Layout.Row = 1;
-            app.RightPanel.Layout.Column = 2;
-
-            rightGrid = uigridlayout(app.RightPanel);
-            rightGrid.ColumnWidth = {'1x'};
-            rightGrid.RowHeight = {'2x', '1x'};
-            rightGrid.Padding = [5 5 5 5];
-            rightGrid.BackgroundColor = [1 1 1];
-
-            app.ScheduleAxesMain = uiaxes(rightGrid);
-            app.ScheduleAxesMain.Layout.Row = 1;
-            app.ScheduleAxesMain.Layout.Column = 1;
-            app.ScheduleAxesMain.Title.String = 'EP Lab Schedule';
-            app.ScheduleAxesMain.Title.FontWeight = 'bold';
-            app.ScheduleAxesMain.Title.FontSize = 14;
-
-            app.ScheduleAxesOperators = uiaxes(rightGrid);
-            app.ScheduleAxesOperators.Layout.Row = 2;
-            app.ScheduleAxesOperators.Layout.Column = 1;
-            app.ScheduleAxesOperators.Title.String = 'Operator Utilization Timeline';
-            app.ScheduleAxesOperators.Title.FontWeight = 'bold';
-            app.ScheduleAxesOperators.Title.FontSize = 12;
+        function buildPresetsTab(app, presetsGrid)
+            app.PresetsInfoLabel = uilabel(presetsGrid);
+            app.PresetsInfoLabel.Text = 'Preset templates will appear here.';
+            app.PresetsInfoLabel.Layout.Row = 1;
+            app.PresetsInfoLabel.Layout.Column = 1;
+            app.PresetsInfoLabel.WordWrap = 'on';
+            app.PresetsInfoLabel.FontColor = [0.4 0.4 0.4];
         end
+
     end
 
     % App creation and deletion
@@ -562,7 +628,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CurrentTestingSummary = struct();
 
             % Create UIFigure and components
-            createComponents(app);
+            app.setupUI();
+            app.refreshSpecificLabDropdown();
 
             % Initialize case manager
             if isempty(historicalCollection)
@@ -1362,7 +1429,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             endHour = 20;
             
             % Set up main schedule axes
-            ax = app.ScheduleAxesMain;
+            ax = app.ScheduleAxes;
             cla(ax);
             hold(ax, 'on');
             
@@ -1393,28 +1460,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ylabel(ax, 'Time of Day', 'Color', 'black');
             
             hold(ax, 'off');
-            
-            % Set up operator timeline axes (empty)
-            axOp = app.ScheduleAxesOperators;
-            cla(axOp);
-            set(axOp, 'Color', 'white');
-            
-            % Empty operator display
-            xlim(axOp, [startHour, endHour + 1]);
-            ylim(axOp, [0.5, 1.5]);
-            
-            text(axOp, mean(xlim(axOp)), 1, 'No operators scheduled', ...
-                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                'FontSize', 12, 'Color', [0.6, 0.6, 0.6]);
-            
-            app.formatTimeAxisLabels(axOp, startHour, endHour);
-            xlabel(axOp, 'Time of Day', 'Color', 'black');
-            
-            % Set operator axes properties to match visualizeDailySchedule
-            set(axOp, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
-            axOp.YTick = [];
-            axOp.XAxis.Color = 'black';
-            axOp.YAxis.Color = 'black';
         end
 
         function addHourGridToAxes(app, ax, startHour, endHour, numLabs)
@@ -1752,25 +1797,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function updateOptimizationActionAvailability(app)
-            if isempty(app.OptimizationRunButton) || ~isvalid(app.OptimizationRunButton)
+            if isempty(app.RunBtn) || ~isvalid(app.RunBtn)
                 return;
             end
 
             hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
 
             if app.IsOptimizationRunning
-                app.OptimizationRunButton.Enable = 'off';
+                app.RunBtn.Enable = 'off';
             elseif hasCases
-                app.OptimizationRunButton.Enable = 'on';
+                app.RunBtn.Enable = 'on';
             else
-                app.OptimizationRunButton.Enable = 'off';
+                app.RunBtn.Enable = 'off';
             end
 
-            if ~isempty(app.OptimizationOptionsButton) && isvalid(app.OptimizationOptionsButton)
+            if ~isempty(app.OptsBtn) && isvalid(app.OptsBtn)
                 if app.IsOptimizationRunning
-                    app.OptimizationOptionsButton.Enable = 'off';
+                    app.OptsBtn.Enable = 'off';
                 else
-                    app.OptimizationOptionsButton.Enable = 'on';
+                    app.OptsBtn.Enable = 'on';
                 end
             end
 
@@ -1790,9 +1835,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function showOptimizationPendingPlaceholder(app)
-            ax = app.ScheduleAxesMain;
+            ax = app.ScheduleAxes;
             cla(ax);
-            set(ax, 'Visible', 'off');
+            set(ax, 'Visible', 'on');
             axis(ax, 'off');
             if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
                 text(ax, 0.5, 0.5, 'No cases queued.', 'Units', 'normalized', ...
@@ -1803,13 +1848,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.4 0.4 0.4]);
             end
 
-            axOp = app.ScheduleAxesOperators;
-            cla(axOp);
-            set(axOp, 'Visible', 'off');
-            axis(axOp, 'off');
-            text(axOp, 0.5, 0.5, 'Operator summary available after optimization.', ...
-                'Units', 'normalized', 'HorizontalAlignment', 'center', ...
-                'FontSize', 11, 'Color', [0.5 0.5 0.5]);
         end
 
         function renderOptimizedSchedule(app, dailySchedule, metadata)
@@ -1825,8 +1863,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             titleText = sprintf('Prospective Schedule - %s', datestr(app.TargetDate, 'mmm dd, yyyy'));
             conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', titleText, ...
-                'ScheduleAxes', app.ScheduleAxesMain, ...
-                'OperatorAxes', app.ScheduleAxesOperators, ...
+                'ScheduleAxes', app.ScheduleAxes, ...
                 'ShowLabels', true);
 
             app.updateOptimizationStatus();

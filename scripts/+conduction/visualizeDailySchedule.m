@@ -50,9 +50,11 @@ function visualizeDailySchedule(scheduleInput, varargin)
     [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts);
 
     cla(axSchedule);
-    cla(axOperators);
     set(axSchedule, 'Visible', 'on', 'Color', 'white');
-    set(axOperators, 'Visible', 'on', 'Color', 'white');
+    if ~isempty(axOperators)
+        cla(axOperators);
+        set(axOperators, 'Visible', 'on', 'Color', 'white');
+    end
 
     hold(axSchedule, 'on');
 
@@ -65,11 +67,15 @@ function visualizeDailySchedule(scheduleInput, varargin)
     annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour);
     hold(axSchedule, 'off');
 
-    hold(axOperators, 'on');
+    if ~isempty(axOperators)
+        hold(axOperators, 'on');
+    end
 
     operatorData = calculateOperatorTimelines(caseTimelines, uniqueOperators);
-    plotOperatorTimeline(axOperators, operatorData, operatorColors, scheduleStartHour, scheduleEndHour, opts.FontSize);
-    hold(axOperators, 'off');
+    if ~isempty(axOperators)
+        plotOperatorTimeline(axOperators, operatorData, operatorColors, scheduleStartHour, scheduleEndHour, opts.FontSize);
+        hold(axOperators, 'off');
+    end
 
     if opts.Debug
         logDebugSummary(caseTimelines, metrics, operatorData);
