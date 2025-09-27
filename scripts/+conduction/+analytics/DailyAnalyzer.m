@@ -13,9 +13,21 @@ classdef DailyAnalyzer
             metrics = struct();
             metrics.date = dailySchedule.Date;
 
+            metadata = dailySchedule.metrics();
+
+            numLabs = numel(labAssignments);
+            labStartTimes = NaN(numLabs, 1);
+            if isstruct(metadata) && isfield(metadata, 'labStartMinutes')
+                rawStarts = metadata.labStartMinutes;
+                labStartTimes = double(rawStarts(:));
+                if numel(labStartTimes) ~= numLabs
+                    labStartTimes = repmat(labStartTimes(1), numLabs, 1);
+                end
+            end
+
             if isempty(caseStructs)
                 metrics.caseCount = 0;
-                metrics.labUtilization = zeros(numel(labAssignments),1);
+                metrics.labUtilization = zeros(numLabs,1);
                 metrics.averageLabOccupancyRatio = 0;
                 metrics.labIdleMinutes = 0;
                 metrics.makespanMinutes = 0;
@@ -27,7 +39,6 @@ classdef DailyAnalyzer
             metrics.caseCount = numel(caseStructs);
 
             % Lab utilization
-            numLabs = numel(labAssignments);
             labUtil = zeros(numLabs,1);
             labStart = zeros(numLabs,1);
             labEnd = zeros(numLabs,1);
@@ -40,7 +51,8 @@ classdef DailyAnalyzer
                 end
                 procTimes = [cases.procTime];
                 labUtil(labIdx) = sum(procTimes);
-                labStart(labIdx) = min([cases.startTime]);
+                caseStarts = arrayfun(@conduction.analytics.DailyAnalyzer.caseStartForLab, cases);
+                labStart(labIdx) = min(caseStarts);
                 labEndTimes = arrayfun(@conduction.analytics.DailyAnalyzer.caseEnd, cases);
                 labEnd(labIdx) = max(labEndTimes);
             end
@@ -72,23 +84,51 @@ classdef DailyAnalyzer
             labIdleTotal = 0;
             for labIdx = 1:numel(labAssignments)
                 labCases = labAssignments{labIdx};
-                if numel(labCases) <= 1
+                if isempty(labCases)
                     continue;
                 end
 
-                [~, labOrder] = sort([labCases.procStartTime]);
-                labCases = labCases(labOrder);
+                % Order cases chronologically
+                caseStarts = arrayfun(@conduction.analytics.DailyAnalyzer.caseStartForLab, labCases);
+                [~, order] = sort(caseStarts);
+                labCases = labCases(order);
 
-                for caseIdx = 2:numel(labCases)
-                    prevEnd = conduction.analytics.DailyAnalyzer.caseEnd(labCases(caseIdx - 1));
-                    nextStart = conduction.analytics.DailyAnalyzer.caseStartForLab(labCases(caseIdx));
-                    if isnan(prevEnd) || isnan(nextStart)
-                        continue;
+                % Determine baseline start for this lab
+                baselineStart = NaN;
+                if labIdx <= numel(labStartTimes)
+                    baselineStart = labStartTimes(labIdx);
+                end
+                if isnan(baselineStart)
+                    baselineStart = caseStarts(order(1));
+                end
+
+                prevEnd = baselineStart;
+
+                for caseIdx = 1:numel(labCases)
+                    thisCase = labCases(caseIdx);
+                    caseStart = conduction.analytics.DailyAnalyzer.caseStartForLab(thisCase);
+                    if isnan(prevEnd)
+                        prevEnd = caseStart;
+                    end
+                    if ~isnan(prevEnd) && ~isnan(caseStart)
+                        gap = caseStart - prevEnd;
+                        if gap > 0
+                            labIdleTotal = labIdleTotal + gap;
+                        end
                     end
 
-                    gap = nextStart - prevEnd;
-                    if gap > 0
-                        labIdleTotal = labIdleTotal + gap;
+                    procEnd = conduction.analytics.DailyAnalyzer.procEnd(thisCase);
+                    postTime = conduction.analytics.DailyAnalyzer.fieldOr(thisCase, 'postTime', 0);
+                    turnoverTime = conduction.analytics.DailyAnalyzer.fieldOr(thisCase, 'turnoverTime', 0);
+                    caseFinish = procEnd + postTime;
+
+                    if caseIdx < numel(labCases)
+                        if turnoverTime > 0
+                            labIdleTotal = labIdleTotal + turnoverTime;
+                        end
+                        prevEnd = caseFinish + turnoverTime;
+                    else
+                        prevEnd = caseFinish;
                     end
                 end
             end
