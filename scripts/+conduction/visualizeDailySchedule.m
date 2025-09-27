@@ -47,11 +47,13 @@ function visualizeDailySchedule(scheduleInput, varargin)
     metrics = dailySchedule.metrics();
     labLabels = resolveLabLabels(dailySchedule, numel(labAssignments));
 
-    fig = figure('Name', 'Daily Schedule Visualization', ...
-        'Position', [100, 100, opts.FigureSize(1), opts.FigureSize(2)], ...
-        'Color', 'white');
+    [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts);
 
-    axSchedule = subplot(3, 1, [1 2], 'Parent', fig, 'Color', 'white');
+    cla(axSchedule);
+    cla(axOperators);
+    set(axSchedule, 'Visible', 'on', 'Color', 'white');
+    set(axOperators, 'Visible', 'on', 'Color', 'white');
+
     hold(axSchedule, 'on');
 
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
@@ -63,7 +65,6 @@ function visualizeDailySchedule(scheduleInput, varargin)
     annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour);
     hold(axSchedule, 'off');
 
-    axOperators = subplot(3, 1, 3, 'Parent', fig, 'Color', 'white');
     hold(axOperators, 'on');
 
     operatorData = calculateOperatorTimelines(caseTimelines, uniqueOperators);
@@ -73,6 +74,7 @@ function visualizeDailySchedule(scheduleInput, varargin)
     if opts.Debug
         logDebugSummary(caseTimelines, metrics, operatorData);
     end
+    drawnow limitrate;
 end
 
 function [dailySchedule, remaining] = resolveDailySchedule(scheduleInput, varargin)
@@ -106,8 +108,47 @@ function opts = parseOptions(varargin)
     addParameter(p, 'FigureSize', [1200, 800], @(x) isnumeric(x) && numel(x) == 2);
     addParameter(p, 'ShowTurnover', false, @islogical);
     addParameter(p, 'Debug', false, @islogical);
+    addParameter(p, 'ScheduleAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
+    addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     parse(p, varargin{:});
     opts = p.Results;
+end
+ 
+function [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts)
+    figHandle = [];
+    axSchedule = [];
+    axOperators = [];
+
+    scheduleProvided = ~isempty(opts.ScheduleAxes);
+    operatorProvided = ~isempty(opts.OperatorAxes);
+
+    if scheduleProvided && ~isvalid(opts.ScheduleAxes)
+        error('visualizeDailySchedule:InvalidAxesHandle', ...
+            'The provided ScheduleAxes handle is no longer valid.');
+    end
+    if operatorProvided && ~isvalid(opts.OperatorAxes)
+        error('visualizeDailySchedule:InvalidAxesHandle', ...
+            'The provided OperatorAxes handle is no longer valid.');
+    end
+
+    if xor(scheduleProvided, operatorProvided)
+        error('visualizeDailySchedule:AxesPairRequired', ...
+            'Provide both ScheduleAxes and OperatorAxes when embedding the visualization.');
+    end
+
+    if scheduleProvided && operatorProvided
+        axSchedule = opts.ScheduleAxes;
+        axOperators = opts.OperatorAxes;
+        figHandle = ancestor(axSchedule, 'figure');
+        return;
+    end
+
+    figHandle = figure('Name', 'Daily Schedule Visualization', ...
+        'Position', [100, 100, opts.FigureSize(1), opts.FigureSize(2)], ...
+        'Color', 'white');
+
+    axSchedule = subplot(3, 1, [1 2], 'Parent', figHandle, 'Color', 'white');
+    axOperators = subplot(3, 1, 3, 'Parent', figHandle, 'Color', 'white');
 end
 
 function caseTimelines = buildCaseTimelines(dailySchedule, includeTurnover)
