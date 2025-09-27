@@ -50,10 +50,10 @@ function visualizeDailySchedule(scheduleInput, varargin)
     [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts);
 
     cla(axSchedule);
-    set(axSchedule, 'Visible', 'on', 'Color', 'white');
+    set(axSchedule, 'Visible', 'on', 'Color', [0 0 0]);
     if ~isempty(axOperators)
         cla(axOperators);
-        set(axOperators, 'Visible', 'on', 'Color', 'white');
+        set(axOperators, 'Visible', 'on', 'Color', [0 0 0]);
     end
 
     hold(axSchedule, 'on');
@@ -61,10 +61,12 @@ function visualizeDailySchedule(scheduleInput, varargin)
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
 
     scheduleTitle = composeTitle(opts.Title, dailySchedule.Date, caseTimelines);
-    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold', 'Color', 'black');
-    ylabel(axSchedule, 'Time of Day', 'Color', 'black');
+    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');
+    ylabel(axSchedule, 'Time of Day');
 
-    annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour);
+    labelColorSchedule = applyAxisTextStyle(axSchedule);
+
+    annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour, labelColorSchedule);
     hold(axSchedule, 'off');
 
     if ~isempty(axOperators)
@@ -137,24 +139,29 @@ function [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts)
             'The provided OperatorAxes handle is no longer valid.');
     end
 
-    if xor(scheduleProvided, operatorProvided)
+    if operatorProvided && ~scheduleProvided
         error('visualizeDailySchedule:AxesPairRequired', ...
-            'Provide both ScheduleAxes and OperatorAxes when embedding the visualization.');
+            'Provide ScheduleAxes when specifying OperatorAxes.');
     end
 
-    if scheduleProvided && operatorProvided
+    if scheduleProvided
         axSchedule = opts.ScheduleAxes;
-        axOperators = opts.OperatorAxes;
+        if operatorProvided
+            axOperators = opts.OperatorAxes;
+        else
+            axOperators = [];
+        end
+
         figHandle = ancestor(axSchedule, 'figure');
         return;
     end
 
     figHandle = figure('Name', 'Daily Schedule Visualization', ...
         'Position', [100, 100, opts.FigureSize(1), opts.FigureSize(2)], ...
-        'Color', 'white');
+        'Color', [0 0 0]);
 
-    axSchedule = subplot(3, 1, [1 2], 'Parent', figHandle, 'Color', 'white');
-    axOperators = subplot(3, 1, 3, 'Parent', figHandle, 'Color', 'white');
+    axSchedule = subplot(3, 1, [1 2], 'Parent', figHandle, 'Color', [0 0 0]);
+    axOperators = subplot(3, 1, 3, 'Parent', figHandle, 'Color', [0 0 0]);
 end
 
 function caseTimelines = buildCaseTimelines(dailySchedule, includeTurnover)
@@ -276,7 +283,8 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     addHourGrid(ax, startHour, endHour);
 
     grayColor = [0.7, 0.7, 0.7];
-    turnoverColor = [0.9, 0.9, 0.5];
+    turnoverColor = [0.6, 0.6, 0.2];
+    edgeColor = [0.2, 0.2, 0.2];
 
     for idx = 1:numel(caseTimelines)
         entry = caseTimelines(idx);
@@ -293,7 +301,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
                 rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
             end
         end
 
@@ -309,14 +317,14 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 opColor = [0.5, 0.5, 0.5];
             end
             rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
-                'FaceColor', opColor, 'EdgeColor', 'black', 'LineWidth', 1);
+                'FaceColor', opColor, 'EdgeColor', edgeColor, 'LineWidth', 1);
         end
 
         if ~isnan(procEndHour) && ~isnan(postEndHour)
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
                 rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
             end
         end
 
@@ -324,7 +332,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
                 rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
-                    'FaceColor', turnoverColor, 'EdgeColor', 'black', 'LineWidth', 0.5);
+                    'FaceColor', turnoverColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
             end
         end
 
@@ -342,11 +350,13 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
     set(ax, 'XTick', 1:numLabs, 'XTickLabel', labLabels);
     formatYAxisTimeTicks(ax, startHour, endHour);
-    ax.XAxis.Color = 'black';
-    ax.YAxis.Color = 'black';
+    applyAxisTextStyle(ax);
 end
 
-function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
+function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour, labelColor)
+    if nargin < 6 || isempty(labelColor)
+        labelColor = determineAxisLabelColor(ax);
+    end
     numCases = numel(caseTimelines);
     numLabs = max([caseTimelines.labIndex]);
     operatorNames = unique(string({caseTimelines.operatorName}));
@@ -387,10 +397,11 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
 
     xLimits = xlim(ax);
     yLimits = ylim(ax);
+    summaryBg = chooseSummaryBackground(labelColor);
     text(ax, xLimits(2) - 0.1, max(yLimits) - 0.2, summaryText, ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
-        'FontSize', 10, 'Color', [0.4, 0.4, 0.4], ...
-        'BackgroundColor', [1, 1, 1]);
+        'FontSize', 10, 'Color', labelColor, ...
+        'BackgroundColor', summaryBg, 'Margin', 4); 
 
     sixPMHour = 18;
     if sixPMHour >= startHour && sixPMHour <= endHour
@@ -399,6 +410,94 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour)
         text(ax, xLimits(2) - 0.1, sixPMHour + 0.1, '6 PM', ...
             'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
             'FontSize', 10, 'FontWeight', 'bold', 'Color', 'red');
+    end
+end
+
+function summaryBg = chooseSummaryBackground(labelColor)
+    if isempty(labelColor)
+        summaryBg = [0 0 0];
+        return;
+    end
+    inverted = 1 - labelColor;
+    summaryBg = labelColor * 0.1 + inverted * 0.9;
+end
+
+function labelColor = applyAxisTextStyle(ax)
+    labelColor = determineAxisLabelColor(ax);
+    if isempty(labelColor)
+        labelColor = [0 0 0];
+    end
+    gridColor = labelColor * 0.6 + (1 - labelColor) * 0.4;
+    set(ax, 'XColor', labelColor, 'YColor', labelColor);
+    if isprop(ax, 'GridColor')
+        set(ax, 'GridColor', gridColor);
+    end
+    if ~isempty(ax.Title) && isprop(ax.Title, 'Color')
+        ax.Title.Color = labelColor;
+    end
+    if ~isempty(ax.XLabel) && isprop(ax.XLabel, 'Color')
+        ax.XLabel.Color = labelColor;
+    end
+    if ~isempty(ax.YLabel) && isprop(ax.YLabel, 'Color')
+        ax.YLabel.Color = labelColor;
+    end
+end
+
+function labelColor = determineAxisLabelColor(ax)
+    bgColor = get(ax, 'Color');
+    rgb = normalizeColorSpec(bgColor);
+    luminance = sum(rgb .* [0.299, 0.587, 0.114]);
+    if luminance < 0.5
+        labelColor = [1 1 1];
+    else
+        labelColor = [0.1 0.1 0.1];
+    end
+end
+
+function rgb = normalizeColorSpec(colorValue)
+    if isnumeric(colorValue)
+        rgb = double(colorValue(:)');
+        if any(rgb > 1)
+            rgb = rgb / 255;
+        end
+        rgb = max(min(rgb, 1), 0);
+        if numel(rgb) >= 3
+            rgb = rgb(1:3);
+        else
+            rgb = [rgb, zeros(1, 3 - numel(rgb))];
+        end
+        return;
+    end
+
+    if isstring(colorValue)
+        colorValue = char(colorValue);
+    end
+
+    if ischar(colorValue)
+        switch lower(strtrim(colorValue))
+            case {'white', 'w'}
+                rgb = [1 1 1];
+            case {'black', 'k'}
+                rgb = [0 0 0];
+            case {'red', 'r'}
+                rgb = [1 0 0];
+            case {'green', 'g'}
+                rgb = [0 1 0];
+            case {'blue', 'b'}
+                rgb = [0 0 1];
+            case {'cyan', 'c'}
+                rgb = [0 1 1];
+            case {'magenta', 'm'}
+                rgb = [1 0 1];
+            case {'yellow', 'y'}
+                rgb = [1 1 0];
+            case {'none', 'transparent'}
+                rgb = [0 0 0];
+            otherwise
+                rgb = [0 0 0];
+        end
+    else
+        rgb = [0 0 0];
     end
 end
 
@@ -447,8 +546,9 @@ end
 function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHour, fontSize)
     numOperators = numel(operatorData);
     if numOperators == 0
-        xlabel(ax, 'Time of Day', 'Color', 'black');
-        title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black');
+        xlabel(ax, 'Time of Day');
+        title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold');
+        applyAxisTextStyle(ax);
         return;
     end
 
@@ -470,7 +570,7 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
                 continue;
             end
             rectangle('Position', [startMin/60, yPos - barHeight/2, (endMin-startMin)/60, barHeight], ...
-                'FaceColor', opColor, 'EdgeColor', 'black', 'LineWidth', 1, 'Parent', ax);
+                'FaceColor', opColor, 'EdgeColor', [0.2, 0.2, 0.2], 'LineWidth', 1, 'Parent', ax);
         end
 
         for row = 1:size(opInfo.idlePeriods, 1)
@@ -481,20 +581,20 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
             end
             durationHours = (endMin - startMin) / 60;
             rectangle('Position', [startMin/60, yPos - barHeight/2, durationHours, barHeight], ...
-                'FaceColor', [0.95, 0.95, 0.95], 'EdgeColor', [0.7, 0.7, 0.7], ...
+                'FaceColor', [0.2, 0.2, 0.2], 'EdgeColor', [0.5, 0.5, 0.5], ...
                 'LineStyle', '--', 'Parent', ax);
             if durationHours > 0.25
                 text(ax, (startMin + endMin) / 120, yPos, sprintf('%.1fh', durationHours), ...
                     'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                    'FontSize', fontSize-1, 'Color', [0.4, 0.4, 0.4]);
+                    'FontSize', fontSize-1, 'Color', [0.85, 0.85, 0.85]);
             end
         end
 
         if opInfo.totalIdle > 3
             text(ax, opInfo.lastEnd/60 + 0.2, yPos, sprintf('Total Idle: %.1fh', opInfo.totalIdle/60), ...
                 'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle', ...
-                'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [0.6, 0.3, 0.3], ...
-                'BackgroundColor', [1, 1, 0.8]);
+                'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [1, 0.6, 0.6], ...
+                'BackgroundColor', [0.2, 0.2, 0.2]);
         end
     end
 
@@ -506,10 +606,11 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
     set(ax, 'YTick', 1:numOperators, 'YTickLabel', labels);
 
     formatXAxisTimeTicks(ax, startHour, endHour);
-    xlabel(ax, 'Time of Day', 'Color', 'black');
-    title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black');
+    xlabel(ax, 'Time of Day');
+    title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold');
     grid(ax, 'on');
-    set(ax, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
+    set(ax, 'GridAlpha', 0.3, 'Box', 'on', 'LineWidth', 1);
+    applyAxisTextStyle(ax);
 
     sixPMHour = 18;
     if sixPMHour >= startHour && sixPMHour <= endHour
@@ -520,8 +621,9 @@ end
 function addHourGrid(ax, startHour, endHour)
     hourTicks = floor(startHour):ceil(endHour);
     xLimits = xlim(ax);
+    gridColor = [0.3, 0.3, 0.3];
     for h = hourTicks
-        line(ax, xLimits, [h, h], 'Color', [0.85, 0.85, 0.85], 'LineStyle', '-', 'LineWidth', 0.5, 'Parent', ax);
+        line(ax, xLimits, [h, h], 'Color', gridColor, 'LineStyle', '-', 'LineWidth', 0.5, 'Parent', ax);
     end
 end
 

@@ -93,8 +93,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsSyncingTestingToggle logical = false
         TestingAdmissionDefault string = "outpatient"
         LabIds double = 1:6
-        OptimizationOptions conduction.scheduling.SchedulingOptions
-        OptimizationDefaults struct = struct()
+        Opts struct = struct()
         OptimizedSchedule conduction.DailySchedule
         OptimizationOutcome struct = struct()
         IsOptimizationDirty logical = true
@@ -194,7 +193,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Title.FontWeight = 'bold';
             app.ScheduleAxes.Title.FontSize = 14;
             app.ScheduleAxes.Box = 'on';
-            app.ScheduleAxes.Color = 'white';
+            app.ScheduleAxes.Color = [0 0 0];
 
             % Bottom KPI bar
             app.BottomBarLayout = uigridlayout(app.MainGridLayout);
@@ -535,7 +534,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationSectionLabel.Layout.Column = [1 4];
 
             app.OptimizationOptionsSummaryLabel = uilabel(leftGrid);
-            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Labs: 6 | Turnover: 30 min | Setup/Post: 15 min';
+            app.OptimizationOptionsSummaryLabel.Text = 'Metric: operatorIdle | Labs: 6 | Turnover: 30 min | Setup/Post: 15/15 min';
             app.OptimizationOptionsSummaryLabel.HorizontalAlignment = 'left';
             app.OptimizationOptionsSummaryLabel.Layout.Row = 23;
             app.OptimizationOptionsSummaryLabel.Layout.Column = [1 3];
@@ -1398,16 +1397,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function initializeOptimizationState(app)
-            numLabs = numel(app.LabIds);
-            startTimes = repmat({'08:00'}, 1, numLabs);
-            app.OptimizationOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
-                'NumLabs', numLabs, 'LabStartTimes', startTimes, 'TurnoverTime', 30);
+            if isempty(app.Opts) || ~isfield(app.Opts, 'labs')
+                app.Opts = struct( ...
+                    'turnover', 30, ...
+                    'setup', 15, ...
+                    'post', 15, ...
+                    'maxOpMin', 480, ...
+                    'enforceMidnight', true, ...
+                    'prioritizeOutpt', true, ...
+                    'caseFilter', "all", ...
+                    'metric', "operatorIdle", ...
+                    'labs', numel(app.LabIds));
+            end
 
-            app.OptimizationDefaults = struct( ...
-                'SetupMinutes', 15, ...
-                'PostMinutes', 15, ...
-                'TurnoverMinutes', app.OptimizationOptions.TurnoverTime, ...
-                'AdmissionStatus', 'outpatient');
+            app.LabIds = 1:max(1, app.Opts.labs);
+            app.updateLabDropdownItems();
 
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.OptimizationOutcome = struct();
@@ -1434,7 +1438,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             hold(ax, 'on');
             
             % Set up axes properties to match visualizeDailySchedule styling
-            set(ax, 'YDir', 'reverse', 'Color', 'white');
+            set(ax, 'YDir', 'reverse', 'Color', [0 0 0]);
             ylim(ax, [startHour, endHour]);
             xlim(ax, [0.5, length(labNumbers) + 0.5]);
             
@@ -1449,15 +1453,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.formatTimeAxisLabels(ax, startHour, endHour);
             
             % Add "No cases scheduled" placeholder text
+            neutralText = [0.9 0.9 0.9];
             text(ax, mean(xlim(ax)), mean(ylim(ax)), 'No cases scheduled', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                'FontSize', 16, 'FontWeight', 'bold', 'Color', [0.6, 0.6, 0.6]);
+                'FontSize', 16, 'FontWeight', 'bold', 'Color', neutralText);
             
             % Set axis properties to match visualizeDailySchedule
-            set(ax, 'GridAlpha', 0.3, 'XColor', 'black', 'YColor', 'black', 'Box', 'on', 'LineWidth', 1);
-            ax.XAxis.Color = 'black';
-            ax.YAxis.Color = 'black';
-            ylabel(ax, 'Time of Day', 'Color', 'black');
+            axisColor = [0.9 0.9 0.9];
+            gridColor = axisColor * 0.4;
+            set(ax, 'GridAlpha', 0.3, 'XColor', axisColor, 'YColor', axisColor, ...
+                'GridColor', gridColor, 'Box', 'on', 'LineWidth', 1);
+            ax.XAxis.Color = axisColor;
+            ax.YAxis.Color = axisColor;
+            ylabel(ax, 'Time of Day', 'Color', axisColor);
             
             hold(ax, 'off');
         end
@@ -1467,8 +1475,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             hourTicks = floor(startHour):ceil(endHour);
             xLimits = [0.5, numLabs + 0.5];
             
+            gridColor = [0.3, 0.3, 0.3];
             for h = hourTicks
-                line(ax, xLimits, [h, h], 'Color', [0.85, 0.85, 0.85], ...
+                line(ax, xLimits, [h, h], 'Color', gridColor, ...
                     'LineStyle', '-', 'LineWidth', 0.5);
             end
         end
@@ -1554,20 +1563,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             metricLabel.Layout.Row = 1; metricLabel.Layout.Column = 1;
             metricDropDown = uidropdown(grid, ...
                 'Items', metrics, ...
-                'Value', char(app.OptimizationOptions.OptimizationMetric));
+                'Value', char(app.Opts.metric));
             metricDropDown.Layout.Row = 1; metricDropDown.Layout.Column = 2;
 
             labLabel = uilabel(grid, 'Text', 'Number of labs:', 'HorizontalAlignment', 'left');
             labLabel.Layout.Row = 2; labLabel.Layout.Column = 1;
             labSpinner = uispinner(grid, 'Limits', [1 12], 'Step', 1, ...
-                'Value', app.OptimizationOptions.NumLabs);
+                'Value', app.Opts.labs);
             labSpinner.Layout.Row = 2; labSpinner.Layout.Column = 2;
 
             filterLabel = uilabel(grid, 'Text', 'Case filter:', 'HorizontalAlignment', 'left');
             filterLabel.Layout.Row = 3; filterLabel.Layout.Column = 1;
             filterDropDown = uidropdown(grid, ...
                 'Items', {'all', 'outpatient', 'inpatient'}, ...
-                'Value', char(app.OptimizationOptions.CaseFilter));
+                'Value', char(app.Opts.caseFilter));
             filterDropDown.Layout.Row = 3; filterDropDown.Layout.Column = 2;
 
             defaultStatusLabel = uilabel(grid, ...
@@ -1582,25 +1591,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             turnoverLabel = uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
             turnoverLabel.Layout.Row = 5; turnoverLabel.Layout.Column = 1;
             turnoverSpinner = uispinner(grid, 'Limits', [0 240], ...
-                'Step', 5, 'Value', app.OptimizationOptions.TurnoverTime);
+                'Step', 5, 'Value', app.Opts.turnover);
             turnoverSpinner.Layout.Row = 5; turnoverSpinner.Layout.Column = 2;
 
             setupLabel = uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
             setupLabel.Layout.Row = 6; setupLabel.Layout.Column = 1;
             setupSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
-                'Value', app.OptimizationDefaults.SetupMinutes);
+                'Value', app.Opts.setup);
             setupSpinner.Layout.Row = 6; setupSpinner.Layout.Column = 2;
 
             postLabel = uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
             postLabel.Layout.Row = 7; postLabel.Layout.Column = 1;
             postSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
-                'Value', app.OptimizationDefaults.PostMinutes);
+                'Value', app.Opts.post);
             postSpinner.Layout.Row = 7; postSpinner.Layout.Column = 2;
 
             maxOperatorLabel = uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
             maxOperatorLabel.Layout.Row = 8; maxOperatorLabel.Layout.Column = 1;
             maxOperatorSpinner = uispinner(grid, 'Limits', [60 1440], 'Step', 15, ...
-                'Value', app.OptimizationOptions.MaxOperatorTime);
+                'Value', app.Opts.maxOpMin);
             maxOperatorSpinner.Layout.Row = 8; maxOperatorSpinner.Layout.Column = 2;
 
             toggleGrid = uigridlayout(grid, [1 2]);
@@ -1612,9 +1621,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             toggleGrid.ColumnSpacing = 12;
 
             enforceCheck = uicheckbox(toggleGrid, 'Text', 'Enforce midnight cutoff', ...
-                'Value', app.OptimizationOptions.EnforceMidnight);
+                'Value', logical(app.Opts.enforceMidnight));
             prioritizeCheck = uicheckbox(toggleGrid, 'Text', 'Prioritize outpatient', ...
-                'Value', app.OptimizationOptions.PrioritizeOutpatient);
+                'Value', logical(app.Opts.prioritizeOutpt));
 
             buttonGrid = uigridlayout(grid, [1 2]);
             buttonGrid.Layout.Row = 10;
@@ -1634,30 +1643,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             function saveAndClose(~, ~)
                 try
-                    numLabsValue = labSpinner.Value;
-                    startTimes = repmat({'08:00'}, 1, numLabsValue);
-                    newOptions = app.OptimizationOptions.with( ...
-                        'OptimizationMetric', string(metricDropDown.Value), ...
-                        'NumLabs', numLabsValue, ...
-                        'LabStartTimes', startTimes, ...
-                        'TurnoverTime', turnoverSpinner.Value, ...
-                        'CaseFilter', string(filterDropDown.Value), ...
-                        'MaxOperatorTime', maxOperatorSpinner.Value, ...
-                        'EnforceMidnight', enforceCheck.Value, ...
-                        'PrioritizeOutpatient', prioritizeCheck.Value);
+                    numLabsValue = round(labSpinner.Value);
+                    newOpts = struct( ...
+                        'turnover', turnoverSpinner.Value, ...
+                        'setup', setupSpinner.Value, ...
+                        'post', postSpinner.Value, ...
+                        'maxOpMin', maxOperatorSpinner.Value, ...
+                        'enforceMidnight', logical(enforceCheck.Value), ...
+                        'prioritizeOutpt', logical(prioritizeCheck.Value), ...
+                        'caseFilter', string(filterDropDown.Value), ...
+                        'metric', string(metricDropDown.Value), ...
+                        'labs', numLabsValue);
 
-                    app.OptimizationOptions = newOptions;
-                    app.OptimizationDefaults.SetupMinutes = setupSpinner.Value;
-                    app.OptimizationDefaults.PostMinutes = postSpinner.Value;
-                    app.OptimizationDefaults.TurnoverMinutes = newOptions.TurnoverTime;
-
+                    app.Opts = newOpts;
                     app.TestingAdmissionDefault = string(defaultStatusDropDown.Value);
 
-                    app.LabIds = 1:numLabsValue;
+                    app.LabIds = 1:max(1, numLabsValue);
+                    app.updateLabDropdownItems();
                     app.refreshSpecificLabDropdown();
-                    if isempty(app.OptimizedSchedule) || app.IsOptimizationDirty
-                        app.showOptimizationPendingPlaceholder();
-                    end
 
                     app.updateOptimizationOptionsSummary();
                     app.markOptimizationDirty();
@@ -1678,8 +1681,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            defaults = app.OptimizationDefaults;
-            defaults.TurnoverMinutes = app.OptimizationOptions.TurnoverTime;
+            defaults = struct( ...
+                'SetupMinutes', app.Opts.setup, ...
+                'PostMinutes', app.Opts.post, ...
+                'TurnoverMinutes', app.Opts.turnover, ...
+                'AdmissionStatus', char(app.TestingAdmissionDefault));
 
             try
                 [casesStruct, metadata] = app.CaseManager.buildOptimizationCases(app.LabIds, defaults);
@@ -1699,7 +1705,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             drawnow;
 
             try
-                [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, app.OptimizationOptions);
+                scheduleOptions = app.buildSchedulingOptions();
+                [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
                 app.OptimizedSchedule = dailySchedule;
                 app.OptimizationOutcome = outcome;
                 app.IsOptimizationDirty = false;
@@ -1735,13 +1742,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            metricText = char(app.OptimizationOptions.OptimizationMetric);
-            labsCount = app.OptimizationOptions.NumLabs;
-            turnoverText = app.OptimizationOptions.TurnoverTime;
-            setupText = app.OptimizationDefaults.SetupMinutes;
-            postText = app.OptimizationDefaults.PostMinutes;
+            if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
+                return;
+            end
+
+            metricText = char(string(app.Opts.metric));
+            labsCount = app.Opts.labs;
+            turnoverText = app.Opts.turnover;
+            setupText = app.Opts.setup;
+            postText = app.Opts.post;
             summary = sprintf('Metric: %s | Labs: %d | Turnover: %d min | Setup/Post: %d/%d min', ...
-                metricText, labsCount, round(turnoverText), round(setupText), round(postText));
+                metricText, round(labsCount), round(turnoverText), round(setupText), round(postText));
             app.OptimizationOptionsSummaryLabel.Text = summary;
         end
 
@@ -1868,6 +1879,41 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
+        end
+
+        function updateLabDropdownItems(app)
+            if isempty(app.LabDrop) || ~isvalid(app.LabDrop)
+                return;
+            end
+
+            items = cellstr(string(app.LabIds));
+            if isempty(items)
+                items = {'1'};
+            end
+
+            previousValue = string(app.LabDrop.Value);
+            app.LabDrop.Items = items;
+
+            if any(strcmp(previousValue, items))
+                app.LabDrop.Value = char(previousValue);
+            else
+                app.LabDrop.Value = items{1};
+            end
+        end
+
+        function scheduleOptions = buildSchedulingOptions(app)
+            numLabs = max(1, round(app.Opts.labs));
+            startTimes = repmat({'08:00'}, 1, numLabs);
+
+            scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
+                'NumLabs', numLabs, ...
+                'LabStartTimes', startTimes, ...
+                'OptimizationMetric', string(app.Opts.metric), ...
+                'CaseFilter', string(app.Opts.caseFilter), ...
+                'MaxOperatorTime', app.Opts.maxOpMin, ...
+                'TurnoverTime', app.Opts.turnover, ...
+                'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
+                'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt));
         end
 
         function refreshSpecificLabDropdown(app)
