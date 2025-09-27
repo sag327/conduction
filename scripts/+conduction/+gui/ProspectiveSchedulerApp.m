@@ -7,6 +7,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         MainGridLayout              matlab.ui.container.GridLayout
         LeftPanel                   matlab.ui.container.Panel
         RightPanel                  matlab.ui.container.Panel
+        CasesPanel                  matlab.ui.container.Panel
 
         % Left Panel Components (Case Input)
         DataLoadingLabel            matlab.ui.control.Label
@@ -19,8 +20,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingDateDropDown         matlab.ui.control.DropDown
         TestingRunButton            matlab.ui.control.Button
         TestingExitButton           matlab.ui.control.Button
-        TestingAdmissionStatusLabel matlab.ui.control.Label
-        TestingAdmissionStatusDropDown matlab.ui.control.DropDown
         TestingInfoLabel            matlab.ui.control.Label
         OptimizationSectionLabel    matlab.ui.control.Label
         OptimizationOptionsSummaryLabel matlab.ui.control.Label
@@ -97,13 +96,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
-            app.UIFigure.Position = [100 100 1200 800];
+            app.UIFigure.Position = [100 100 1200 900];
             app.UIFigure.Name = 'Prospective Scheduler';
             app.UIFigure.Resize = 'on';
 
             % Create main layout with left (input) and right (visualization) panels
             app.MainGridLayout = uigridlayout(app.UIFigure);
-            app.MainGridLayout.ColumnWidth = {500, '1x'};
+            app.MainGridLayout.ColumnWidth = {500, '1x', 360};
             app.MainGridLayout.RowHeight = {'1x'};
 
             app.LeftPanel = uipanel(app.MainGridLayout);
@@ -118,9 +117,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.buildDurationSection(leftGrid);
             app.buildConstraintSection(leftGrid);
             app.buildOptimizationSection(leftGrid);
-            app.buildCaseManagementSection(leftGrid);
 
             app.configureRightPanel();
+            casesGrid = app.configureCasePanelLayout();
+            app.buildCaseManagementSection(casesGrid);
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.applyDurationThemeColors();
@@ -132,7 +132,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function leftGrid = configureLeftPanelLayout(app)
             leftGrid = uigridlayout(app.LeftPanel);
             leftGrid.ColumnWidth = {100, 140, 80, '1x'};
-            leftGrid.RowHeight = {22, 30, 22, 22, 26, 26, 26, 22, 10, 22, 22, 22, 10, 22, 90, 10, 22, 22, 22, 30, 26, 10, 22, 26, 26, 22, 10, 22, '1x', 30};
+            leftGrid.RowHeight = {22, 30, 22, 22, 28, 28, 28, 28, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
             leftGrid.Padding = [10 10 10 10];
             leftGrid.RowSpacing = 3;
             leftGrid.ColumnSpacing = 6;
@@ -205,22 +205,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingExitButton.Layout.Column = [3 4];
             app.TestingExitButton.ButtonPushedFcn = createCallbackFcn(app, @TestingExitButtonPushed, true);
 
-            app.TestingAdmissionStatusLabel = uilabel(leftGrid);
-            app.TestingAdmissionStatusLabel.Text = 'Default admission:';
-            app.TestingAdmissionStatusLabel.Layout.Row = 8;
-            app.TestingAdmissionStatusLabel.Layout.Column = 1;
-
-            app.TestingAdmissionStatusDropDown = uidropdown(leftGrid);
-            app.TestingAdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
-            app.TestingAdmissionStatusDropDown.Value = app.TestingAdmissionDefault;
-            app.TestingAdmissionStatusDropDown.Layout.Row = 8;
-            app.TestingAdmissionStatusDropDown.Layout.Column = [2 4];
-            app.TestingAdmissionStatusDropDown.ValueChangedFcn = createCallbackFcn(app, @TestingAdmissionStatusDropDownValueChanged, true);
-
             app.TestingInfoLabel = uilabel(leftGrid);
             app.TestingInfoLabel.Text = 'Testing mode disabled.';
             app.TestingInfoLabel.FontColor = [0.4 0.4 0.4];
-            app.TestingInfoLabel.Layout.Row = 9;
+            app.TestingInfoLabel.Layout.Row = 8;
             app.TestingInfoLabel.Layout.Column = [1 4];
             app.TestingInfoLabel.WordWrap = 'on';
         end
@@ -486,32 +474,46 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationStatusLabel.WordWrap = 'on';
         end
 
-        function buildCaseManagementSection(app, leftGrid)
-            app.CasesLabel = uilabel(leftGrid);
+        function casesGrid = configureCasePanelLayout(app)
+            app.CasesPanel = uipanel(app.MainGridLayout);
+            app.CasesPanel.Title = 'Scenario Cases';
+            app.CasesPanel.Layout.Row = 1;
+            app.CasesPanel.Layout.Column = 3;
+
+            casesGrid = uigridlayout(app.CasesPanel);
+            casesGrid.ColumnWidth = {'1x', '1x'};
+            casesGrid.RowHeight = {24, '1x', 34};
+            casesGrid.Padding = [10 10 10 10];
+            casesGrid.RowSpacing = 6;
+            casesGrid.ColumnSpacing = 10;
+        end
+
+        function buildCaseManagementSection(app, casesGrid)
+            app.CasesLabel = uilabel(casesGrid);
             app.CasesLabel.Text = 'Added Cases';
             app.CasesLabel.FontWeight = 'bold';
-            app.CasesLabel.Layout.Row = 27;
-            app.CasesLabel.Layout.Column = [1 4];
+            app.CasesLabel.Layout.Row = 1;
+            app.CasesLabel.Layout.Column = [1 2];
 
-            app.CasesTable = uitable(leftGrid);
+            app.CasesTable = uitable(casesGrid);
             app.CasesTable.ColumnName = {'#', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
             app.CasesTable.ColumnWidth = {60, 100, 140, 80, 100, 90, 80};
             app.CasesTable.RowName = {};
-            app.CasesTable.Layout.Row = 28;
-            app.CasesTable.Layout.Column = [1 4];
+            app.CasesTable.Layout.Row = 2;
+            app.CasesTable.Layout.Column = [1 2];
             app.CasesTable.SelectionType = 'row';
 
-            app.RemoveSelectedButton = uibutton(leftGrid, 'push');
+            app.RemoveSelectedButton = uibutton(casesGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
-            app.RemoveSelectedButton.Layout.Row = 29;
-            app.RemoveSelectedButton.Layout.Column = [1 2];
+            app.RemoveSelectedButton.Layout.Row = 3;
+            app.RemoveSelectedButton.Layout.Column = 1;
             app.RemoveSelectedButton.Enable = 'off';
             app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
 
-            app.ClearAllButton = uibutton(leftGrid, 'push');
+            app.ClearAllButton = uibutton(casesGrid, 'push');
             app.ClearAllButton.Text = 'Clear All';
-            app.ClearAllButton.Layout.Row = 29;
-            app.ClearAllButton.Layout.Column = [3 4];
+            app.ClearAllButton.Layout.Row = 3;
+            app.ClearAllButton.Layout.Column = 2;
             app.ClearAllButton.Enable = 'off';
             app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
         end
@@ -743,13 +745,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function TestingExitButtonPushed(app, event)
             app.exitTestingMode();
-        end
-
-        function TestingAdmissionStatusDropDownValueChanged(app, event)
-            %#ok<INUSD>
-            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
-                app.TestingAdmissionDefault = string(app.TestingAdmissionStatusDropDown.Value);
-            end
         end
 
         function OptimizationOptionsButtonPushed(app, event)
@@ -998,10 +993,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.TestingDateDropDown.Value = items{2};
             end
 
-            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
-                app.TestingAdmissionStatusDropDown.Value = app.TestingAdmissionDefault;
-            end
-
             app.CurrentTestingSummary = struct();
             app.updateTestingActionStates();
             app.updateTestingInfoText();
@@ -1129,9 +1120,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function status = getTestingAdmissionStatus(app)
             status = app.TestingAdmissionDefault;
-            if ~isempty(app.TestingAdmissionStatusDropDown) && isvalid(app.TestingAdmissionStatusDropDown)
-                status = string(app.TestingAdmissionStatusDropDown.Value);
-            end
         end
 
         function selectedDate = getSelectedTestingDate(app)
@@ -1506,11 +1494,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             dlg = uifigure('Name', 'Optimization Options', ...
                 'Color', app.UIFigure.Color, ...
-                'Position', [app.UIFigure.Position(1:2)+[120 120], 360, 360], ...
+                'Position', [app.UIFigure.Position(1:2)+[120 120], 380, 440], ...
                 'WindowStyle', 'modal');
 
             grid = uigridlayout(dlg);
-            grid.RowHeight = {24, 32, 32, 32, 32, 32, 32, 40};
+            grid.RowHeight = {24, 32, 32, 32, 32, 32, 32, 32, 32, 40};
             grid.ColumnWidth = {160, '1x'};
             grid.Padding = [10 10 10 10];
             grid.RowSpacing = 6;
@@ -1537,32 +1525,41 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Value', char(app.OptimizationOptions.CaseFilter));
             filterDropDown.Layout.Row = 3; filterDropDown.Layout.Column = 2;
 
+            defaultStatusLabel = uilabel(grid, ...
+                'Text', 'Default status (if unlisted):', ...
+                'HorizontalAlignment', 'left');
+            defaultStatusLabel.Layout.Row = 4; defaultStatusLabel.Layout.Column = 1;
+            defaultStatusDropDown = uidropdown(grid, ...
+                'Items', {'outpatient', 'inpatient'}, ...
+                'Value', char(app.TestingAdmissionDefault));
+            defaultStatusDropDown.Layout.Row = 4; defaultStatusDropDown.Layout.Column = 2;
+
             turnoverLabel = uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
-            turnoverLabel.Layout.Row = 4; turnoverLabel.Layout.Column = 1;
+            turnoverLabel.Layout.Row = 5; turnoverLabel.Layout.Column = 1;
             turnoverSpinner = uispinner(grid, 'Limits', [0 240], ...
                 'Step', 5, 'Value', app.OptimizationOptions.TurnoverTime);
-            turnoverSpinner.Layout.Row = 4; turnoverSpinner.Layout.Column = 2;
+            turnoverSpinner.Layout.Row = 5; turnoverSpinner.Layout.Column = 2;
 
             setupLabel = uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
-            setupLabel.Layout.Row = 5; setupLabel.Layout.Column = 1;
+            setupLabel.Layout.Row = 6; setupLabel.Layout.Column = 1;
             setupSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.OptimizationDefaults.SetupMinutes);
-            setupSpinner.Layout.Row = 5; setupSpinner.Layout.Column = 2;
+            setupSpinner.Layout.Row = 6; setupSpinner.Layout.Column = 2;
 
             postLabel = uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
-            postLabel.Layout.Row = 6; postLabel.Layout.Column = 1;
+            postLabel.Layout.Row = 7; postLabel.Layout.Column = 1;
             postSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.OptimizationDefaults.PostMinutes);
-            postSpinner.Layout.Row = 6; postSpinner.Layout.Column = 2;
+            postSpinner.Layout.Row = 7; postSpinner.Layout.Column = 2;
 
             maxOperatorLabel = uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
-            maxOperatorLabel.Layout.Row = 7; maxOperatorLabel.Layout.Column = 1;
+            maxOperatorLabel.Layout.Row = 8; maxOperatorLabel.Layout.Column = 1;
             maxOperatorSpinner = uispinner(grid, 'Limits', [60 1440], 'Step', 15, ...
                 'Value', app.OptimizationOptions.MaxOperatorTime);
-            maxOperatorSpinner.Layout.Row = 7; maxOperatorSpinner.Layout.Column = 2;
+            maxOperatorSpinner.Layout.Row = 8; maxOperatorSpinner.Layout.Column = 2;
 
             toggleGrid = uigridlayout(grid, [1 2]);
-            toggleGrid.Layout.Row = 8;
+            toggleGrid.Layout.Row = 9;
             toggleGrid.Layout.Column = [1 2];
             toggleGrid.ColumnWidth = {'1x', '1x'};
             toggleGrid.RowHeight = {32};
@@ -1575,7 +1572,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Value', app.OptimizationOptions.PrioritizeOutpatient);
 
             buttonGrid = uigridlayout(grid, [1 2]);
-            buttonGrid.Layout.Row = 9;
+            buttonGrid.Layout.Row = 10;
             buttonGrid.Layout.Column = [1 2];
             buttonGrid.ColumnWidth = {'1x', '1x'};
             buttonGrid.RowHeight = {30};
@@ -1608,6 +1605,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.OptimizationDefaults.SetupMinutes = setupSpinner.Value;
                     app.OptimizationDefaults.PostMinutes = postSpinner.Value;
                     app.OptimizationDefaults.TurnoverMinutes = newOptions.TurnoverTime;
+
+                    app.TestingAdmissionDefault = string(defaultStatusDropDown.Value);
 
                     app.LabIds = 1:numLabsValue;
                     app.refreshSpecificLabDropdown();
