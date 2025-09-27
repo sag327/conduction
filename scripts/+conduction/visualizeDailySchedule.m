@@ -118,6 +118,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'Debug', false, @islogical);
     addParameter(p, 'ScheduleAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
+    addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -276,6 +277,11 @@ end
 function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, operatorColors, opts)
     numLabs = numel(labLabels);
 
+    caseClickedCallback = [];
+    if isstruct(opts) && isfield(opts, 'CaseClickedFcn')
+        caseClickedCallback = opts.CaseClickedFcn;
+    end
+
     set(ax, 'YDir', 'reverse');
     ylim(ax, [startHour, endHour]);
     xlim(ax, [0.5, numLabs + 0.5]);
@@ -300,8 +306,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if ~isnan(setupStartHour) && ~isnan(procStartHour)
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
-                rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
+                setupRect = rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
                     'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                attachCaseClick(setupRect, entry, caseClickedCallback);
             end
         end
 
@@ -316,41 +323,71 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             else
                 opColor = [0.5, 0.5, 0.5];
             end
-            rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
+            procRect = rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
                 'FaceColor', opColor, 'EdgeColor', edgeColor, 'LineWidth', 1);
+            attachCaseClick(procRect, entry, caseClickedCallback);
         end
 
         if ~isnan(procEndHour) && ~isnan(postEndHour)
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
-                rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
+                postRect = rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
                     'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                attachCaseClick(postRect, entry, caseClickedCallback);
             end
         end
 
         if opts.ShowTurnover && ~isnan(postEndHour) && ~isnan(turnoverEndHour)
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
-                rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
+                turnoverRect = rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
                     'FaceColor', turnoverColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                attachCaseClick(turnoverRect, entry, caseClickedCallback);
             end
         end
 
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
-            text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName), ...
+            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
                 'FontWeight', 'bold', ...
                 'Color', 'white');
+            labelHandle.HitTest = 'off';
+            if isprop(labelHandle, 'PickableParts')
+                labelHandle.PickableParts = 'none';
+            end
         end
     end
 
     set(ax, 'XTick', 1:numLabs, 'XTickLabel', labLabels);
     formatYAxisTimeTicks(ax, startHour, endHour);
     applyAxisTextStyle(ax);
+
+    function attachCaseClick(rectHandle, caseEntry, callback)
+        if isempty(callback) || isempty(rectHandle) || ~isgraphics(rectHandle)
+            return;
+        end
+        rectHandle.UserData = struct('caseId', caseEntry.caseId, 'labIndex', caseEntry.labIndex);
+        rectHandle.HitTest = 'on';
+        if isprop(rectHandle, 'PickableParts')
+            rectHandle.PickableParts = 'visible';
+        end
+        rectHandle.ButtonDownFcn = @(~, ~) dispatchCaseClick(callback, caseEntry.caseId);
+    end
+
+    function dispatchCaseClick(callback, caseId)
+        if isempty(callback)
+            return;
+        end
+        try
+            callback(string(caseId));
+        catch ME
+            warning('visualizeDailySchedule:CaseClickFailed', 'Case click handler failed: %s', ME.message);
+        end
+    end
 end
 
 function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour, labelColor)

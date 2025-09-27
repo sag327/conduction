@@ -22,6 +22,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestPanel                   matlab.ui.container.Panel
         TestPanelLayout             matlab.ui.container.GridLayout
 
+        Drawer                      matlab.ui.container.Panel
+        DrawerLayout                matlab.ui.container.GridLayout
+        DrawerHeaderLabel           matlab.ui.control.Label
+        DrawerCloseBtn              matlab.ui.control.Button
+        DrawerInspectorTitle        matlab.ui.control.Label
+        DrawerInspectorGrid         matlab.ui.container.GridLayout
+        DrawerCaseValueLabel        matlab.ui.control.Label
+        DrawerProcedureValueLabel   matlab.ui.control.Label
+        DrawerOperatorValueLabel    matlab.ui.control.Label
+        DrawerLabValueLabel         matlab.ui.control.Label
+        DrawerStartValueLabel       matlab.ui.control.Label
+        DrawerEndValueLabel         matlab.ui.control.Label
+        DrawerLogTitle              matlab.ui.control.Label
+        DrawerLogTextArea           matlab.ui.control.TextArea
+
         % Add/Edit Tab Components
         DataLoadingLabel            matlab.ui.control.Label
         LoadDataButton              matlab.ui.control.Button
@@ -100,6 +115,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
+        DrawerTimer timer = timer.empty
+        DrawerWidth double = 0
+        DrawerCurrentCaseId string = ""
     end
 
     % Component initialization
@@ -164,7 +182,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
             app.MiddleLayout.RowHeight = {'1x','fit'};
-            app.MiddleLayout.ColumnWidth = {320, '1x'};
+            app.MiddleLayout.ColumnWidth = {320, '1x', 0};
             app.MiddleLayout.ColumnSpacing = 12;
             app.MiddleLayout.RowSpacing = 12;
             app.MiddleLayout.Padding = [0 0 0 0];
@@ -206,6 +224,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Title.FontSize = 14;
             app.ScheduleAxes.Box = 'on';
             app.ScheduleAxes.Color = [0 0 0];
+
+            app.Drawer = uipanel(app.MiddleLayout);
+            app.Drawer.Layout.Row = [1 2];
+            app.Drawer.Layout.Column = 3;
+            app.Drawer.BackgroundColor = [0.1 0.1 0.1];
+            app.Drawer.BorderType = 'none';
+            app.Drawer.Visible = 'on';
+
+            app.buildDrawerUI();
 
             % Bottom KPI bar
             app.BottomBarLayout = uigridlayout(app.MainGridLayout);
@@ -324,6 +351,102 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingInfoLabel.Layout.Row = 4;
             app.TestingInfoLabel.Layout.Column = [1 2];
             app.TestingInfoLabel.WordWrap = 'on';
+        end
+
+        function buildDrawerUI(app)
+            if isempty(app.Drawer) || ~isvalid(app.Drawer)
+                return;
+            end
+
+            app.DrawerLayout = uigridlayout(app.Drawer);
+            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', '1x'};
+            app.DrawerLayout.ColumnWidth = {'1x'};
+            app.DrawerLayout.Padding = [16 18 16 18];
+            app.DrawerLayout.RowSpacing = 12;
+            app.DrawerLayout.ColumnSpacing = 0;
+            app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
+
+            headerLayout = uigridlayout(app.DrawerLayout);
+            headerLayout.Layout.Row = 1;
+            headerLayout.Layout.Column = 1;
+            headerLayout.RowHeight = {'fit'};
+            headerLayout.ColumnWidth = {'1x', 'fit'};
+            headerLayout.ColumnSpacing = 12;
+            headerLayout.Padding = [0 0 0 0];
+            headerLayout.BackgroundColor = app.Drawer.BackgroundColor;
+
+            app.DrawerHeaderLabel = uilabel(headerLayout);
+            app.DrawerHeaderLabel.Text = 'Case Inspector';
+            app.DrawerHeaderLabel.FontSize = 16;
+            app.DrawerHeaderLabel.FontWeight = 'bold';
+            app.DrawerHeaderLabel.FontColor = [1 1 1];
+            app.DrawerHeaderLabel.Layout.Row = 1;
+            app.DrawerHeaderLabel.Layout.Column = 1;
+
+            app.DrawerCloseBtn = uibutton(headerLayout, 'push');
+            app.DrawerCloseBtn.Text = 'Close';
+            app.DrawerCloseBtn.Layout.Row = 1;
+            app.DrawerCloseBtn.Layout.Column = 2;
+            app.DrawerCloseBtn.ButtonPushedFcn = createCallbackFcn(app, @DrawerCloseButtonPushed, true);
+
+            app.DrawerInspectorTitle = uilabel(app.DrawerLayout);
+            app.DrawerInspectorTitle.Text = 'Inspector';
+            app.DrawerInspectorTitle.FontWeight = 'bold';
+            app.DrawerInspectorTitle.FontColor = [0.9 0.9 0.9];
+            app.DrawerInspectorTitle.Layout.Row = 2;
+            app.DrawerInspectorTitle.Layout.Column = 1;
+
+            app.DrawerInspectorGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerInspectorGrid.Layout.Row = 3;
+            app.DrawerInspectorGrid.Layout.Column = 1;
+            app.DrawerInspectorGrid.RowHeight = repmat({'fit'}, 1, 6);
+            app.DrawerInspectorGrid.ColumnWidth = {90, '1x'};
+            app.DrawerInspectorGrid.RowSpacing = 4;
+            app.DrawerInspectorGrid.ColumnSpacing = 12;
+            app.DrawerInspectorGrid.Padding = [0 0 0 0];
+            app.DrawerInspectorGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+            app.createDrawerInspectorRow(1, 'Case', 'DrawerCaseValueLabel');
+            app.createDrawerInspectorRow(2, 'Procedure', 'DrawerProcedureValueLabel');
+            app.createDrawerInspectorRow(3, 'Operator', 'DrawerOperatorValueLabel');
+            app.createDrawerInspectorRow(4, 'Lab', 'DrawerLabValueLabel');
+            app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
+            app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
+
+            app.DrawerLogTitle = uilabel(app.DrawerLayout);
+            app.DrawerLogTitle.Text = 'Why-not / Run log';
+            app.DrawerLogTitle.FontWeight = 'bold';
+            app.DrawerLogTitle.FontColor = [0.9 0.9 0.9];
+            app.DrawerLogTitle.Layout.Row = 4;
+            app.DrawerLogTitle.Layout.Column = 1;
+
+            app.DrawerLogTextArea = uitextarea(app.DrawerLayout);
+            app.DrawerLogTextArea.Layout.Row = 5;
+            app.DrawerLogTextArea.Layout.Column = 1;
+            app.DrawerLogTextArea.Editable = 'off';
+            app.DrawerLogTextArea.Value = {'Select a case to inspect diagnostics.'};
+            app.DrawerLogTextArea.WordWrap = 'on';
+            app.DrawerLogTextArea.BackgroundColor = [0.15 0.15 0.15];
+            app.DrawerLogTextArea.FontColor = [0.9 0.9 0.9];
+
+            app.setDrawerWidth(0);
+        end
+
+        function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
+            staticLabel = uilabel(app.DrawerInspectorGrid);
+            staticLabel.Text = labelText;
+            staticLabel.FontColor = [0.7 0.7 0.7];
+            staticLabel.Layout.Row = rowIndex;
+            staticLabel.Layout.Column = 1;
+
+            valueLabel = uilabel(app.DrawerInspectorGrid);
+            valueLabel.Text = '--';
+            valueLabel.FontColor = [0.95 0.95 0.95];
+            valueLabel.Layout.Row = rowIndex;
+            valueLabel.Layout.Column = 2;
+            valueLabel.WordWrap = 'on';
+
+            app.(valuePropName) = valueLabel;
         end
 
         function buildCaseDetailsSection(app, leftGrid)
@@ -681,7 +804,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Name = sprintf('Prospective Scheduler - %s', datestr(targetDate, 'mmm dd, yyyy'));
         end
 
+        function openDrawer(app, caseId)
+            if nargin < 2
+                caseId = string.empty;
+            end
+            app.populateDrawer(caseId);
+            app.animateDrawerToWidth(440);
+        end
+
+        function closeDrawer(app)
+            app.animateDrawerToWidth(0);
+        end
+
+        function onScheduleBlockClicked(app, caseId)
+            if nargin < 2
+                return;
+            end
+            app.openDrawer(caseId);
+        end
+
         function delete(app)
+            app.clearDrawerTimer();
             delete(app.UIFigure);
         end
     end
@@ -855,10 +998,372 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             %#ok<INUSD>
             app.openOptimizationPlot();
         end
+
+        function DrawerCloseButtonPushed(app, ~)
+            app.closeDrawer();
+        end
     end
 
     % Helper methods
     methods (Access = private)
+
+        function setDrawerWidth(app, widthValue)
+            if isempty(app.MiddleLayout) || ~isvalid(app.MiddleLayout)
+                return;
+            end
+
+            widthValue = max(0, double(widthValue));
+            app.DrawerWidth = widthValue;
+
+            widths = app.MiddleLayout.ColumnWidth;
+            if numel(widths) < 3
+                widths = {320, '1x', widthValue};
+            else
+                widths{3} = widthValue;
+            end
+            app.MiddleLayout.ColumnWidth = widths;
+        end
+
+        function clearDrawerTimer(app)
+            if ~isempty(app.DrawerTimer)
+                try
+                    if isvalid(app.DrawerTimer)
+                        stop(app.DrawerTimer);
+                    end
+                catch
+                end
+                if isvalid(app.DrawerTimer)
+                    delete(app.DrawerTimer);
+                end
+            end
+            app.DrawerTimer = timer.empty;
+        end
+
+        function animateDrawerToWidth(app, targetWidth)
+            if isempty(app.Drawer) || ~isvalid(app.Drawer)
+                return;
+            end
+
+            targetWidth = max(0, double(targetWidth));
+            currentWidth = app.DrawerWidth;
+
+            if abs(currentWidth - targetWidth) < 1
+                app.setDrawerWidth(targetWidth);
+                app.clearDrawerTimer();
+                return;
+            end
+
+            app.clearDrawerTimer();
+
+            distance = targetWidth - currentWidth;
+            steps = max(ceil(abs(distance) / 40), 5);
+            delta = distance / steps;
+
+            animationTimer = timer('ExecutionMode', 'fixedRate', ...
+                'Period', 0.02, 'TasksToExecute', steps);
+            animationTimer.TimerFcn = @(src, ~) app.stepDrawerAnimation(delta, targetWidth, src);
+            app.DrawerTimer = animationTimer;
+            start(animationTimer);
+        end
+
+        function stepDrawerAnimation(app, delta, targetWidth, timerObj)
+            nextWidth = app.DrawerWidth + delta;
+            if (delta > 0 && nextWidth >= targetWidth) || (delta < 0 && nextWidth <= targetWidth)
+                nextWidth = targetWidth;
+            end
+
+            app.setDrawerWidth(nextWidth);
+
+            if abs(nextWidth - targetWidth) < 1
+                if nargin >= 4 && isa(timerObj, 'timer') && isvalid(timerObj)
+                    stop(timerObj);
+                end
+                app.clearDrawerTimer();
+            end
+        end
+
+        function populateDrawer(app, caseId)
+            if isempty(app.Drawer) || ~isvalid(app.Drawer)
+                return;
+            end
+            if isempty(app.DrawerLogTextArea) || ~isvalid(app.DrawerLogTextArea)
+                return;
+            end
+
+            if nargin < 2
+                caseId = app.DrawerCurrentCaseId;
+            end
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                app.resetDrawerInspector();
+                app.DrawerLogTextArea.Value = {'Select a case to inspect diagnostics.'};
+                return;
+            end
+
+            details = app.extractCaseDetails(caseId);
+
+            app.setLabelText(app.DrawerCaseValueLabel, details.DisplayCase);
+            app.setLabelText(app.DrawerProcedureValueLabel, details.Procedure);
+            app.setLabelText(app.DrawerOperatorValueLabel, details.Operator);
+            app.setLabelText(app.DrawerLabValueLabel, details.Lab);
+            app.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
+            app.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
+
+            logLines = app.buildDrawerLog(details);
+            app.DrawerLogTextArea.Value = logLines;
+
+            app.DrawerCurrentCaseId = caseId;
+        end
+
+        function resetDrawerInspector(app)
+            app.setLabelText(app.DrawerCaseValueLabel, '--');
+            app.setLabelText(app.DrawerProcedureValueLabel, '--');
+            app.setLabelText(app.DrawerOperatorValueLabel, '--');
+            app.setLabelText(app.DrawerLabValueLabel, '--');
+            app.setLabelText(app.DrawerStartValueLabel, '--');
+            app.setLabelText(app.DrawerEndValueLabel, '--');
+        end
+
+        function setLabelText(~, labelHandle, textValue)
+            if isempty(labelHandle) || ~isvalid(labelHandle)
+                return;
+            end
+            if isa(textValue, 'string')
+                textValue = char(textValue);
+            end
+            labelHandle.Text = textValue;
+        end
+
+        function details = extractCaseDetails(app, caseId)
+            details = struct();
+            details.CaseId = string(caseId);
+            details.DisplayCase = string(caseId);
+            details.Procedure = string('--');
+            details.Operator = string('--');
+            details.Lab = string('--');
+            details.StartMinutes = NaN;
+            details.EndMinutes = NaN;
+            details.StartDisplay = string('--');
+            details.EndDisplay = string('--');
+            details.Status = string('missing');
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for entryIdx = 1:numel(labCases)
+                    entry = labCases(entryIdx);
+                    entryId = app.resolveCaseIdentifier(entry, entryIdx);
+                    if strlength(entryId) == 0
+                        continue;
+                    end
+                    if strcmpi(entryId, caseId)
+                        details.CaseId = entryId;
+                        details.DisplayCase = entryId;
+                        details.Procedure = app.extractCaseField(entry, {'procedure', 'procedureName', 'Procedure'});
+                        details.Operator = app.extractCaseField(entry, {'operator', 'Operator', 'physician'});
+
+                        if numel(labs) >= labIdx
+                            labName = string(labs(labIdx).Room);
+                            if strlength(labName) == 0
+                                labName = string(sprintf('Lab %d', labIdx));
+                            end
+                        else
+                            labName = string(sprintf('Lab %d', labIdx));
+                        end
+                        details.Lab = labName;
+
+                        details.StartMinutes = app.extractNumericField(entry, {'procStartTime', 'startTime'});
+                        details.EndMinutes = app.extractNumericField(entry, {'procEndTime', 'endTime'});
+                        details.StartDisplay = app.formatDrawerTime(details.StartMinutes);
+                        details.EndDisplay = app.formatDrawerTime(details.EndMinutes);
+                        details.Status = string('scheduled');
+                        return;
+                    end
+                end
+            end
+        end
+
+        function caseIdValue = resolveCaseIdentifier(~, caseEntry, fallbackIndex)
+            candidates = {'caseID', 'CaseId', 'caseId', 'id', 'CaseID'};
+            for idx = 1:numel(candidates)
+                name = candidates{idx};
+                if isstruct(caseEntry) && isfield(caseEntry, name)
+                    candidate = string(caseEntry.(name));
+                elseif isobject(caseEntry) && isprop(caseEntry, name)
+                    candidate = string(caseEntry.(name));
+                else
+                    continue;
+                end
+                if strlength(candidate) > 0
+                    caseIdValue = candidate;
+                    return;
+                end
+            end
+            caseIdValue = string(sprintf('Case %d', fallbackIndex));
+        end
+
+        function value = extractCaseField(~, entry, candidateNames)
+            value = string('--');
+            for idx = 1:numel(candidateNames)
+                name = candidateNames{idx};
+                if isstruct(entry) && isfield(entry, name)
+                    raw = entry.(name);
+                elseif isobject(entry) && isprop(entry, name)
+                    raw = entry.(name);
+                else
+                    continue;
+                end
+                strValue = string(raw);
+                if strlength(strValue) > 0
+                    value = strtrim(strValue(1));
+                    if strlength(value) == 0
+                        continue;
+                    end
+                    return;
+                end
+            end
+        end
+
+        function numeric = extractNumericField(~, entry, candidateNames)
+            numeric = NaN;
+            for idx = 1:numel(candidateNames)
+                name = candidateNames{idx};
+                if isstruct(entry) && isfield(entry, name)
+                    raw = entry.(name);
+                elseif isobject(entry) && isprop(entry, name)
+                    raw = entry.(name);
+                else
+                    continue;
+                end
+
+                if isempty(raw)
+                    continue;
+                end
+
+                if isnumeric(raw)
+                    numeric = double(raw(1));
+                    return;
+                elseif isduration(raw)
+                    numeric = minutes(raw(1));
+                    return;
+                elseif isstring(raw) || ischar(raw)
+                    numeric = str2double(raw(1));
+                    if ~isnan(numeric)
+                        return;
+                    end
+                end
+            end
+        end
+
+        function formatted = formatDrawerTime(~, minutesValue)
+            if isnan(minutesValue)
+                formatted = string('--');
+                return;
+            end
+
+            hours = floor(minutesValue / 60);
+            mins = round(minutesValue - hours * 60);
+            hours = mod(hours, 24);
+            formatted = string(sprintf('%02d:%02d', hours, mins));
+        end
+
+        function logLines = buildDrawerLog(app, details)
+            lines = {};
+
+            if details.Status == "scheduled"
+                lines{end+1} = sprintf('Scheduled in %s from %s to %s.', ...
+                    char(details.Lab), char(details.StartDisplay), char(details.EndDisplay));
+            else
+                lines{end+1} = sprintf('Case %s was not present in the optimized schedule output.', char(details.DisplayCase));
+            end
+
+            solverLines = app.gatherSolverMessages();
+            if ~isempty(solverLines)
+                if ~isempty(lines)
+                    lines{end+1} = '';
+                end
+                lines = [lines, solverLines(:)']; %#ok<AGROW>
+            end
+
+            if isempty(lines)
+                lines = {'No diagnostics available.'};
+            end
+
+            logLines = lines(:);
+        end
+
+        function solverLines = gatherSolverMessages(app)
+            solverLines = {};
+            outcome = app.OptimizationOutcome;
+
+            if isempty(outcome) || ~isstruct(outcome)
+                return;
+            end
+
+            if isfield(outcome, 'phase1') && ~isempty(outcome.phase1)
+                solverLines = [solverLines, app.extractMessagesFromOutcome(outcome.phase1, 'Phase 1')]; %#ok<AGROW>
+            end
+
+            if isfield(outcome, 'phase2') && ~isempty(outcome.phase2)
+                solverLines = [solverLines, app.extractMessagesFromOutcome(outcome.phase2, 'Phase 2')]; %#ok<AGROW>
+            end
+
+            if isfield(outcome, 'output') && ~isempty(outcome.output)
+                solverLines = [solverLines, app.extractMessagesFromOutcome(outcome, 'Run')]; %#ok<AGROW>
+            end
+
+            if isfield(outcome, 'objectiveValue') && ~isempty(outcome.objectiveValue)
+                solverLines{end+1} = sprintf('Objective value: %.3f', outcome.objectiveValue);
+            end
+
+            solverLines = solverLines(:)';
+        end
+
+        function messages = extractMessagesFromOutcome(app, outcomeStruct, label)
+            messages = {};
+            if ~isstruct(outcomeStruct)
+                return;
+            end
+
+            prefix = string(label);
+
+            if isfield(outcomeStruct, 'output') && ~isempty(outcomeStruct.output)
+                solverOutput = outcomeStruct.output;
+                if isstruct(solverOutput)
+                    if isfield(solverOutput, 'message') && ~isempty(solverOutput.message)
+                        messages{end+1} = sprintf('%s: %s', char(prefix), char(string(solverOutput.message)));
+                    end
+                elseif isstring(solverOutput) || ischar(solverOutput)
+                    messages{end+1} = sprintf('%s: %s', char(prefix), char(string(solverOutput)));
+                end
+            end
+
+            if isfield(outcomeStruct, 'exitflag') && ~isempty(outcomeStruct.exitflag)
+                exitInfo = outcomeStruct.exitflag;
+                if isnumeric(exitInfo)
+                    exitText = sprintf('exitflag = %s', mat2str(exitInfo));
+                else
+                    exitText = sprintf('exitflag = %s', char(string(exitInfo)));
+                end
+                messages{end+1} = sprintf('%s: %s', char(prefix), exitText);
+            end
+
+            if isfield(outcomeStruct, 'objectiveValue') && ~isempty(outcomeStruct.objectiveValue)
+                messages{end+1} = sprintf('%s objective: %.3f', char(prefix), outcomeStruct.objectiveValue);
+            end
+
+            messages = messages(:)';
+        end
 
         function updateDropdowns(app)
             % Update operator dropdown
@@ -1467,7 +1972,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function renderEmptySchedule(app, labNumbers)
             % Display empty schedule with time grid and lab rows
-            
+
+            app.closeDrawer();
+
             % Default time window: 6 AM to 8 PM (6 to 20 hours)
             startHour = 6;
             endHour = 20;
@@ -1915,7 +2422,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', titleText, ...
                 'ScheduleAxes', app.ScheduleAxes, ...
-                'ShowLabels', true);
+                'ShowLabels', true, ...
+                'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId));
+
+            if strlength(app.DrawerCurrentCaseId) > 0
+                app.populateDrawer(app.DrawerCurrentCaseId);
+            end
 
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
