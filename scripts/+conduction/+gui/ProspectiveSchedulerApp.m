@@ -14,18 +14,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         RunBtn                      matlab.ui.control.Button
         OptsBtn                     matlab.ui.control.Button
         UndoBtn                     matlab.ui.control.Button
+        TestToggle                  matlab.ui.control.Switch
 
         TabGroup                    matlab.ui.container.TabGroup
         TabAdd                      matlab.ui.container.Tab
         TabList                     matlab.ui.container.Tab
         TabPresets                  matlab.ui.container.Tab
+        TestPanel                   matlab.ui.container.Panel
+        TestPanelLayout             matlab.ui.container.GridLayout
 
         % Add/Edit Tab Components
         DataLoadingLabel            matlab.ui.control.Label
         LoadDataButton              matlab.ui.control.Button
         DataStatusLabel             matlab.ui.control.Label
         TestingSectionLabel         matlab.ui.control.Label
-        TestingModeCheckBox         matlab.ui.control.CheckBox
         TestingDatasetLabel         matlab.ui.control.Label
         TestingDateLabel            matlab.ui.control.Label
         TestingDateDropDown         matlab.ui.control.DropDown
@@ -125,7 +127,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','1x'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','fit','1x'};
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -150,18 +152,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptsBtn.Layout.Column = 4;
             app.OptsBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
 
+            app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
+            app.TestToggle.Layout.Column = 5;
+            app.TestToggle.Items = {'Testing Off','Testing On'};
+            app.TestToggle.ItemsData = {'Off','On'};
+            app.TestToggle.Value = 'Off';
+            app.TestToggle.Orientation = 'horizontal';
+            app.TestToggle.ValueChangedFcn = createCallbackFcn(app, @TestToggleValueChanged, true);
+
             app.UndoBtn = uibutton(app.TopBarLayout, 'push');
             app.UndoBtn.Text = 'Undo';
-            app.UndoBtn.Layout.Column = 5;
+            app.UndoBtn.Layout.Column = 6;
             app.UndoBtn.Enable = 'off';
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
-            app.MiddleLayout.RowHeight = {'1x'};
+            app.MiddleLayout.RowHeight = {'1x','fit'};
             app.MiddleLayout.ColumnWidth = {320, '1x'};
             app.MiddleLayout.ColumnSpacing = 12;
+            app.MiddleLayout.RowSpacing = 12;
             app.MiddleLayout.Padding = [0 0 0 0];
 
             app.TabGroup = uitabgroup(app.MiddleLayout);
@@ -174,11 +185,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             addGrid = app.configureAddTabLayout();
             app.buildDataSection(addGrid);
-            app.buildTestingSection(addGrid);
             app.buildCaseDetailsSection(addGrid);
             app.buildDurationSection(addGrid);
             app.buildConstraintSection(addGrid);
             app.buildOptimizationSection(addGrid);
+
+            app.TestPanel = uipanel(app.MiddleLayout);
+            app.TestPanel.Layout.Row = 2;
+            app.TestPanel.Layout.Column = 1;
+            app.TestPanel.Title = 'Testing';
+            app.TestPanel.Visible = 'off';
+            app.TestPanel.BackgroundColor = app.UIFigure.Color;
+            app.buildTestingPanel();
 
             listGrid = app.configureListTabLayout();
             app.buildCaseManagementSection(listGrid);
@@ -218,6 +236,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.applyDurationThemeColors();
 
+            % Ensure testing controls start hidden/off
+            app.setTestToggleValue(false);
+
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
         end
@@ -225,7 +246,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function addGrid = configureAddTabLayout(app)
             addGrid = uigridlayout(app.TabAdd);
             addGrid.ColumnWidth = {100, 140, 80, '1x'};
-            addGrid.RowHeight = {22, 30, 22, 22, 28, 28, 28, 28, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
+            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
             addGrid.Padding = [10 10 10 10];
             addGrid.RowSpacing = 3;
             addGrid.ColumnSpacing = 6;
@@ -251,58 +272,63 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DataStatusLabel.Layout.Column = [1 4];
         end
 
-        function buildTestingSection(app, leftGrid)
-            app.TestingSectionLabel = uilabel(leftGrid);
-            app.TestingSectionLabel.Text = 'Testing Mode';
-            app.TestingSectionLabel.FontWeight = 'bold';
-            app.TestingSectionLabel.Layout.Row = 4;
-            app.TestingSectionLabel.Layout.Column = [1 4];
+        function buildTestingPanel(app)
+            if isempty(app.TestPanel) || ~isvalid(app.TestPanel)
+                return;
+            end
 
-            app.TestingModeCheckBox = uicheckbox(leftGrid);
-            app.TestingModeCheckBox.Text = 'Enable testing mode';
-            app.TestingModeCheckBox.Layout.Row = 5;
-            app.TestingModeCheckBox.Layout.Column = [1 2];
-            app.TestingModeCheckBox.ValueChangedFcn = createCallbackFcn(app, @TestingModeCheckBoxValueChanged, true);
+            app.TestPanelLayout = uigridlayout(app.TestPanel);
+            app.TestPanelLayout.ColumnWidth = {110, '1x'};
+            app.TestPanelLayout.RowHeight = {22, 32, 32, 'fit'};
+            app.TestPanelLayout.Padding = [10 10 10 10];
+            app.TestPanelLayout.RowSpacing = 6;
+            app.TestPanelLayout.ColumnSpacing = 8;
 
-            app.TestingDatasetLabel = uilabel(leftGrid);
-            app.TestingDatasetLabel.Text = 'Dataset: (none)';
-            app.TestingDatasetLabel.HorizontalAlignment = 'right';
-            app.TestingDatasetLabel.Layout.Row = 5;
-            app.TestingDatasetLabel.Layout.Column = [3 4];
+            app.TestingSectionLabel = uilabel(app.TestPanelLayout);
+            app.TestingSectionLabel.Text = 'Dataset';
+            app.TestingSectionLabel.Layout.Row = 1;
+            app.TestingSectionLabel.Layout.Column = 1;
+            app.TestingSectionLabel.HorizontalAlignment = 'left';
 
-            app.TestingDateLabel = uilabel(leftGrid);
+            app.TestingDatasetLabel = uilabel(app.TestPanelLayout);
+            app.TestingDatasetLabel.Text = '(none)';
+            app.TestingDatasetLabel.Layout.Row = 1;
+            app.TestingDatasetLabel.Layout.Column = 2;
+            app.TestingDatasetLabel.HorizontalAlignment = 'left';
+
+            app.TestingDateLabel = uilabel(app.TestPanelLayout);
             app.TestingDateLabel.Text = 'Historical day:';
-            app.TestingDateLabel.Layout.Row = 6;
+            app.TestingDateLabel.Layout.Row = 2;
             app.TestingDateLabel.Layout.Column = 1;
 
-            app.TestingDateDropDown = uidropdown(leftGrid);
+            app.TestingDateDropDown = uidropdown(app.TestPanelLayout);
             app.TestingDateDropDown.Items = {'Select a date'};
             app.TestingDateDropDown.Value = 'Select a date';
             app.TestingDateDropDown.UserData = datetime.empty;
             app.TestingDateDropDown.Enable = 'off';
-            app.TestingDateDropDown.Layout.Row = 6;
-            app.TestingDateDropDown.Layout.Column = [2 4];
+            app.TestingDateDropDown.Layout.Row = 2;
+            app.TestingDateDropDown.Layout.Column = 2;
             app.TestingDateDropDown.ValueChangedFcn = createCallbackFcn(app, @TestingDateDropDownValueChanged, true);
 
-            app.TestingRunButton = uibutton(leftGrid, 'push');
+            app.TestingRunButton = uibutton(app.TestPanelLayout, 'push');
             app.TestingRunButton.Text = 'Run Test Day';
             app.TestingRunButton.Enable = 'off';
-            app.TestingRunButton.Layout.Row = 7;
-            app.TestingRunButton.Layout.Column = [1 2];
+            app.TestingRunButton.Layout.Row = 3;
+            app.TestingRunButton.Layout.Column = 1;
             app.TestingRunButton.ButtonPushedFcn = createCallbackFcn(app, @TestingRunButtonPushed, true);
 
-            app.TestingExitButton = uibutton(leftGrid, 'push');
+            app.TestingExitButton = uibutton(app.TestPanelLayout, 'push');
             app.TestingExitButton.Text = 'Exit Testing Mode';
             app.TestingExitButton.Enable = 'off';
-            app.TestingExitButton.Layout.Row = 7;
-            app.TestingExitButton.Layout.Column = [3 4];
+            app.TestingExitButton.Layout.Row = 3;
+            app.TestingExitButton.Layout.Column = 2;
             app.TestingExitButton.ButtonPushedFcn = createCallbackFcn(app, @TestingExitButtonPushed, true);
 
-            app.TestingInfoLabel = uilabel(leftGrid);
+            app.TestingInfoLabel = uilabel(app.TestPanelLayout);
             app.TestingInfoLabel.Text = 'Testing mode disabled.';
             app.TestingInfoLabel.FontColor = [0.4 0.4 0.4];
-            app.TestingInfoLabel.Layout.Row = 8;
-            app.TestingInfoLabel.Layout.Column = [1 4];
+            app.TestingInfoLabel.Layout.Row = 4;
+            app.TestingInfoLabel.Layout.Column = [1 2];
             app.TestingInfoLabel.WordWrap = 'on';
         end
 
@@ -783,12 +809,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.LoadDataButton.Enable = 'on';
         end
 
-        function TestingModeCheckBoxValueChanged(app, event)
+        function TestToggleValueChanged(app, ~)
             if app.IsSyncingTestingToggle
                 return;
             end
+            isOn = strcmp(app.TestToggle.Value, 'On');
+            if ~isempty(app.TestPanel) && isvalid(app.TestPanel)
+                panelState = 'off';
+                if isOn
+                    panelState = 'on';
+                end
+                app.TestPanel.Visible = panelState;
+            end
 
-            if app.TestingModeCheckBox.Value
+            if isOn
                 app.enterTestingMode();
             else
                 app.exitTestingMode();
@@ -876,15 +910,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            displayText = 'Dataset: (none)';
+            displayText = '(none)';
 
             if ~isempty(app.CaseManager) && app.CaseManager.hasClinicalData()
                 dataPath = app.CaseManager.getClinicalDataPath();
                 if strlength(dataPath) > 0
                     [~, name, ext] = fileparts(dataPath);
-                    displayText = sprintf('Dataset: %s%s', name, ext);
+                    displayText = sprintf('%s%s', name, ext);
                 else
-                    displayText = 'Dataset: (active collection)';
+                    displayText = '(active collection)';
                 end
             end
 
@@ -1018,7 +1052,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.TestingAvailableDates = app.CaseManager.getAvailableTestingDates();
             else
                 uialert(app.UIFigure, 'Load clinical data before enabling testing mode.', 'Testing Mode');
-                app.setTestingModeCheckbox(false);
+                app.setTestToggleValue(false);
                 app.updateTestingActionStates();
                 app.updateTestingInfoText();
                 return;
@@ -1032,7 +1066,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 if strcmp(answer, 'Clear Cases')
                     app.CaseManager.clearAllCases();
                 else
-                    app.setTestingModeCheckbox(false);
+                    app.setTestToggleValue(false);
                     app.updateTestingActionStates();
                     app.updateTestingInfoText();
                     return;
@@ -1045,7 +1079,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~hasDates
                 uialert(app.UIFigure, 'The loaded dataset does not contain any days with historical cases.', ...
                     'Testing Mode');
-                app.setTestingModeCheckbox(false);
+                app.setTestToggleValue(false);
                 app.updateTestingActionStates();
                 app.updateTestingInfoText();
                 return;
@@ -1062,11 +1096,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CurrentTestingSummary = struct();
             app.updateTestingActionStates();
             app.updateTestingInfoText();
+            app.setTestToggleValue(true);
         end
 
         function exitTestingMode(app)
             if ~app.IsTestingModeActive
-                app.setTestingModeCheckbox(false);
+                app.setTestToggleValue(false);
                 app.updateTestingActionStates();
                 app.updateTestingInfoText();
                 return;
@@ -1082,7 +1117,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.IsTestingModeActive = false;
-            app.setTestingModeCheckbox(false);
+            app.setTestToggleValue(false);
             app.setManualInputsEnabled(true);
             app.refreshDurationOptions();
 
@@ -1096,13 +1131,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateTestingInfoText();
         end
 
-        function setTestingModeCheckbox(app, value)
-            if isempty(app.TestingModeCheckBox) || ~isvalid(app.TestingModeCheckBox)
+        function setTestToggleValue(app, value)
+            if isempty(app.TestToggle) || ~isvalid(app.TestToggle)
                 return;
             end
 
             app.IsSyncingTestingToggle = true;
-            app.TestingModeCheckBox.Value = logical(value);
+            if value
+                app.TestToggle.Value = 'On';
+            else
+                app.TestToggle.Value = 'Off';
+            end
+            if ~isempty(app.TestPanel) && isvalid(app.TestPanel)
+                panelState = 'off';
+                if value
+                    panelState = 'on';
+                end
+                app.TestPanel.Visible = panelState;
+            end
             app.IsSyncingTestingToggle = false;
         end
 
