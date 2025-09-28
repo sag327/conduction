@@ -2628,6 +2628,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'ShowLabels', true, ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId));
 
+            app.styleOperatorTimelineAxes();
+
             if app.DrawerWidth > 1 && strlength(app.DrawerCurrentCaseId) > 0
                 app.populateDrawer(app.DrawerCurrentCaseId);
             end
@@ -2721,15 +2723,49 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 ax = app.UtilAxes;
                 cla(ax);
                 ax.Color = [0 0 0];
-                ax.XColor = [0.3 0.3 0.3];
-                ax.YColor = [0.3 0.3 0.3];
+                ax.XColor = [0.5 0.5 0.5];
+                ax.YColor = [0.5 0.5 0.5];
                 ax.XAxis.Visible = 'off';
                 ax.YAxis.Visible = 'off';
-                title(ax, 'Operator Timeline', 'Color', [0.8 0.8 0.8]);
+                title(ax, 'Operator Timeline', 'Color', [0.9 0.9 0.9]);
                 text(ax, 0.5, 0.5, 'Run the optimizer to view operator timelines.', 'Units', 'normalized', ...
                     'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.7 0.7 0.7], ...
                     'Interpreter', 'none');
             end
+        end
+
+        function styleOperatorTimelineAxes(app)
+            if isempty(app.UtilAxes) || ~isvalid(app.UtilAxes)
+                return;
+            end
+
+            ax = app.UtilAxes;
+            ax.Color = [0 0 0];
+            ax.XColor = [0.85 0.85 0.85];
+            ax.YColor = [0.85 0.85 0.85];
+            ax.GridColor = [0.35 0.35 0.35];
+            ax.LineWidth = 1;
+
+            if ~isempty(ax.Title)
+                ax.Title.Color = [0.95 0.95 0.95];
+            end
+            if ~isempty(ax.XLabel)
+                ax.XLabel.Color = [0.9 0.9 0.9];
+            end
+            if ~isempty(ax.YLabel)
+                ax.YLabel.Color = [0.9 0.9 0.9];
+            end
+
+            childText = findobj(ax, 'Type', 'Text');
+            for idx = 1:numel(childText)
+                try
+                    childText(idx).Color = [0.95 0.95 0.95];
+                catch
+                end
+            end
+
+            ax.GridAlpha = 0.3;
+            ax.MinorGridAlpha = 0.2;
         end
         function value = safeField(~, s, fieldName, defaultValue)
             if isstruct(s) && isfield(s, fieldName) && ~isempty(s.(fieldName))
