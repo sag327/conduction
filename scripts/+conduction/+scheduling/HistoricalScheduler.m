@@ -266,11 +266,21 @@ classdef HistoricalScheduler
                 tf = true;
                 return;
             end
-            tf = strcmp(caseStruct.admissionStatus, 'Hospital Outpatient Surgery (Amb Proc)');
+
+            statusValue = lower(strtrim(string(caseStruct.admissionStatus)));
+            outpatientValues = ["outpatient", "ambulatory", "hospital outpatient surgery (amb proc)"];
+            tf = any(strcmp(statusValue, outpatientValues));
         end
 
         function tf = isInpatient(caseStruct)
-            tf = isfield(caseStruct, 'admissionStatus') && strcmp(caseStruct.admissionStatus, 'Inpatient');
+            if ~isfield(caseStruct, 'admissionStatus') || isempty(caseStruct.admissionStatus)
+                tf = false;
+                return;
+            end
+
+            statusValue = lower(strtrim(string(caseStruct.admissionStatus)));
+            inpatientValues = ["inpatient", "ip"];
+            tf = any(strcmp(statusValue, inpatientValues));
         end
     end
 

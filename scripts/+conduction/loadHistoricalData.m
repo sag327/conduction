@@ -14,6 +14,12 @@ arguments
     filePath (1,1) string = "clinicalData/testProcedureDurations-7day.xlsx"
 end
 
+% Basic validation for clearer errors when called programmatically
+if ~isfile(filePath)
+    error('loadHistoricalData:FileNotFound', ...
+        'Historical data file not found: %s', filePath);
+end
+
 rawTable = readRawHistoricalTable(filePath);
 historicalTable = normaliseHistoricalTable(rawTable);
 

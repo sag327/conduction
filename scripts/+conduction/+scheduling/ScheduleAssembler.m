@@ -116,6 +116,18 @@ classdef ScheduleAssembler
             resultsStruct.scheduleStart = min(labStartMinutes);
             resultsStruct.scheduleEnd = max([labStartMinutes(:); allEndTimes(:)]);
             resultsStruct.makespan = resultsStruct.scheduleEnd - resultsStruct.scheduleStart;
+            resultsStruct.labStartMinutes = labStartMinutes;
+
+            labEndMinutes = labStartMinutes;
+            for labIdx = 1:numLabs
+                labCases = scheduleStruct.labs{labIdx};
+                if isempty(labCases)
+                    labEndMinutes(labIdx) = labStartMinutes(labIdx);
+                else
+                    labEndMinutes(labIdx) = max([labCases.endTime]);
+                end
+            end
+            resultsStruct.labEndMinutes = labEndMinutes;
 
             % Convert to DailySchedule for downstream usage
             dailySchedule = conduction.DailySchedule.fromLegacyStruct(scheduleStruct, resultsStruct);
