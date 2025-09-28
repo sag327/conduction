@@ -20,13 +20,6 @@ function visualizeDailySchedule(scheduleInput, varargin)
     [dailySchedule, remaining] = resolveDailySchedule(scheduleInput, varargin{:});
     opts = parseOptions(remaining{:});
 
-    themeOption = lower(string(opts.Theme));
-    if themeOption == "auto"
-        themeOption = "light";
-    elseif themeOption ~= "dark"
-        themeOption = "light";
-    end
-
     labAssignments = dailySchedule.labAssignments();
     if isempty(labAssignments) || all(cellfun(@isempty, labAssignments))
         fprintf('No schedule data to visualize.\n');
@@ -54,18 +47,13 @@ function visualizeDailySchedule(scheduleInput, varargin)
     metrics = dailySchedule.metrics();
     labLabels = resolveLabLabels(dailySchedule, numel(labAssignments));
 
-    [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts, themeOption);
-
-    backgroundColor = [1 1 1];
-    if themeOption == "dark"
-        backgroundColor = [0 0 0];
-    end
+    [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts);
 
     cla(axSchedule);
-    set(axSchedule, 'Visible', 'on', 'Color', backgroundColor);
+    set(axSchedule, 'Visible', 'on', 'Color', [0 0 0]);
     if ~isempty(axOperators)
         cla(axOperators);
-        set(axOperators, 'Visible', 'on', 'Color', backgroundColor);
+        set(axOperators, 'Visible', 'on', 'Color', [0 0 0]);
     end
 
     hold(axSchedule, 'on');
@@ -93,12 +81,6 @@ function visualizeDailySchedule(scheduleInput, varargin)
     if opts.Debug
         logDebugSummary(caseTimelines, metrics, operatorData);
     end
-
-    applyVisualizationTheme(axSchedule, themeOption);
-    if ~isempty(axOperators)
-        applyVisualizationTheme(axOperators, themeOption);
-    end
-
     drawnow limitrate;
 end
 
@@ -135,13 +117,12 @@ function opts = parseOptions(varargin)
     addParameter(p, 'Debug', false, @islogical);
     addParameter(p, 'ScheduleAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
-    addParameter(p, 'Theme', 'dark', @(s) ischarLike(s) || isstring(s));
     addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
     parse(p, varargin{:});
     opts = p.Results;
 end
  
-function [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts, themeOption)
+function [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts)
     figHandle = [];
     axSchedule = [];
     axOperators = [];
@@ -175,17 +156,12 @@ function [figHandle, axSchedule, axOperators] = resolvePlotTargets(opts, themeOp
         return;
     end
 
-    figColor = [1 1 1];
-    if themeOption == "dark"
-        figColor = [0 0 0];
-    end
-
     figHandle = figure('Name', 'Daily Schedule Visualization', ...
         'Position', [100, 100, opts.FigureSize(1), opts.FigureSize(2)], ...
-        'Color', figColor);
+        'Color', [0 0 0]);
 
-    axSchedule = subplot(3, 1, [1 2], 'Parent', figHandle, 'Color', figColor);
-    axOperators = subplot(3, 1, 3, 'Parent', figHandle, 'Color', figColor);
+    axSchedule = subplot(3, 1, [1 2], 'Parent', figHandle, 'Color', [0 0 0]);
+    axOperators = subplot(3, 1, 3, 'Parent', figHandle, 'Color', [0 0 0]);
 end
 
 function caseTimelines = buildCaseTimelines(dailySchedule, includeTurnover)
@@ -503,63 +479,6 @@ function labelColor = applyAxisTextStyle(ax)
     end
 end
 
-function applyVisualizationTheme(ax, themeOption)
-    if isempty(ax) || ~isgraphics(ax)
-        return;
-    end
-
-    themeOption = lower(string(themeOption));
-
-    switch themeOption
-        case "dark"
-            background = [0 0 0];
-            axisColor = [0.9 0.9 0.9];
-            gridColor = [0.35 0.35 0.35];
-            minorGridColor = [0.25 0.25 0.25];
-            titleColor = [1 1 1];
-            labelColor = [0.95 0.95 0.95];
-        otherwise
-            background = [1 1 1];
-            axisColor = [0.2 0.2 0.2];
-            gridColor = [0.85 0.85 0.85];
-            minorGridColor = [0.92 0.92 0.92];
-            titleColor = [0 0 0];
-            labelColor = [0 0 0];
-    end
-
-    set(ax, 'Color', background, 'XColor', axisColor, 'YColor', axisColor, ...
-        'GridColor', gridColor, 'MinorGridColor', minorGridColor, 'LineWidth', 1);
-
-    try
-        ax.GridAlpha = 0.3;
-        ax.MinorGridAlpha = 0.2;
-    catch
-    end
-
-    if ~isempty(ax.Title) && isprop(ax.Title, 'Color')
-        ax.Title.Color = titleColor;
-    end
-    if ~isempty(ax.XLabel) && isprop(ax.XLabel, 'Color')
-        ax.XLabel.Color = labelColor;
-    end
-    if ~isempty(ax.YLabel) && isprop(ax.YLabel, 'Color')
-        ax.YLabel.Color = labelColor;
-    end
-
-    if themeOption == "dark"
-        textObjs = findobj(ax, 'Type', 'Text');
-        for idx = 1:numel(textObjs)
-            try
-                textObjs(idx).Color = [1 1 1];
-                if isprop(textObjs(idx), 'BackgroundColor') && ~isempty(textObjs(idx).BackgroundColor)
-                    textObjs(idx).BackgroundColor = [0.2 0.2 0.2];
-                end
-            catch
-            end
-        end
-    end
-end
-
 function labelColor = determineAxisLabelColor(ax)
     bgColor = get(ax, 'Color');
     rgb = normalizeColorSpec(bgColor);
@@ -703,15 +622,15 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
             if durationHours > 0.25
                 text(ax, (startMin + endMin) / 120, yPos, sprintf('%.1fh', durationHours), ...
                     'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                    'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [1, 1, 1]);
+                    'FontSize', fontSize-1, 'Color', [0.85, 0.85, 0.85]);
             end
         end
 
         if opInfo.totalIdle > 3
             text(ax, opInfo.lastEnd/60 + 0.2, yPos, sprintf('Total Idle: %.1fh', opInfo.totalIdle/60), ...
                 'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle', ...
-                'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [1, 1, 1], ...
-                'BackgroundColor', [0.2, 0.2, 0.2], 'EdgeColor', [0.7, 0.7, 0.7], 'Margin', 4);
+                'FontSize', fontSize-1, 'FontWeight', 'bold', 'Color', [1, 0.6, 0.6], ...
+                'BackgroundColor', [0.2, 0.2, 0.2]);
         end
     end
 
