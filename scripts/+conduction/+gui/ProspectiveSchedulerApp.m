@@ -123,7 +123,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
             app.UIFigure.Position = [100 100 1400 900];
-            app.UIFigure.Name = 'Prospective Scheduler';
+            versionInfo = conduction.version();
+            app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
 
             % Root layout: header, content, footer
@@ -811,7 +812,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.onCaseManagerChanged();
 
             % Update window title with target date
-            app.UIFigure.Name = sprintf('Prospective Scheduler - %s', datestr(targetDate, 'mmm dd, yyyy'));
+            versionInfo = conduction.version();
+            app.UIFigure.Name = sprintf('Conduction v%s - %s', versionInfo.Version, datestr(targetDate, 'mmm dd, yyyy'));
         end
 
         function delete(app)
