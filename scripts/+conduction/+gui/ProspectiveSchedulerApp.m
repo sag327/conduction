@@ -811,9 +811,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.refreshTestingAvailability();
             app.onCaseManagerChanged();
 
-            % Update window title with target date
+            % Update window title (keep version only, no date)
             versionInfo = conduction.version();
-            app.UIFigure.Name = sprintf('Conduction v%s - %s', versionInfo.Version, datestr(targetDate, 'mmm dd, yyyy'));
+            app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
         end
 
         function delete(app)
