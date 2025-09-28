@@ -21,6 +21,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestPanel                   matlab.ui.container.Panel
         TestPanelLayout             matlab.ui.container.GridLayout
 
+        CanvasTabGroup              matlab.ui.container.TabGroup
+        CanvasScheduleTab           matlab.ui.container.Tab
+        CanvasAnalyzeTab            matlab.ui.container.Tab
+        CanvasScheduleLayout        matlab.ui.container.GridLayout
+        CanvasAnalyzeLayout         matlab.ui.container.GridLayout
+        
         Drawer                      matlab.ui.container.Panel
         DrawerLayout                matlab.ui.container.GridLayout
         DrawerHeaderLabel           matlab.ui.control.Label
@@ -102,6 +108,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
+        UtilAxes                    matlab.ui.control.UIAxes
         KPI1                        matlab.ui.control.Label
         KPI2                        matlab.ui.control.Label
         KPI3                        matlab.ui.control.Label
@@ -226,14 +233,48 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             optimizationGrid = app.configureOptimizationTabLayout();
             app.buildOptimizationTab(optimizationGrid);
 
-            app.ScheduleAxes = uiaxes(app.MiddleLayout);
+            app.CanvasTabGroup = uitabgroup(app.MiddleLayout);
+            app.CanvasTabGroup.Layout.Row = 1;
+            app.CanvasTabGroup.Layout.Column = 2;
+            app.CanvasTabGroup.SelectionChangedFcn = createCallbackFcn(app, @CanvasTabGroupSelectionChanged, true);
+
+            app.CanvasScheduleTab = uitab(app.CanvasTabGroup, 'Title', 'Schedule');
+            app.CanvasAnalyzeTab = uitab(app.CanvasTabGroup, 'Title', 'Analyze');
+
+            app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
+            app.CanvasScheduleLayout.RowHeight = {'1x'};
+            app.CanvasScheduleLayout.ColumnWidth = {'1x'};
+            app.CanvasScheduleLayout.Padding = [0 0 0 0];
+            app.CanvasScheduleLayout.RowSpacing = 0;
+            app.CanvasScheduleLayout.ColumnSpacing = 0;
+
+            app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
             app.ScheduleAxes.Layout.Row = 1;
-            app.ScheduleAxes.Layout.Column = 2;
+            app.ScheduleAxes.Layout.Column = 1;
             app.ScheduleAxes.Title.String = '';
             app.ScheduleAxes.Title.FontWeight = 'bold';
             app.ScheduleAxes.Title.FontSize = 14;
             app.ScheduleAxes.Box = 'on';
             app.ScheduleAxes.Color = [0 0 0];
+
+            app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
+            app.CanvasAnalyzeLayout.RowHeight = {'1x'};
+            app.CanvasAnalyzeLayout.ColumnWidth = {'1x'};
+            app.CanvasAnalyzeLayout.Padding = [12 12 12 12];
+            app.CanvasAnalyzeLayout.RowSpacing = 0;
+            app.CanvasAnalyzeLayout.ColumnSpacing = 0;
+
+            app.UtilAxes = uiaxes(app.CanvasAnalyzeLayout);
+            app.UtilAxes.Layout.Row = 1;
+            app.UtilAxes.Layout.Column = 1;
+            app.UtilAxes.Color = [0 0 0];
+            app.UtilAxes.Box = 'on';
+            app.UtilAxes.Title.String = 'Operator Utilization';
+            app.UtilAxes.Title.FontWeight = 'bold';
+            app.UtilAxes.Title.FontSize = 14;
+            app.UtilAxes.Visible = 'on';
+
+            app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
             app.Drawer = uipanel(app.MiddleLayout);
             app.Drawer.Layout.Row = [1 3];
@@ -1126,6 +1167,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function DrawerCloseButtonPushed(app, ~)
             app.closeDrawer();
+        end
+
+        function CanvasTabGroupSelectionChanged(app, event)
+            if isempty(event) || ~isprop(event, 'NewValue') || isempty(event.NewValue)
+                return;
+            end
+
+            if event.NewValue == app.CanvasAnalyzeTab
+                if ~isempty(app.UtilAxes) && isvalid(app.UtilAxes)
+                    app.drawUtilization(app.UtilAxes);
+                end
+            end
         end
 
     end
@@ -2152,6 +2205,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ylabel(ax, '', 'Color', axisColor);
             
             hold(ax, 'off');
+
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                    app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
+                app.drawUtilization(app.UtilAxes);
+            end
         end
 
         function addHourGridToAxes(app, ax, startHour, endHour, numLabs)
@@ -2564,6 +2622,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.4 0.4 0.4]);
             end
 
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                    app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
+                app.drawUtilization(app.UtilAxes);
+            end
+
         end
 
         function renderOptimizedSchedule(app, dailySchedule, metadata)
@@ -2590,6 +2653,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
             app.updateKPIBar(dailySchedule);
+
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                    app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
+                app.drawUtilization(app.UtilAxes);
+            end
         end
 
         function scheduleOptions = buildSchedulingOptions(app)
@@ -2664,6 +2732,184 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.KPI5.Text = 'Flip ratio: --';
             else
                 app.KPI5.Text = sprintf('Flip ratio: %.0f%%%%', flipRatio * 100);
+            end
+        end
+
+        function drawUtilization(app, ax)
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            cla(ax);
+            hold(ax, 'off');
+            ax.Color = [0 0 0];
+            ax.XColor = [0.85 0.85 0.85];
+            ax.YColor = [0.85 0.85 0.85];
+            ax.GridColor = [0.3 0.3 0.3];
+            ax.Box = 'on';
+            ax.XAxis.Visible = 'on';
+            ax.YAxis.Visible = 'on';
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                app.renderUtilizationPlaceholder(ax, 'Run the optimizer to analyze operator utilization.');
+                return;
+            end
+
+            cases = app.OptimizedSchedule.cases();
+            if isempty(cases)
+                app.renderUtilizationPlaceholder(ax, 'No cases available for utilization analysis.');
+                return;
+            end
+
+            operatorNames = string({cases.operator});
+            operatorNames = operatorNames(strlength(operatorNames) > 0);
+            if isempty(operatorNames)
+                app.renderUtilizationPlaceholder(ax, 'Operators not specified in schedule results.');
+                return;
+            end
+
+            uniqueOps = unique(operatorNames, 'stable');
+            opIndex = containers.Map(cellstr(uniqueOps), num2cell(1:numel(uniqueOps)));
+
+            procMinutes = zeros(numel(uniqueOps), 1);
+            for caseIdx = 1:numel(cases)
+                opName = string(cases(caseIdx).operator);
+                if strlength(opName) == 0
+                    continue;
+                end
+                key = char(opName);
+                if ~isKey(opIndex, key)
+                    continue;
+                end
+                procMinutes(opIndex(key)) = procMinutes(opIndex(key)) + app.extractProcedureMinutes(cases(caseIdx));
+            end
+
+            metrics = conduction.analytics.OperatorAnalyzer.analyze(app.OptimizedSchedule);
+            idleMinutes = zeros(numel(uniqueOps), 1);
+            overtimeMinutes = zeros(numel(uniqueOps), 1);
+            if isfield(metrics, 'operatorMetrics')
+                opMetrics = metrics.operatorMetrics;
+                seriesNames = {'totalIdleTime', 'overtime'};
+                for seriesIdx = 1:numel(seriesNames)
+                    mapName = seriesNames{seriesIdx};
+                    if ~isfield(opMetrics, mapName)
+                        continue;
+                    end
+                    sourceMap = opMetrics.(mapName);
+                    for opIdx = 1:numel(uniqueOps)
+                        key = char(uniqueOps(opIdx));
+                        if sourceMap.isKey(key)
+                            switch mapName
+                                case 'totalIdleTime'
+                                    idleMinutes(opIdx) = sourceMap(key);
+                                case 'overtime'
+                                    overtimeMinutes(opIdx) = sourceMap(key);
+                            end
+                        end
+                    end
+                end
+            end
+
+            totalMinutes = procMinutes + idleMinutes + overtimeMinutes;
+            if all(totalMinutes == 0)
+                app.renderUtilizationPlaceholder(ax, 'Utilization metrics unavailable for the current schedule.');
+                return;
+            end
+
+            stackedData = [procMinutes, idleMinutes, overtimeMinutes] / 60; % minutes to hours
+            barHandles = bar(ax, stackedData, 'stacked');
+            if numel(barHandles) >= 1
+                barHandles(1).FaceColor = [0.2 0.6 0.9];
+            end
+            if numel(barHandles) >= 2
+                barHandles(2).FaceColor = [0.95 0.6 0.2];
+            end
+            if numel(barHandles) >= 3
+                barHandles(3).FaceColor = [0.6 0.3 0.8];
+            end
+
+            ax.XTick = 1:numel(uniqueOps);
+            ax.XTickLabel = cellstr(uniqueOps);
+            ax.XTickLabelRotation = 30;
+            ylabel(ax, 'Hours');
+            title(ax, 'Operator Utilization (Procedure vs Idle vs Overtime)', 'Color', [0.9 0.9 0.9]);
+            legend(ax, {'Procedure', 'Idle', 'Overtime'}, 'TextColor', [0.9 0.9 0.9], ...
+                'Location', 'northoutside', 'Orientation', 'horizontal');
+            grid(ax, 'on');
+        end
+
+        function renderUtilizationPlaceholder(app, ax, message)
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+            cla(ax);
+            ax.Color = [0 0 0];
+            ax.XColor = [0.3 0.3 0.3];
+            ax.YColor = [0.3 0.3 0.3];
+            ax.XAxis.Visible = 'off';
+            ax.YAxis.Visible = 'off';
+            text(ax, 0.5, 0.5, message, 'Units', 'normalized', ...
+                'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.7 0.7 0.7], ...
+                'Interpreter', 'none');
+        end
+
+        function minutes = extractProcedureMinutes(~, caseEntry)
+            minutes = NaN;
+            candidateFields = {'procTime', 'procedureMinutes', 'procedureDuration', 'durationMinutes'};
+            for idx = 1:numel(candidateFields)
+                name = candidateFields{idx};
+                if isstruct(caseEntry) && isfield(caseEntry, name) && ~isempty(caseEntry.(name))
+                    minutes = double(caseEntry.(name));
+                    break;
+                elseif isobject(caseEntry) && isprop(caseEntry, name)
+                    value = caseEntry.(name);
+                    if ~isempty(value)
+                        minutes = double(value);
+                        break;
+                    end
+                end
+            end
+
+            if isnan(minutes)
+                startFields = {'procStartTime', 'startTime'};
+                endFields = {'procEndTime', 'endTime'};
+                startMinutes = NaN;
+                endMinutes = NaN;
+                for idx = 1:numel(startFields)
+                    name = startFields{idx};
+                    if isstruct(caseEntry) && isfield(caseEntry, name) && ~isempty(caseEntry.(name))
+                        startMinutes = double(caseEntry.(name));
+                        break;
+                    elseif isobject(caseEntry) && isprop(caseEntry, name)
+                        value = caseEntry.(name);
+                        if ~isempty(value)
+                            startMinutes = double(value);
+                            break;
+                        end
+                    end
+                end
+
+                for idx = 1:numel(endFields)
+                    name = endFields{idx};
+                    if isstruct(caseEntry) && isfield(caseEntry, name) && ~isempty(caseEntry.(name))
+                        endMinutes = double(caseEntry.(name));
+                        break;
+                    elseif isobject(caseEntry) && isprop(caseEntry, name)
+                        value = caseEntry.(name);
+                        if ~isempty(value)
+                            endMinutes = double(value);
+                            break;
+                        end
+                    end
+                end
+
+                if ~isnan(startMinutes) && ~isnan(endMinutes)
+                    minutes = max(0, endMinutes - startMinutes);
+                end
+            end
+
+            if isnan(minutes)
+                minutes = 0;
             end
         end
 

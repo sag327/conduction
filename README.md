@@ -1,91 +1,121 @@
-# EP Scheduling Refactor
+# Conduction
 
-## Overview
-This repository tracks the refactor of a mature MATLAB workflow used to plan and analyze electrophysiology (EP) lab schedules. The legacy code in `oldScripts/` loads historical case data, rebuilds day-by-day lab schedules, optimizes future schedules with integer programming, and produces analytics on lab utilization, operator idle time, and procedure throughput. The goal of this project is to replace that MATLAB toolchain with a modern, modular implementation while preserving the validated behaviour and outputs.
+Conduction is a MATLAB toolbox for scheduling and analysing electrophysiology (EP) lab activity. It combines an interactive GUI for prospective planning with a composable optimisation and analytics library that can be scripted for batch experimentation.
 
-## What the legacy MATLAB suite does
-- **Data ingestion** – `loadHistoricalDataFromFile.m` reads historical procedure datasets and supporting lab metadata into rich MATLAB structures keyed by case, operator, and date.
-- **Schedule reconstruction** – Utilities such as `reconstructHistoricalSchedule.m`, `getCasesByDate.m`, and `createHistoricalScheduleContainer` rebuild daily schedules so they can be analysed or used as baselines for optimization.
-- **Optimization engine** – `optimizeDailySchedule.m` formulates an integer linear program to assign cases to labs, balance operator workloads, respect turnover times, and optionally prioritise outpatient cases.
-- **Analysis & reporting** – `analyzeHistoricalData.m` and `analyzeStatisticalDataset.m` generate comprehensive metrics (idle time, lab flips, throughput, surgeon/operator stats) and can persist structured reports for downstream visualization.
-- **Experiment automation** – Scripts such as `runSchedulingExperiment.m`, `configureExperiment.m`, and `batchProcessHistoricalCases.m` coordinate multi-day experiments, capture results, and write summaries into `.mat` files for further analysis.
+## Feature Highlights
+- **Prospective Scheduler GUI** – Build a day-of-surgery plan, optimise with ILP, and inspect results without leaving MATLAB.
+- **Right‑hand case inspector** – Click any schedule block to view detailed timing, lab assignment, and solver diagnostics in a slide‑in drawer.
+- **Analyze tab** – Switch to the utilisation view to plot operator procedure, idle, and overtime hours for the optimised day.
+- **Configurable optimisation engine** – Tune lab counts, turnover/setup/post durations, objective metrics, admission defaults, and filtering straight from the UI (or scripts).
+- **Rich analytics** – Daily and operator analysers expose KPIs (idle time, flips, makespan, utilisation ratios) for GUI display or downstream reporting.
+- **Dark‑mode visualisation** – `conduction.visualizeDailySchedule` supports embedding into existing axes (used by the GUI) or standalone figure generation.
 
-Understanding these behaviours is the baseline for the refactor: each new module must accept the same inputs, produce comparable metrics, and support the same experiment flows.
+## Requirements
+- MATLAB R2023b or newer (tested on R2024a).
+- Optimization Toolbox (required by the ILP scheduler).
+- Access to the project root on the MATLAB path.
 
-## Repository layout
-- `oldScripts/` – Reference MATLAB implementation to be dissected and rewritten.
-- `clinicalData/` – Sample datasets, lab mappings, and historical experiment outputs the refactor will use for parity testing.
-- `scripts/` – Placeholder for new refactored code (language/architecture to be defined as the project evolves). Legacy MATLAB scripts remain in the original project at `../epScheduling/scripts` and can be referenced via `addpath` when comparisons are needed.
+## Setup
+1. Clone the repository and open MATLAB in the project root.
+2. Add the `scripts` folder to the path (once per session):
+   ```matlab
+   addpath(genpath(fullfile(pwd, 'scripts')));
+   ```
+3. Optional: create a startup script or save the path for future sessions (`savepath`).
+
+## Launching the GUI
+```matlab
+clear classes
+conduction.launchSchedulerGUI
+```
+
+### Layout
+- **Left column** – Case creation (Add/Edit), queue management (Cases tab), and optimisation parameters.
+- **Top bar** – Date picker, optimisation trigger, testing toggle, and undo placeholder.
+- **Center canvas** – Two-tab control with:
+  - **Schedule** tab: the optimised day rendered by `visualizeDailySchedule`.
+  - **Analyze** tab: operator utilisation bar chart (procedure, idle, overtime hours).
+- **Drawer inspector** – Click any schedule block to reveal case, timing, lab assignment, and solver logs.
+- **KPI footer** – Live metrics for case count, last-out, operator idle, lab idle, and flip ratio.
+
+### Typical Workflow
+1. Load historical/clinical data (optional) to seed procedure statistics.
+2. Add prospective cases (operator, procedure, duration selection, constraints).
+3. Adjust optimisation options (labs, turnover, objective metric, admission defaults).
+4. Click **Optimize Schedule**.
+5. Review the **Schedule** tab; click blocks to inspect details in the drawer.
+6. Switch to **Analyze** to compare operator utilisation.
+7. Iterate on options or case mix as needed.
+
+### Drawer Tips
+- Case drawer opens automatically on schedule block click and animates closed via the **Close** button or when a new optimisation is required.
+- Diagnostics include objective value, exit flags, and solver messages (two-phase runs are summarised per phase).
+
+## Command-Line Usage
+
+### Optimise a Single Day Programmatically
+```matlab
+% Prepare cases (struct array with required optimisation fields)
+cases = conduction.examples.sampleCases();   % replace with your loader
+
+% Configure scheduling options
+options = conduction.scheduling.SchedulingOptions.fromArgs( ...
+    'NumLabs', 4, ...
+    'TurnoverTime', 25, ...
+    'OptimizationMetric', "operatorIdle", ...
+    'PrioritizeOutpatient', true);
+
+% Run the optimiser
+[dailySchedule, outcome] = conduction.optimizeDailySchedule(cases, options);
+
+% Visualise and inspect
+conduction.visualizeDailySchedule(dailySchedule, 'Title', 'Prospective Plan');
+disp(outcome.objectiveValue);
+```
+
+### Run Analytics on an Optimised Day
+```matlab
+metrics = conduction.analytics.DailyAnalyzer.analyze(dailySchedule);
+operator = conduction.analytics.OperatorAnalyzer.analyze(dailySchedule);
+
+fprintf('Cases: %d\n', metrics.caseCount);
+lastOutMinutes = metrics.lastCaseEnd;
+fprintf('Last case ends at: %02d:%02d\n', floor(lastOutMinutes/60), mod(round(lastOutMinutes), 60));
+fprintf('Total operator idle minutes: %.1f\n', operator.departmentMetrics.totalOperatorIdleMinutes);
+```
+
+### Batch Optimisation Across a Collection
+```matlab
+collection = conduction.ScheduleCollection.fromFile('clinicalData/exampleDataset.mat');
+batchOptions = conduction.configureOptimization('NumLabs', 5, 'TurnoverTime', 30);
+optimizer = conduction.batch.Optimizer(collection, 'SchedulingOptions', batchOptions);
+results = optimizer.run();
+
+summaryTable = results.toTable();
+head(summaryTable)
+```
+
+## Directory Layout
+- `scripts/+conduction/+gui/` – App Designer implementation, controllers, and GUI helpers.
+- `scripts/+conduction/+analytics/` – Daily and operator analyzers, KPI utilities.
+- `scripts/+conduction/+scheduling/` – ILP scheduler, preprocessing, and result assembly.
+- `scripts/+conduction/+plotting/` – Shared plotting utilities and operator trend charts.
+- `scripts/+conduction/batch/` – Batch optimisation workflows.
+- `clinicalData/` – Sample datasets for testing and regression comparisons.
 
 ## Versioning
+- Project version is tracked in the root `VERSION` file and surfaced via `conduction.version()`.
+- Releases are tagged on `main` (`vMAJOR.MINOR.PATCH`); the latest is **v0.2.1** (drawer inspector + analyse tab).
 
-- The refactor uses [Semantic Versioning](https://semver.org/) with Git tags in the format `vMAJOR.MINOR.PATCH` applied to `main`. Create an annotated tag when you cut a release (for example `git tag -a v0.1.0 -m "Initial release"`) and push it with `git push origin <tag>`.
-- The current base version is stored in the root `VERSION` file; update it whenever you bump the version and create a new tag.
-- Run `conduction.bumpVersion('patch')` (or `'minor'`, `'major'`) to update the `VERSION` file, commit the change, and create the corresponding tag automatically. Pass `'DryRun', true` to preview, or `'Push', true` to push the branch/tag immediately.
-- Call `conduction.version()` to retrieve the semantic version, the short commit hash, the latest tag (when available), and a dirty flag. This helper does not error out when Git is unavailable and can be used in logs or metadata.
-- Batch optimisation results (`conduction.batch.Optimizer.run` and top-level wrappers such as `conduction.optimizeScheduleCollection`) include this information under `metadata.version`, along with a `metadata.generatedAt` timestamp. Plotting helpers add a footer annotation with the same version stamp.
+## Contributing
+1. Create a feature branch from `main`.
+2. Make changes, add targeted tests or examples.
+3. Run the GUI smoke test and relevant analytics scripts.
+4. Open a pull request; prefer squash merges for concise history.
 
-## Refactor objectives
-- Document and modularise the functional areas above before porting them into the new stack.
-- Create automated tests and parity checks that compare refactored outputs to the MATLAB references.
-- Gradually retire `oldScripts/` once feature coverage and validation thresholds are met.
+## Support & Troubleshooting
+- **GUI does not update after code changes** – Run `clear classes` before relaunching the app to flush cached class definitions.
+- **Optimiser failures** – Check the drawer log for solver messages; ensure the Optimization Toolbox is licensed and cases include required fields (`operator`, `procTime`, etc.).
+- **Dark-mode readability** – All embedded axes (schedule and analyse tabs) adopt a black background with light labels; if you embed visuals elsewhere, reuse the provided plotting helpers.
 
-As the refactor progresses, this README should be updated with implementation specifics, run instructions, and verification steps for the new codebase.
-
-## Planned Object Model
-
-- **Operator**: encapsulates provider identity, specialties, availability windows, and tracked performance metrics used by the optimizer and analytics.
-- **Lab**: captures lab identity, capabilities, daily open/close windows, turnover policies, and equipment constraints.
-- **Procedure**: describes procedure templates including expected setup/procedure/post durations, required lab capabilities, and operator qualifications.
-- **CaseRequest**: represents a specific case drawn from historical or live demand, linking a procedure template to a date, patient class, and preferred operators.
-- **DailyLabSchedule**: owns the timeline for a single lab-day, maintaining ordered case assignments, state transitions, and derived idle/turnover metrics.
-- **ScheduleDay**: aggregates all `DailyLabSchedule` instances for a calendar day, ensuring inter-lab constraints (shared operators, resources) stay consistent.
-- **ScheduleOptimizer**: strategy object that transforms a pool of `CaseRequest` instances into a `ScheduleDay` using chosen objective functions and solver backends.
-- **ScheduleAnalyzer**: computes utilization, idle/turnover ratios, flip counts, and other KPIs, replacing the reporting logic in `analyzeHistoricalData.m`.
-- **ScheduleCollection**: coordinates data ingestion/cleansing and exposes typed collections of operators, procedures, labs, and case requests for experiments.
-- **ExperimentRunner**: orchestrates end-to-end scenarios (data load, optimization run, analytics, persistence) mirroring `runSchedulingExperiment.m`.
-- **ParityValidator**: compares refactored outputs to MATLAB references to ensure behavioural fidelity during migration.
-
-Future refactor tasks will map each MATLAB script or workflow to one or more of the classes above, enabling gradual porting while preserving validated behaviour.
-
-### Optimization Configuration
-
-Use `config = conduction.configureOptimization(...)` to build an options struct, then call:
-
-```matlab
-config = conduction.configureOptimization('NumLabs',5,'OptimizationMetric','operatorIdle');
-[newDaily, outcome] = conduction.optimizeDailySchedule(oldDaily, config);
-```
-
-### Batch Optimization
-
-Use `conduction.ScheduleCollection.fromFile` to load a dataset and `conduction.batch.Optimizer` to run `optimizeDailySchedule` across each day. Example:
-
-```matlab
-collection = conduction.ScheduleCollection.fromFile('clinicalData/testProcedureDurations-7day.xlsx');
-config = conduction.configureOptimization('NumLabs',5,'OptimizationMetric','operatorIdle');
-batchOptions = conduction.batch.OptimizationOptions.fromArgs('SchedulingConfig', config, 'Parallel', true);
-optimizer = conduction.batch.Optimizer(batchOptions);
-batchResult = optimizer.run(collection);
-```
-
-`batchResult.results` is an array of `OptimizationResult` objects; `batchResult.failures` lists any days skipped prior to optimization. Progress messages show the number of days processed, which dates were skipped for missing procedure timestamps, and a final success/skip summary.
-
-### Analytics
-
-- Legacy vs. Refactor note: The refactored analyzers drop cases that are missing procedure start/end timestamps or lab assignments. Legacy scripts counted those rows when estimating turnovers, which tends to inflate the turnover denominator and lower flip-per-turnover ratios. Expect conduction’s aggregate ratios to be slightly higher (more accurate) in data sets with incomplete clinical rows.
-
-- `conduction.analytics.DailyAnalyzer.analyze(dailySchedule)` produces per-day metrics (case counts, average lab occupancy ratio = procedure minutes ÷ active window) and lab idle minutes.
-- `conduction.analytics.OperatorAnalyzer.analyze(dailySchedule)` returns `operatorMetrics` (per-operator idle, overtime, flip/idle ratios) and `departmentMetrics` (turnover samples, totals, aggregate ratios).
-- `conduction.analytics.ProcedureAnalyzer.analyze(dailySchedule)` captures raw procedure duration samples per procedure and per operator; pair it with `conduction.analytics.ProcedureMetricsAggregator` to accumulate days and compute mean/median/P70/P90 statistics.
-- `conduction.analytics.ScheduleCollectionAnalyzer.run(schedules)` orchestrates analyzers across many days; by default it produces `procedureMetrics` via the procedure aggregator, and you can register additional analyzers as needed.
-- `conduction.analytics.runProcedureAnalysis(collection)` wraps the collection analyzer for the common case of aggregating procedure metrics across an entire dataset.
-- `conduction.analytics.analyzeDailySchedule(dailySchedule)` bundles all per-day analyzers into a single call, returning daily/operator/procedure results.
-- `conduction.analytics.analyzeScheduleCollection(collection)` iterates every day in a schedule collection (or array of schedules) and returns consolidated procedure, operator (including per-operator turnover ratios), and daily summaries.
-- `conduction.optimizeScheduleCollection(collection, config, ...)` wraps the batch optimizer so you can optimize every day in a collection (or load from file) with a single call; `config` is the struct returned by `conduction.configureOptimization`. The result struct now includes `optimizedSchedules` (array of `DailySchedule`) and `optimizedCollection` (a `ScheduleCollection` view over those schedules) so you can pass the output straight into analytics.
-
-### Plotting
-
-- `conduction.plotting.plotOperatorTurnovers(summary, 'Mode', mode)` plots idle/flip per turnover for each operator using the summary returned by `analyzeScheduleCollection`; use `Mode='median'` (default) or `'aggregate'` to switch between day medians and overall collection percentages. The generated figure includes a footer showing the refactor version and commit hash used to produce it.
-- `conduction.plotting.plotMultiCollectionResults(experiments, ...)` compares metrics (operator idle, flip ratios, department totals, makespan, utilisation) across multiple collection analyses; accepts `Metric`, `PlotType`, and `ExperimentNames` options. Every chart is annotated with the current refactor version via `conduction.version()`.
-- `conduction.plotting.applyStandardStyle(fig, axes, ...)` applies the standard white background / black text styling used by all analytics plots.
+For additional examples or questions, open an issue or contact the maintainers.
