@@ -11,7 +11,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
-        OptsBtn                     matlab.ui.control.Button
         UndoBtn                     matlab.ui.control.Button
         TestToggle                  matlab.ui.control.Switch
 
@@ -140,7 +139,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','fit','1x'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','1x'};
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -151,17 +150,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.RunBtn = uibutton(app.TopBarLayout, 'push');
-            app.RunBtn.Text = 'Optimized Schedule';
+            app.RunBtn.Text = 'Optimize Schedule';
             app.RunBtn.Layout.Column = 2;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
-            app.OptsBtn = uibutton(app.TopBarLayout, 'push');
-            app.OptsBtn.Text = 'Options';
-            app.OptsBtn.Layout.Column = 3;
-            app.OptsBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationOptionsButtonPushed, true);
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 4;
+            app.TestToggle.Layout.Column = 3;
             app.TestToggle.Items = {'Testing Off','Testing On'};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -170,7 +165,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.UndoBtn = uibutton(app.TopBarLayout, 'push');
             app.UndoBtn.Text = 'Undo';
-            app.UndoBtn.Layout.Column = 5;
+            app.UndoBtn.Layout.Column = 4;
             app.UndoBtn.Enable = 'off';
 
             % Middle layout with tabs and schedule visualization
@@ -215,7 +210,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes = uiaxes(app.MiddleLayout);
             app.ScheduleAxes.Layout.Row = 1;
             app.ScheduleAxes.Layout.Column = 2;
-            app.ScheduleAxes.Title.String = 'Schedule';
+            app.ScheduleAxes.Title.String = '';
             app.ScheduleAxes.Title.FontWeight = 'bold';
             app.ScheduleAxes.Title.FontSize = 14;
             app.ScheduleAxes.Box = 'on';
@@ -272,7 +267,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function buildDataSection(app, leftGrid)
             app.DataLoadingLabel = uilabel(leftGrid);
-            app.DataLoadingLabel.Text = 'Clinical Data';
+            app.DataLoadingLabel.Text = 'Baseline Clinical Data';
             app.DataLoadingLabel.FontWeight = 'bold';
             app.DataLoadingLabel.Layout.Row = 1;
             app.DataLoadingLabel.Layout.Column = [1 4];
@@ -544,7 +539,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SpecificLabDropDown.Items = {'Any Lab'};
             app.SpecificLabDropDown.Value = 'Any Lab';
             app.SpecificLabDropDown.Layout.Row = 18;
-            app.SpecificLabDropDown.Layout.Column = [2 4];
+            app.SpecificLabDropDown.Layout.Column = 2;
 
             app.FirstCaseCheckBox = uicheckbox(leftGrid);
             app.FirstCaseCheckBox.Text = 'First case only';
@@ -561,7 +556,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
             app.AdmissionStatusDropDown.Value = 'outpatient';
             app.AdmissionStatusDropDown.Layout.Row = 20;
-            app.AdmissionStatusDropDown.Layout.Column = [2 4];
+            app.AdmissionStatusDropDown.Layout.Column = 2;
 
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
@@ -979,11 +974,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.exitTestingMode();
         end
 
-        function OptimizationOptionsButtonPushed(app, event)
-            %#ok<INUSD>
-            % Options are now in the Optimization tab
-            app.TabGroup.SelectedTab = app.TabOptimization;
-        end
 
         function OptimizationRunButtonPushed(app, event)
             %#ok<INUSD>
@@ -1508,32 +1498,43 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            count = 0;
-            if isfield(summary, 'primaryCount') && ~isempty(summary.primaryCount)
-                count = summary.primaryCount;
-            end
-
-            if isfield(summary, 'dataSource')
-                dataSource = string(summary.dataSource);
+            % Check if we have operator-specific count but are using fallback statistics
+            if isfield(summary, 'isFallback') && summary.isFallback && ...
+               isfield(summary, 'operatorCount') && summary.operatorCount > 0
+                % Show operator count but indicate fallback statistics
+                opCount = summary.operatorCount;
+                
+                descriptor = sprintf('%d case%s -> overall stats', ...
+                    opCount, pluralSuffix(opCount));
             else
-                dataSource = "";
-            end
+                % Standard display logic
+                count = 0;
+                if isfield(summary, 'primaryCount') && ~isempty(summary.primaryCount)
+                    count = summary.primaryCount;
+                end
 
-            switch dataSource
-                case "operator"
-                    if count > 0
-                        descriptor = sprintf('%d operator-specific case%s', count, pluralSuffix(count));
-                    else
-                        descriptor = 'operator history';
-                    end
-                case "procedure"
-                    if count > 0
-                        descriptor = sprintf('%d historical procedure%s', count, pluralSuffix(count));
-                    else
-                        descriptor = 'historical procedures';
-                    end
-                otherwise
-                    descriptor = 'heuristic defaults';
+                if isfield(summary, 'dataSource')
+                    dataSource = string(summary.dataSource);
+                else
+                    dataSource = "";
+                end
+
+                switch dataSource
+                    case "operator"
+                        if count > 0
+                            descriptor = sprintf('%d operator-specific case%s', count, pluralSuffix(count));
+                        else
+                            descriptor = 'operator history';
+                        end
+                    case "procedure"
+                        if count > 0
+                            descriptor = sprintf('%d historical procedure%s', count, pluralSuffix(count));
+                        else
+                            descriptor = 'historical procedures';
+                        end
+                    otherwise
+                        descriptor = 'heuristic defaults';
+                end
             end
 
             text = sprintf('source: %s', descriptor);
@@ -2025,13 +2026,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.RunBtn.Enable = 'off';
             end
 
-            if ~isempty(app.OptsBtn) && isvalid(app.OptsBtn)
-                if app.IsOptimizationRunning
-                    app.OptsBtn.Enable = 'off';
-                else
-                    app.OptsBtn.Enable = 'on';
-                end
-            end
 
         end
 

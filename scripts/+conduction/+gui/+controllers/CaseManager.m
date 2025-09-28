@@ -314,6 +314,8 @@ classdef CaseManager < handle
             summary.customDefault = summary.estimate;
             summary.dataSource = 'heuristic';
             summary.primaryCount = 0;
+            summary.operatorCount = 0;
+            summary.isFallback = false;
             summary.operatorStats = struct();
             summary.procedureStats = struct();
 
@@ -338,9 +340,16 @@ classdef CaseManager < handle
                 summary.dataSource = 'operator';
                 summary.primaryCount = opStats.count;
                 summary.operatorStats = opStats;
+                summary.operatorCount = opStats.count;  % Always track actual operator count
+                summary.isFallback = false;
+            elseif opStats.available
+                % Operator has cases but too few for reliable stats - show operator count but use fallback stats
+                summary.operatorCount = opStats.count;  % Actual operator count
+                summary.operatorStats = opStats;
+                summary.isFallback = true;  % Flag that we'll use fallback stats
             end
 
-            % Fall back to procedure-only statistics if operator-specific unavailable
+            % Fall back to procedure-only statistics if operator-specific unavailable or unreliable
             if strcmp(summary.dataSource, 'heuristic') && summary.hasClinicalData
                 procedureId = conduction.gui.models.ProspectiveCase.generateProcedureId(procedureName);
                 if isfield(obj.ProcedureAnalytics, 'procedures') && ...
@@ -353,6 +362,13 @@ classdef CaseManager < handle
                         summary.dataSource = 'procedure';
                         summary.primaryCount = procData.overall.count;
                         summary.procedureStats = procData.overall;
+                        
+                        % If we have operator count but are using procedure fallback, preserve operator count
+                        if isfield(summary, 'operatorCount') && summary.operatorCount > 0
+                            % Keep the operator count and fallback flag already set
+                        else
+                            summary.isFallback = false;  % No operator data, so procedure stats are primary
+                        end
                     end
                 end
             end
