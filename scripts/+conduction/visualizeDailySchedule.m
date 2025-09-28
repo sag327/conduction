@@ -61,8 +61,7 @@ function visualizeDailySchedule(scheduleInput, varargin)
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
 
     scheduleTitle = composeTitle(opts.Title, dailySchedule.Date, caseTimelines);
-    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');
-    ylabel(axSchedule, 'Time of Day');
+    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');    
 
     labelColorSchedule = applyAxisTextStyle(axSchedule);
 
@@ -823,7 +822,7 @@ function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
     if isnat(resolvedDate)
         titleStr = baseTitleStr;
     else
-        titleStr = sprintf('%s - %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+        titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
     end
 end
 

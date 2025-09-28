@@ -1910,8 +1910,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            titleText = sprintf('Prospective Schedule - %s', datestr(app.TargetDate, 'mmm dd, yyyy'));
-            conduction.visualizeDailySchedule(app.OptimizedSchedule, 'Title', titleText);
+            conduction.visualizeDailySchedule(app.OptimizedSchedule, 'Title', 'Optimized Schedule');
         end
 
         function updateOptimizationOptionsSummary(app)
@@ -2068,9 +2067,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            titleText = sprintf('Prospective Schedule - %s', datestr(app.TargetDate, 'mmm dd, yyyy'));
             conduction.visualizeDailySchedule(dailySchedule, ...
-                'Title', titleText, ...
+                'Title', 'Optimized Schedule', ...
                 'ScheduleAxes', app.ScheduleAxes, ...
                 'ShowLabels', true);
 
