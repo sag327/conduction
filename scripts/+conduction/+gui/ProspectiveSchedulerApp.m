@@ -259,7 +259,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
             app.CanvasAnalyzeLayout.RowHeight = {'1x'};
             app.CanvasAnalyzeLayout.ColumnWidth = {'1x'};
-            app.CanvasAnalyzeLayout.Padding = [12 12 12 12];
+            app.CanvasAnalyzeLayout.Padding = [60 16 24 16];
             app.CanvasAnalyzeLayout.RowSpacing = 0;
             app.CanvasAnalyzeLayout.ColumnSpacing = 0;
 
@@ -2747,25 +2747,32 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ax.LineWidth = 1;
 
             if ~isempty(ax.Title)
-                ax.Title.Color = [0.95 0.95 0.95];
+                ax.Title.Color = [1 1 1];
+                ax.Title.FontWeight = 'bold';
             end
             if ~isempty(ax.XLabel)
-                ax.XLabel.Color = [0.9 0.9 0.9];
+                ax.XLabel.Color = [0.95 0.95 0.95];
             end
             if ~isempty(ax.YLabel)
-                ax.YLabel.Color = [0.9 0.9 0.9];
+                ax.YLabel.Color = [0.95 0.95 0.95];
             end
+
+            ax.FontSize = max(ax.FontSize, 12);
+            ax.TickDir = 'out';
 
             childText = findobj(ax, 'Type', 'Text');
             for idx = 1:numel(childText)
                 try
-                    childText(idx).Color = [0.95 0.95 0.95];
+                    childText(idx).Color = [1 1 1];
+                    if isprop(childText(idx), 'BackgroundColor') && ~isempty(childText(idx).BackgroundColor)
+                        childText(idx).BackgroundColor = [0.15 0.15 0.15];
+                    end
                 catch
                 end
             end
 
-            ax.GridAlpha = 0.3;
-            ax.MinorGridAlpha = 0.2;
+            ax.GridAlpha = 0.35;
+            ax.MinorGridAlpha = 0.25;
         end
         function value = safeField(~, s, fieldName, defaultValue)
             if isstruct(s) && isfield(s, fieldName) && ~isempty(s.(fieldName))
