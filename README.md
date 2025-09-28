@@ -5,7 +5,7 @@ Conduction is a MATLAB toolbox for scheduling and analysing electrophysiology (E
 ## Feature Highlights
 - **Prospective Scheduler GUI** – Build a day-of-surgery plan, optimise with ILP, and inspect results without leaving MATLAB.
 - **Right‑hand case inspector** – Click any schedule block to view detailed timing, lab assignment, and solver diagnostics in a slide‑in drawer.
-- **Analyze tab** – Switch to the utilisation view to plot operator procedure, idle, and overtime hours for the optimised day.
+- **Analyze tab** – View the operator timeline (the lower subplot from `visualizeDailySchedule`) showing each clinician’s day.
 - **Configurable optimisation engine** – Tune lab counts, turnover/setup/post durations, objective metrics, admission defaults, and filtering straight from the UI (or scripts).
 - **Rich analytics** – Daily and operator analysers expose KPIs (idle time, flips, makespan, utilisation ratios) for GUI display or downstream reporting.
 - **Dark‑mode visualisation** – `conduction.visualizeDailySchedule` supports embedding into existing axes (used by the GUI) or standalone figure generation.
@@ -34,7 +34,7 @@ conduction.launchSchedulerGUI
 - **Top bar** – Date picker, optimisation trigger, testing toggle, and undo placeholder.
 - **Center canvas** – Two-tab control with:
   - **Schedule** tab: the optimised day rendered by `visualizeDailySchedule`.
-  - **Analyze** tab: operator utilisation bar chart (procedure, idle, overtime hours).
+  - **Analyze** tab: operator timeline (procedure blocks, turnover/idle, overtime) rendered directly from the optimiser output.
 - **Drawer inspector** – Click any schedule block to reveal case, timing, lab assignment, and solver logs.
 - **KPI footer** – Live metrics for case count, last-out, operator idle, lab idle, and flip ratio.
 
@@ -44,7 +44,7 @@ conduction.launchSchedulerGUI
 3. Adjust optimisation options (labs, turnover, objective metric, admission defaults).
 4. Click **Optimize Schedule**.
 5. Review the **Schedule** tab; click blocks to inspect details in the drawer.
-6. Switch to **Analyze** to compare operator utilisation.
+6. Switch to **Analyze** to review operator timelines.
 7. Iterate on options or case mix as needed.
 
 ### Drawer Tips
