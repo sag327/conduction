@@ -11,7 +11,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
-        UndoBtn                     matlab.ui.control.Button
         TestToggle                  matlab.ui.control.Switch
 
         TabGroup                    matlab.ui.container.TabGroup
@@ -109,6 +108,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
         UtilAxes                    matlab.ui.control.UIAxes
+        TurnoverMetricsAxes         matlab.ui.control.UIAxes
         KPI1                        matlab.ui.control.Label
         KPI2                        matlab.ui.control.Label
         KPI3                        matlab.ui.control.Label
@@ -165,7 +165,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','1x'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit'};
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -182,17 +182,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 3;
-            app.TestToggle.Items = {'Testing Off','Testing On'};
+            app.TestToggle.Layout.Column = 4;
+            app.TestToggle.Items = {'Test Mode',''};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
             app.TestToggle.Orientation = 'horizontal';
             app.TestToggle.ValueChangedFcn = createCallbackFcn(app, @TestToggleValueChanged, true);
-
-            app.UndoBtn = uibutton(app.TopBarLayout, 'push');
-            app.UndoBtn.Text = 'Undo';
-            app.UndoBtn.Layout.Column = 4;
-            app.UndoBtn.Enable = 'off';
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
@@ -258,7 +253,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Color = [0 0 0];
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
-            app.CanvasAnalyzeLayout.RowHeight = {'1x'};
+            app.CanvasAnalyzeLayout.RowHeight = {'1x', '1x'};
             app.CanvasAnalyzeLayout.ColumnWidth = {'1x'};
             app.CanvasAnalyzeLayout.Padding = [12 12 12 12];
             app.CanvasAnalyzeLayout.RowSpacing = 0;
@@ -273,6 +268,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UtilAxes.Title.FontWeight = 'bold';
             app.UtilAxes.Title.FontSize = 14;
             app.UtilAxes.Visible = 'on';
+
+            app.TurnoverMetricsAxes = uiaxes(app.CanvasAnalyzeLayout);
+            app.TurnoverMetricsAxes.Layout.Row = 2;
+            app.TurnoverMetricsAxes.Layout.Column = 1;
+            app.TurnoverMetricsAxes.Color = [0 0 0];
+            app.TurnoverMetricsAxes.Box = 'on';
+            app.TurnoverMetricsAxes.Title.String = 'Operator Turnover Metrics';
+            app.TurnoverMetricsAxes.Title.FontWeight = 'bold';
+            app.TurnoverMetricsAxes.Title.FontSize = 14;
+            app.TurnoverMetricsAxes.Visible = 'on';
 
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
@@ -1177,6 +1182,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if event.NewValue == app.CanvasAnalyzeTab
                 if ~isempty(app.UtilAxes) && isvalid(app.UtilAxes)
                     app.drawUtilization(app.UtilAxes);
+                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
+                end
+                if ~isempty(app.TurnoverMetricsAxes) && isvalid(app.TurnoverMetricsAxes)
+                    app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
                 end
             end
         end
@@ -2209,6 +2218,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
+                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
             end
         end
 
@@ -2625,6 +2635,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
+                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
             end
 
         end
@@ -2657,6 +2668,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
+                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
             end
         end
 
@@ -2828,9 +2840,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 barHandles(3).FaceColor = [0.6 0.3 0.8];
             end
 
+            % Add idle time labels on top of bars
+            for i = 1:numel(uniqueOps)
+                idleTime = idleMinutes(i);
+                if idleTime > 0
+                    barTop = stackedData(i, 1) + stackedData(i, 2) + stackedData(i, 3);
+                    text(ax, i, barTop + 0.1, sprintf('%.0fm', idleTime), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+                        'Color', [0.95 0.6 0.2], 'FontSize', 10, 'FontWeight', 'bold');
+                end
+            end
+
             ax.XTick = 1:numel(uniqueOps);
-            ax.XTickLabel = cellstr(uniqueOps);
-            ax.XTickLabelRotation = 30;
+            ax.XTickLabel = {};
+            ax.XTickLabelRotation = 0;
             ylabel(ax, 'Hours');
             title(ax, 'Operator Utilization (Procedure vs Idle vs Overtime)', 'Color', [0.9 0.9 0.9]);
             legend(ax, {'Procedure', 'Idle', 'Overtime'}, 'TextColor', [0.9 0.9 0.9], ...
@@ -2839,6 +2862,134 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function renderUtilizationPlaceholder(app, ax, message)
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+            cla(ax);
+            ax.Color = [0 0 0];
+            ax.XColor = [0.3 0.3 0.3];
+            ax.YColor = [0.3 0.3 0.3];
+            ax.XAxis.Visible = 'off';
+            ax.YAxis.Visible = 'off';
+            text(ax, 0.5, 0.5, message, 'Units', 'normalized', ...
+                'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.7 0.7 0.7], ...
+                'Interpreter', 'none');
+        end
+
+        function drawTurnoverMetrics(app, ax)
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            cla(ax);
+            hold(ax, 'off');
+            ax.Color = [0 0 0];
+            ax.XColor = [0.85 0.85 0.85];
+            ax.GridColor = [0.3 0.3 0.3];
+            ax.Box = 'on';
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see turnover metrics.');
+                return;
+            end
+
+            cases = app.OptimizedSchedule.cases();
+            if isempty(cases)
+                app.renderTurnoverPlaceholder(ax, 'No cases available for turnover analysis.');
+                return;
+            end
+
+            % Get operator metrics from analytics
+            metrics = conduction.analytics.OperatorAnalyzer.analyze(app.OptimizedSchedule);
+            if ~isfield(metrics, 'operatorMetrics')
+                app.renderTurnoverPlaceholder(ax, 'Operator metrics unavailable.');
+                return;
+            end
+
+            opMetrics = metrics.operatorMetrics;
+            if ~isfield(opMetrics, 'flipPerTurnoverRatio') || ~isfield(opMetrics, 'idlePerTurnoverRatio')
+                app.renderTurnoverPlaceholder(ax, 'Turnover metrics not computed.');
+                return;
+            end
+
+            % Get all operators from cases (same ordering as utilization plot)
+            cases = app.OptimizedSchedule.cases();
+            operatorNames = string({cases.operator});
+            operatorNames = operatorNames(strlength(operatorNames) > 0);
+            uniqueOps = unique(operatorNames, 'stable');
+            
+            if isempty(uniqueOps)
+                app.renderTurnoverPlaceholder(ax, 'No operators found.');
+                return;
+            end
+
+            % Extract turnover data maps
+            flipMap = opMetrics.flipPerTurnoverRatio;
+            idleMap = opMetrics.idlePerTurnoverRatio;
+
+            % Get data for each operator (include all operators, even with no turnover data)
+            flipRatios = zeros(length(uniqueOps), 1);
+            idleRatios = zeros(length(uniqueOps), 1);
+            hasFlipData = false(length(uniqueOps), 1);
+            hasIdleData = false(length(uniqueOps), 1);
+            
+            for i = 1:length(uniqueOps)
+                opName = char(uniqueOps(i));
+                if flipMap.isKey(opName)
+                    flipRatios(i) = flipMap(opName) * 100; % Convert to percentage
+                    hasFlipData(i) = true;
+                end
+                if idleMap.isKey(opName)
+                    idleRatios(i) = idleMap(opName); % Minutes per turnover
+                    hasIdleData(i) = true;
+                end
+            end
+
+            % Create dual y-axis plot
+            xPos = 1:length(uniqueOps);
+            
+            % Left y-axis for flip percentage
+            yyaxis(ax, 'left');
+            flipBars = bar(ax, xPos - 0.2, flipRatios, 0.4, 'FaceColor', [0.2 0.6 0.9]);
+            ax.YAxis(1).Color = [0.2 0.6 0.9];
+            ylim(ax, [0 120]);
+            ylabel(ax, 'Flip per Turnover (%)', 'Color', [0.9 0.9 0.9]);
+            
+            % Add flip percentage labels
+            for i = 1:length(uniqueOps)
+                if hasFlipData(i) && flipRatios(i) > 0
+                    text(ax, i - 0.2, flipRatios(i) + max(flipRatios) * 0.05, sprintf('%.0f%%', flipRatios(i)), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+                        'Color', [0.2 0.6 0.9], 'FontSize', 9, 'FontWeight', 'bold');
+                end
+            end
+            
+            % Right y-axis for idle ratio
+            yyaxis(ax, 'right');
+            idleBars = bar(ax, xPos + 0.2, idleRatios, 0.4, 'FaceColor', [0.95 0.6 0.2]);
+            ax.YAxis(2).Color = [0.95 0.6 0.2];
+            ylabel(ax, 'Idle per Turnover (min)', 'Color', [0.9 0.9 0.9]);
+            
+            % Add idle ratio labels
+            for i = 1:length(uniqueOps)
+                if hasIdleData(i) && idleRatios(i) > 0
+                    text(ax, i + 0.2, idleRatios(i) + max(idleRatios) * 0.05, sprintf('%.1fm', idleRatios(i)), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+                        'Color', [0.95 0.6 0.2], 'FontSize', 9, 'FontWeight', 'bold');
+                end
+            end
+
+            % Common formatting
+            ax.XTick = xPos;
+            ax.XTickLabel = cellstr(uniqueOps);
+            ax.XTickLabelRotation = 30;
+            title(ax, 'Operator Turnover Metrics', 'Color', [0.9 0.9 0.9]);
+            legend(ax, [flipBars, idleBars], {'Flip %', 'Idle (min)'}, 'TextColor', [0.9 0.9 0.9], ...
+                'Location', 'northoutside', 'Orientation', 'horizontal');
+            grid(ax, 'on');
+        end
+
+        function renderTurnoverPlaceholder(app, ax, message)
             if isempty(ax) || ~isvalid(ax)
                 return;
             end
