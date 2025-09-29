@@ -2902,16 +2902,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             maxHeight = max(sum(stackedData, 2));
             ylim(ax, [0 maxHeight * 1.20]); % Add more space at top for text
             
-            % Set integer-only y-ticks and pad labels for alignment
+            % Set integer-only y-ticks
             maxY = ceil(maxHeight * 1.20);
             ax.YTick = 0:ceil(maxY/5):maxY; % Integer ticks only
-            currentTicks = ax.YTick;
-            paddedLabels = cell(size(currentTicks));
-            for i = 1:length(currentTicks)
-                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
-                paddedLabels{i} = sprintf('%s%d', figureSpaces, round(currentTicks(i)));
-            end
-            ax.YTickLabel = paddedLabels;
             
             % Position text with more distance from right edge and better spacing
             xOffset = 0.12; % Increased distance from right edge
@@ -3022,14 +3015,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             flipBars = bar(ax, xPos, flipRatios, 0.6, 'FaceColor', [0.2 0.6 0.9]);
             ylim(ax, [0 130]);
             ax.YTick = 0:20:100;
-            % Pad y-tick labels for alignment (integers only, figure spaces)
-            tickValues = 0:20:100;
-            paddedLabels = cell(size(tickValues));
-            for i = 1:length(tickValues)
-                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
-                paddedLabels{i} = sprintf('%s%d', figureSpaces, tickValues(i));
-            end
-            ax.YTickLabel = paddedLabels;
             ylabel(ax, 'Flip per Turnover (%)', 'Color', [1 1 1]);
             
             % Add flip percentage labels
@@ -3126,14 +3111,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 ax.YTick = 0:2:10; % Default integer ticks
             end
             
-            % Pad y-tick labels for alignment (integers only, figure spaces)
-            currentTicks = ax.YTick;
-            paddedLabels = cell(size(currentTicks));
-            for i = 1:length(currentTicks)
-                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
-                paddedLabels{i} = sprintf('%s%d', figureSpaces, round(currentTicks(i)));
-            end
-            ax.YTickLabel = paddedLabels;
             
             ylabel(ax, 'Idle per Turnover (min)', 'Color', [1 1 1]);
             
