@@ -2908,7 +2908,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             currentTicks = ax.YTick;
             paddedLabels = cell(size(currentTicks));
             for i = 1:length(currentTicks)
-                paddedLabels{i} = sprintf('%3d', round(currentTicks(i))); % 3-character width, no decimals
+                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
+                paddedLabels{i} = sprintf('%s%d', figureSpaces, round(currentTicks(i)));
             end
             ax.YTickLabel = paddedLabels;
             
@@ -3021,11 +3022,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             flipBars = bar(ax, xPos, flipRatios, 0.6, 'FaceColor', [0.2 0.6 0.9]);
             ylim(ax, [0 130]);
             ax.YTick = 0:20:100;
-            % Pad y-tick labels for alignment (integers only, 3-character width)
+            % Pad y-tick labels for alignment (integers only, figure spaces)
             tickValues = 0:20:100;
             paddedLabels = cell(size(tickValues));
             for i = 1:length(tickValues)
-                paddedLabels{i} = sprintf('%3d', tickValues(i));
+                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
+                paddedLabels{i} = sprintf('%s%d', figureSpaces, tickValues(i));
             end
             ax.YTickLabel = paddedLabels;
             ylabel(ax, 'Flip per Turnover (%)', 'Color', [1 1 1]);
@@ -3124,11 +3126,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 ax.YTick = 0:2:10; % Default integer ticks
             end
             
-            % Pad y-tick labels for alignment (integers only, 3-character width)
+            % Pad y-tick labels for alignment (integers only, figure spaces)
             currentTicks = ax.YTick;
             paddedLabels = cell(size(currentTicks));
             for i = 1:length(currentTicks)
-                paddedLabels{i} = sprintf('%3d', round(currentTicks(i))); % 3-character width, no decimals
+                figureSpaces = repmat(char(8199), 1, 4); % 4 figure spaces (same width as digits)
+                paddedLabels{i} = sprintf('%s%d', figureSpaces, round(currentTicks(i)));
             end
             ax.YTickLabel = paddedLabels;
             
@@ -3145,7 +3148,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Formatting (x-axis labels only on bottom plot)
             ax.XTick = xPos;
-            ax.XTickLabel = cellstr(uniqueOps);
+            formattedNames = conduction.plotting.utils.formatOperatorNames(cellstr(uniqueOps));
+            ax.XTickLabel = formattedNames;
             ax.XTickLabelRotation = 30;
             xlim(ax, [0.5 length(uniqueOps) + 0.5]);
             grid(ax, 'on');
