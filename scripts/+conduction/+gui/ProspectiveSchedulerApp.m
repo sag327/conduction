@@ -2992,7 +2992,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create bar plot
             xPos = 1:length(uniqueOps);
             flipBars = bar(ax, xPos, flipRatios, 0.6, 'FaceColor', [0.2 0.6 0.9]);
-            ylim(ax, [0 100]);
+            ylim(ax, [0 130]);
+            ax.YTick = 0:20:100;
             ylabel(ax, 'Flip per Turnover (%)', 'Color', [1 1 1]);
             
             % Add flip percentage labels
