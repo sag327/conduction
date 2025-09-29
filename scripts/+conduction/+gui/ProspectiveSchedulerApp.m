@@ -2786,11 +2786,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            cla(ax);
+            % Clear only the plot data, preserve axis properties
+            delete(findobj(ax, 'Type', 'Bar'));
+            delete(findobj(ax, 'Type', 'Text'));
             hold(ax, 'off');
+            
+            % Ensure axis properties are always set
             ax.Color = [0 0 0];
-            ax.XColor = [0.85 0.85 0.85];
-            ax.YColor = [0.85 0.85 0.85];
+            ax.XColor = [1 1 1];
+            ax.YColor = [1 1 1];
             ax.GridColor = [0.3 0.3 0.3];
             ax.Box = 'on';
             ax.XAxis.Visible = 'on';
@@ -2889,27 +2893,39 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ax.XTickLabel = {};
             ax.XTickLabelRotation = 0;
             xlim(ax, [0.5 numel(uniqueOps) + 0.5]);
-            ylabel(ax, 'Hours');
+            ylabel(ax, 'Hours', 'Color', [1 1 1]);
+            ax.YColor = [1 1 1];
+            ax.XColor = [1 1 1];
             
             % Add color-coded text in northeast corner instead of legend
             % Position text in the upper right, making sure bars don't overlap
             maxHeight = max(sum(stackedData, 2));
             ylim(ax, [0 maxHeight * 1.20]); % Add more space at top for text
             
-            % Position text with equal distance from top and right edges
-            xOffset = 0.08; % Distance from right edge
+            % Set integer-only y-ticks and pad labels for alignment
+            maxY = ceil(maxHeight * 1.20);
+            ax.YTick = 0:ceil(maxY/5):maxY; % Integer ticks only
+            currentTicks = ax.YTick;
+            paddedLabels = cell(size(currentTicks));
+            for i = 1:length(currentTicks)
+                paddedLabels{i} = sprintf('%3d', round(currentTicks(i))); % 3-character width, no decimals
+            end
+            ax.YTickLabel = paddedLabels;
+            
+            % Position text with more distance from right edge and better spacing
+            xOffset = 0.12; % Increased distance from right edge
             yOffset = 0.08; % Distance from top edge
-            lineSpacing = 0.06; % Spacing between lines
+            lineSpacing = 0.08; % Increased spacing between lines to prevent overlap
             
             text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset), 'Procedure', ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'Color', [0.2 0.6 0.9], 'FontSize', 14, 'FontWeight', 'normal');
+                'Color', [0.2 0.6 0.9], 'FontSize', 17, 'FontWeight', 'normal');
             text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset - lineSpacing), 'Idle', ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'Color', [0.95 0.6 0.2], 'FontSize', 14, 'FontWeight', 'normal');
+                'Color', [0.95 0.6 0.2], 'FontSize', 17, 'FontWeight', 'normal');
             text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset - 2*lineSpacing), 'Overtime', ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'Color', [0.6 0.3 0.8], 'FontSize', 14, 'FontWeight', 'normal');
+                'Color', [0.6 0.3 0.8], 'FontSize', 17, 'FontWeight', 'normal');
             
             grid(ax, 'on');
         end
@@ -2918,7 +2934,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(ax) || ~isvalid(ax)
                 return;
             end
-            cla(ax);
+            
+            % Clear only the plot data, preserve axis structure
+            delete(findobj(ax, 'Type', 'Bar'));
+            delete(findobj(ax, 'Type', 'Text'));
+            
+            % Set basic axis properties for placeholder
             ax.Color = [0 0 0];
             ax.XColor = [0.3 0.3 0.3];
             ax.YColor = [0.3 0.3 0.3];
@@ -2934,13 +2955,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            cla(ax);
+            % Clear only the plot data, preserve axis properties
+            delete(findobj(ax, 'Type', 'Bar'));
+            delete(findobj(ax, 'Type', 'Text'));
             hold(ax, 'off');
+            
+            % Ensure axis properties are always set
             ax.Color = [0 0 0];
             ax.XColor = [1 1 1];
             ax.YColor = [1 1 1];
             ax.GridColor = [0.3 0.3 0.3];
             ax.Box = 'on';
+            ax.XAxis.Visible = 'on';
+            ax.YAxis.Visible = 'on';
 
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
                 app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see flip metrics.');
@@ -2994,6 +3021,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             flipBars = bar(ax, xPos, flipRatios, 0.6, 'FaceColor', [0.2 0.6 0.9]);
             ylim(ax, [0 130]);
             ax.YTick = 0:20:100;
+            % Pad y-tick labels for alignment (integers only, 3-character width)
+            tickValues = 0:20:100;
+            paddedLabels = cell(size(tickValues));
+            for i = 1:length(tickValues)
+                paddedLabels{i} = sprintf('%3d', tickValues(i));
+            end
+            ax.YTickLabel = paddedLabels;
             ylabel(ax, 'Flip per Turnover (%)', 'Color', [1 1 1]);
             
             % Add flip percentage labels
@@ -3017,13 +3051,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            cla(ax);
+            % Clear only the plot data, preserve axis properties
+            delete(findobj(ax, 'Type', 'Bar'));
+            delete(findobj(ax, 'Type', 'Text'));
             hold(ax, 'off');
+            
+            % Ensure axis properties are always set
             ax.Color = [0 0 0];
             ax.XColor = [1 1 1];
             ax.YColor = [1 1 1];
             ax.GridColor = [0.3 0.3 0.3];
             ax.Box = 'on';
+            ax.XAxis.Visible = 'on';
+            ax.YAxis.Visible = 'on';
 
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
                 app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see idle metrics.');
@@ -3075,10 +3115,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create bar plot
             xPos = 1:length(uniqueOps);
             idleBars = bar(ax, xPos, idleRatios, 0.6, 'FaceColor', [0.95 0.6 0.2]);
-            % Set y-axis limit to 120% of max data
+            % Set y-axis limit to 120% of max data with integer ticks
             if max(idleRatios) > 0
-                ylim(ax, [0 max(idleRatios) * 1.2]);
+                maxY = ceil(max(idleRatios) * 1.2);
+                ylim(ax, [0 maxY]);
+                ax.YTick = 0:ceil(maxY/5):maxY; % Integer ticks only
+            else
+                ax.YTick = 0:2:10; % Default integer ticks
             end
+            
+            % Pad y-tick labels for alignment (integers only, 3-character width)
+            currentTicks = ax.YTick;
+            paddedLabels = cell(size(currentTicks));
+            for i = 1:length(currentTicks)
+                paddedLabels{i} = sprintf('%3d', round(currentTicks(i))); % 3-character width, no decimals
+            end
+            ax.YTickLabel = paddedLabels;
+            
             ylabel(ax, 'Idle per Turnover (min)', 'Color', [1 1 1]);
             
             % Add idle ratio labels
@@ -3095,7 +3148,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ax.XTickLabel = cellstr(uniqueOps);
             ax.XTickLabelRotation = 30;
             xlim(ax, [0.5 length(uniqueOps) + 0.5]);
-            ax.XAxis.Label.Color = [1 1 1];
             grid(ax, 'on');
         end
 
@@ -3103,7 +3155,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(ax) || ~isvalid(ax)
                 return;
             end
-            cla(ax);
+            
+            % Clear only the plot data, preserve axis structure
+            delete(findobj(ax, 'Type', 'Bar'));
+            delete(findobj(ax, 'Type', 'Text'));
+            
+            % Set basic axis properties for placeholder
             ax.Color = [0 0 0];
             ax.XColor = [0.3 0.3 0.3];
             ax.YColor = [0.3 0.3 0.3];
