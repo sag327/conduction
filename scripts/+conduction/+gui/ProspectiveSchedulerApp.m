@@ -38,6 +38,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerLabValueLabel         matlab.ui.control.Label
         DrawerStartValueLabel       matlab.ui.control.Label
         DrawerEndValueLabel         matlab.ui.control.Label
+        DrawerMetricValueLabel      matlab.ui.control.Label
+        DrawerLabsValueLabel        matlab.ui.control.Label
+        DrawerTimingsValueLabel     matlab.ui.control.Label
+        DrawerOptimizationTitle     matlab.ui.control.Label
+        DrawerOptimizationGrid      matlab.ui.container.GridLayout
         DrawerLogTitle              matlab.ui.control.Label
         DrawerLogTextArea           matlab.ui.control.TextArea
 
@@ -52,7 +57,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingRunButton            matlab.ui.control.Button
         TestingExitButton           matlab.ui.control.Button
         TestingInfoLabel            matlab.ui.control.Label
-        OptimizationOptionsSummaryLabel matlab.ui.control.Label
 
         CaseDetailsLabel            matlab.ui.control.Label
         OperatorLabel               matlab.ui.control.Label
@@ -108,7 +112,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
         UtilAxes                    matlab.ui.control.UIAxes
-        TurnoverMetricsAxes         matlab.ui.control.UIAxes
+        FlipAxes                    matlab.ui.control.UIAxes
+        IdleAxes                    matlab.ui.control.UIAxes
         KPI1                        matlab.ui.control.Label
         KPI2                        matlab.ui.control.Label
         KPI3                        matlab.ui.control.Label
@@ -193,7 +198,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
-            app.MiddleLayout.RowHeight = {'1x','fit','fit'};
+            app.MiddleLayout.RowHeight = {'1x','fit'};
             app.MiddleLayout.ColumnWidth = {370, '1x', 0};
             app.MiddleLayout.ColumnSpacing = 12;
             app.MiddleLayout.RowSpacing = 12;
@@ -229,7 +234,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.buildOptimizationTab(optimizationGrid);
 
             app.CanvasTabGroup = uitabgroup(app.MiddleLayout);
-            app.CanvasTabGroup.Layout.Row = 1;
+            app.CanvasTabGroup.Layout.Row = [1 2];
             app.CanvasTabGroup.Layout.Column = 2;
             app.CanvasTabGroup.SelectionChangedFcn = createCallbackFcn(app, @CanvasTabGroupSelectionChanged, true);
 
@@ -253,10 +258,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Color = [0 0 0];
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
-            app.CanvasAnalyzeLayout.RowHeight = {'1x', '1x'};
+            app.CanvasAnalyzeLayout.RowHeight = {'1.5x', '1x', '1.3x'};
             app.CanvasAnalyzeLayout.ColumnWidth = {'1x'};
-            app.CanvasAnalyzeLayout.Padding = [12 12 12 12];
-            app.CanvasAnalyzeLayout.RowSpacing = 0;
+            app.CanvasAnalyzeLayout.Padding = [8 8 8 8];
+            app.CanvasAnalyzeLayout.RowSpacing = 5;
             app.CanvasAnalyzeLayout.ColumnSpacing = 0;
 
             app.UtilAxes = uiaxes(app.CanvasAnalyzeLayout);
@@ -264,25 +269,35 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UtilAxes.Layout.Column = 1;
             app.UtilAxes.Color = [0 0 0];
             app.UtilAxes.Box = 'on';
-            app.UtilAxes.Title.String = 'Operator Utilization';
+            app.UtilAxes.Title.String = '';
             app.UtilAxes.Title.FontWeight = 'bold';
             app.UtilAxes.Title.FontSize = 14;
             app.UtilAxes.Visible = 'on';
 
-            app.TurnoverMetricsAxes = uiaxes(app.CanvasAnalyzeLayout);
-            app.TurnoverMetricsAxes.Layout.Row = 2;
-            app.TurnoverMetricsAxes.Layout.Column = 1;
-            app.TurnoverMetricsAxes.Color = [0 0 0];
-            app.TurnoverMetricsAxes.Box = 'on';
-            app.TurnoverMetricsAxes.Title.String = 'Operator Turnover Metrics';
-            app.TurnoverMetricsAxes.Title.FontWeight = 'bold';
-            app.TurnoverMetricsAxes.Title.FontSize = 14;
-            app.TurnoverMetricsAxes.Visible = 'on';
+            app.FlipAxes = uiaxes(app.CanvasAnalyzeLayout);
+            app.FlipAxes.Layout.Row = 2;
+            app.FlipAxes.Layout.Column = 1;
+            app.FlipAxes.Color = [0 0 0];
+            app.FlipAxes.Box = 'on';
+            app.FlipAxes.Title.String = '';
+            app.FlipAxes.Title.FontWeight = 'bold';
+            app.FlipAxes.Title.FontSize = 14;
+            app.FlipAxes.Visible = 'on';
+
+            app.IdleAxes = uiaxes(app.CanvasAnalyzeLayout);
+            app.IdleAxes.Layout.Row = 3;
+            app.IdleAxes.Layout.Column = 1;
+            app.IdleAxes.Color = [0 0 0];
+            app.IdleAxes.Box = 'on';
+            app.IdleAxes.Title.String = '';
+            app.IdleAxes.Title.FontWeight = 'bold';
+            app.IdleAxes.Title.FontSize = 14;
+            app.IdleAxes.Visible = 'on';
 
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
             app.Drawer = uipanel(app.MiddleLayout);
-            app.Drawer.Layout.Row = [1 3];
+            app.Drawer.Layout.Row = [1 2];
             app.Drawer.Layout.Column = 3;
             app.Drawer.BackgroundColor = [0.1 0.1 0.1];
             app.Drawer.BorderType = 'none';
@@ -290,14 +305,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.buildDrawerUI();
 
             % Add optimization options and status as caption below schedule
-            app.OptimizationOptionsSummaryLabel = uilabel(app.MiddleLayout);
-            app.OptimizationOptionsSummaryLabel.Text = sprintf('Metric: operatorIdle | Labs: 6 | Turnover: 30 | Setup/Post: 15/15\nNo optimization run yet.');
-            app.OptimizationOptionsSummaryLabel.HorizontalAlignment = 'center';
-            app.OptimizationOptionsSummaryLabel.FontSize = 12;
-            app.OptimizationOptionsSummaryLabel.FontColor = [0 0.5 0];
-            app.OptimizationOptionsSummaryLabel.Layout.Row = 3;
-            app.OptimizationOptionsSummaryLabel.Layout.Column = 2;
-            app.OptimizationOptionsSummaryLabel.WordWrap = 'on';
 
             % Bottom KPI bar
             app.BottomBarLayout = uigridlayout(app.MainGridLayout);
@@ -424,7 +431,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', '1x'};
+            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
             app.DrawerLayout.ColumnWidth = {'1x'};
             app.DrawerLayout.Padding = [16 18 16 18];
             app.DrawerLayout.RowSpacing = 12;
@@ -478,15 +485,37 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
 
+            % Optimization Parameters Section
+            app.DrawerOptimizationTitle = uilabel(app.DrawerLayout);
+            app.DrawerOptimizationTitle.Text = 'Optimization Parameters';
+            app.DrawerOptimizationTitle.FontWeight = 'bold';
+            app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
+            app.DrawerOptimizationTitle.Layout.Row = 4;
+            app.DrawerOptimizationTitle.Layout.Column = 1;
+
+            app.DrawerOptimizationGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerOptimizationGrid.Layout.Row = 5;
+            app.DrawerOptimizationGrid.Layout.Column = 1;
+            app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
+            app.DrawerOptimizationGrid.ColumnWidth = {90, '1x'};
+            app.DrawerOptimizationGrid.RowSpacing = 4;
+            app.DrawerOptimizationGrid.ColumnSpacing = 12;
+            app.DrawerOptimizationGrid.Padding = [0 8 0 0];
+            app.DrawerOptimizationGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+            app.createDrawerOptimizationRow(1, 'Metric', 'DrawerMetricValueLabel');
+            app.createDrawerOptimizationRow(2, 'Labs', 'DrawerLabsValueLabel');
+            app.createDrawerOptimizationRow(3, 'Timings', 'DrawerTimingsValueLabel');
+
             app.DrawerLogTitle = uilabel(app.DrawerLayout);
             app.DrawerLogTitle.Text = 'Why-not / Run log';
             app.DrawerLogTitle.FontWeight = 'bold';
             app.DrawerLogTitle.FontColor = [0.9 0.9 0.9];
-            app.DrawerLogTitle.Layout.Row = 4;
+            app.DrawerLogTitle.Layout.Row = 6;
             app.DrawerLogTitle.Layout.Column = 1;
 
             app.DrawerLogTextArea = uitextarea(app.DrawerLayout);
-            app.DrawerLogTextArea.Layout.Row = 5;
+            app.DrawerLogTextArea.Layout.Row = 7;
             app.DrawerLogTextArea.Layout.Column = 1;
             app.DrawerLogTextArea.Editable = 'off';
             app.DrawerLogTextArea.Value = {'Select a case to inspect diagnostics.'};
@@ -505,6 +534,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             staticLabel.Layout.Column = 1;
 
             valueLabel = uilabel(app.DrawerInspectorGrid);
+            valueLabel.Text = '--';
+            valueLabel.FontColor = [0.95 0.95 0.95];
+            valueLabel.Layout.Row = rowIndex;
+            valueLabel.Layout.Column = 2;
+            valueLabel.WordWrap = 'on';
+
+            app.(valuePropName) = valueLabel;
+        end
+
+        function createDrawerOptimizationRow(app, rowIndex, labelText, valuePropName)
+            staticLabel = uilabel(app.DrawerOptimizationGrid);
+            staticLabel.Text = labelText;
+            staticLabel.FontColor = [0.7 0.7 0.7];
+            staticLabel.Layout.Row = rowIndex;
+            staticLabel.Layout.Column = 1;
+
+            valueLabel = uilabel(app.DrawerOptimizationGrid);
             valueLabel.Text = '--';
             valueLabel.FontColor = [0.95 0.95 0.95];
             valueLabel.Layout.Row = rowIndex;
@@ -1182,10 +1228,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if event.NewValue == app.CanvasAnalyzeTab
                 if ~isempty(app.UtilAxes) && isvalid(app.UtilAxes)
                     app.drawUtilization(app.UtilAxes);
-                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
                 end
-                if ~isempty(app.TurnoverMetricsAxes) && isvalid(app.TurnoverMetricsAxes)
-                    app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
+                if ~isempty(app.FlipAxes) && isvalid(app.FlipAxes)
+                    app.drawFlipMetrics(app.FlipAxes);
+                end
+                if ~isempty(app.IdleAxes) && isvalid(app.IdleAxes)
+                    app.drawIdleMetrics(app.IdleAxes);
                 end
             end
         end
@@ -2218,7 +2266,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
-                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
+                app.drawFlipMetrics(app.FlipAxes);
+                app.drawIdleMetrics(app.IdleAxes);
             end
         end
 
@@ -2542,50 +2591,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function updateOptimizationStatus(app)
-            if isempty(app.OptimizationOptionsSummaryLabel) || ~isvalid(app.OptimizationOptionsSummaryLabel)
+            % Update drawer optimization section if it exists
+            app.updateDrawerOptimizationSection();
+        end
+        
+        function updateDrawerOptimizationSection(app)
+            % Check if drawer optimization labels exist
+            if isempty(app.DrawerMetricValueLabel) || ~isvalid(app.DrawerMetricValueLabel)
                 return;
             end
-
-            % Get current options summary (first line)
-            optionsSummary = app.getOptimizationOptionsSummary();
             
-            % Determine status text (second line)
-            statusText = '';
-            if app.IsOptimizationRunning
-                statusText = 'Optimizing schedule...';
-            elseif isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
-                statusText = 'Add at least one case to run optimization.';
-            elseif app.IsOptimizationDirty || isempty(app.OptimizedSchedule)
-                statusText = 'Case changes pending. Run optimization to refresh results.';
+            % Get optimization parameters
+            if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
+                app.setLabelText(app.DrawerMetricValueLabel, 'operatorIdle');
+                app.setLabelText(app.DrawerLabsValueLabel, '6');
+                app.setLabelText(app.DrawerTimingsValueLabel, 'Turn: 30 | Setup/Post: 15/15');
             else
-                % Optimization completed successfully
-                metrics = app.OptimizedSchedule.metrics();
-                makespan = NaN;
-                if isfield(metrics, 'makespan') && ~isempty(metrics.makespan)
-                    makespan = metrics.makespan;
-                end
-
-                if ~isnan(makespan)
-                    makespanText = sprintf('Makespan: %.0f min', makespan);
-                else
-                    makespanText = 'Makespan: n/a';
-                end
-
-                objectiveText = 'Objective: n/a';
-                if isfield(app.OptimizationOutcome, 'objectiveValue') && ~isempty(app.OptimizationOutcome.objectiveValue)
-                    objectiveText = sprintf('Objective: %.2f', app.OptimizationOutcome.objectiveValue);
-                end
-
-                timestampText = 'Just now';
-                if ~isnat(app.OptimizationLastRun)
-                    timestampText = datestr(app.OptimizationLastRun, 'HH:MM AM');
-                end
-
-                statusText = sprintf('Optimized %s | %s | %s', timestampText, makespanText, objectiveText);
+                metricText = char(string(app.Opts.metric));
+                labsCount = round(app.Opts.labs);
+                turnoverText = round(app.Opts.turnover);
+                setupText = round(app.Opts.setup);
+                postText = round(app.Opts.post);
+                
+                app.setLabelText(app.DrawerMetricValueLabel, metricText);
+                app.setLabelText(app.DrawerLabsValueLabel, sprintf('%d', labsCount));
+                app.setLabelText(app.DrawerTimingsValueLabel, sprintf('Turn: %d | Setup/Post: %d/%d', ...
+                    turnoverText, setupText, postText));
             end
-
-            % Update the combined caption
-            app.OptimizationOptionsSummaryLabel.Text = sprintf('%s\n%s', optionsSummary, statusText);
         end
 
         function updateOptimizationActionAvailability(app)
@@ -2635,7 +2667,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
-                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
+                app.drawFlipMetrics(app.FlipAxes);
+                app.drawIdleMetrics(app.IdleAxes);
             end
 
         end
@@ -2668,7 +2701,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.drawUtilization(app.UtilAxes);
-                app.drawTurnoverMetrics(app.TurnoverMetricsAxes);
+                app.drawFlipMetrics(app.FlipAxes);
+                app.drawIdleMetrics(app.IdleAxes);
             end
         end
 
@@ -2829,7 +2863,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             stackedData = [procMinutes, idleMinutes, overtimeMinutes] / 60; % minutes to hours
-            barHandles = bar(ax, stackedData, 'stacked');
+            barHandles = bar(ax, stackedData, 0.6, 'stacked');
             if numel(barHandles) >= 1
                 barHandles(1).FaceColor = [0.2 0.6 0.9];
             end
@@ -2854,10 +2888,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             ax.XTick = 1:numel(uniqueOps);
             ax.XTickLabel = {};
             ax.XTickLabelRotation = 0;
+            xlim(ax, [0.5 numel(uniqueOps) + 0.5]);
             ylabel(ax, 'Hours');
-            title(ax, 'Operator Utilization (Procedure vs Idle vs Overtime)', 'Color', [0.9 0.9 0.9]);
-            legend(ax, {'Procedure', 'Idle', 'Overtime'}, 'TextColor', [0.9 0.9 0.9], ...
-                'Location', 'northoutside', 'Orientation', 'horizontal');
+            
+            % Add color-coded text in northeast corner instead of legend
+            % Position text in the upper right, making sure bars don't overlap
+            maxHeight = max(sum(stackedData, 2));
+            ylim(ax, [0 maxHeight * 1.20]); % Add more space at top for text
+            
+            % Position text with equal distance from top and right edges
+            xOffset = 0.08; % Distance from right edge
+            yOffset = 0.08; % Distance from top edge
+            lineSpacing = 0.06; % Spacing between lines
+            
+            text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset), 'Procedure', ...
+                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+                'Color', [0.2 0.6 0.9], 'FontSize', 14, 'FontWeight', 'normal');
+            text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset - lineSpacing), 'Idle', ...
+                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+                'Color', [0.95 0.6 0.2], 'FontSize', 14, 'FontWeight', 'normal');
+            text(ax, numel(uniqueOps) + 0.5 - xOffset, maxHeight * (1.20 - yOffset - 2*lineSpacing), 'Overtime', ...
+                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+                'Color', [0.6 0.3 0.8], 'FontSize', 14, 'FontWeight', 'normal');
+            
             grid(ax, 'on');
         end
 
@@ -2876,7 +2929,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Interpreter', 'none');
         end
 
-        function drawTurnoverMetrics(app, ax)
+        function drawFlipMetrics(app, ax)
             if isempty(ax) || ~isvalid(ax)
                 return;
             end
@@ -2884,18 +2937,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             cla(ax);
             hold(ax, 'off');
             ax.Color = [0 0 0];
-            ax.XColor = [0.85 0.85 0.85];
+            ax.XColor = [1 1 1];
+            ax.YColor = [1 1 1];
             ax.GridColor = [0.3 0.3 0.3];
             ax.Box = 'on';
 
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
-                app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see turnover metrics.');
+                app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see flip metrics.');
                 return;
             end
 
             cases = app.OptimizedSchedule.cases();
             if isempty(cases)
-                app.renderTurnoverPlaceholder(ax, 'No cases available for turnover analysis.');
+                app.renderTurnoverPlaceholder(ax, 'No cases available for flip analysis.');
                 return;
             end
 
@@ -2907,13 +2961,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             opMetrics = metrics.operatorMetrics;
-            if ~isfield(opMetrics, 'flipPerTurnoverRatio') || ~isfield(opMetrics, 'idlePerTurnoverRatio')
-                app.renderTurnoverPlaceholder(ax, 'Turnover metrics not computed.');
+            if ~isfield(opMetrics, 'flipPerTurnoverRatio')
+                app.renderTurnoverPlaceholder(ax, 'Flip metrics not computed.');
                 return;
             end
 
             % Get all operators from cases (same ordering as utilization plot)
-            cases = app.OptimizedSchedule.cases();
             operatorNames = string({cases.operator});
             operatorNames = operatorNames(strlength(operatorNames) > 0);
             uniqueOps = unique(operatorNames, 'stable');
@@ -2923,15 +2976,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Extract turnover data maps
+            % Extract flip data
             flipMap = opMetrics.flipPerTurnoverRatio;
-            idleMap = opMetrics.idlePerTurnoverRatio;
-
-            % Get data for each operator (include all operators, even with no turnover data)
             flipRatios = zeros(length(uniqueOps), 1);
-            idleRatios = zeros(length(uniqueOps), 1);
             hasFlipData = false(length(uniqueOps), 1);
-            hasIdleData = false(length(uniqueOps), 1);
             
             for i = 1:length(uniqueOps)
                 opName = char(uniqueOps(i));
@@ -2939,53 +2987,114 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     flipRatios(i) = flipMap(opName) * 100; % Convert to percentage
                     hasFlipData(i) = true;
                 end
+            end
+
+            % Create bar plot
+            xPos = 1:length(uniqueOps);
+            flipBars = bar(ax, xPos, flipRatios, 0.6, 'FaceColor', [0.2 0.6 0.9]);
+            ylim(ax, [0 100]);
+            ylabel(ax, 'Flip per Turnover (%)', 'Color', [1 1 1]);
+            
+            % Add flip percentage labels
+            for i = 1:length(uniqueOps)
+                if hasFlipData(i) && flipRatios(i) > 0
+                    text(ax, i, flipRatios(i) + max(flipRatios) * 0.05, sprintf('%.0f%%', flipRatios(i)), ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+                        'Color', [1 1 1], 'FontSize', 10, 'FontWeight', 'bold');
+                end
+            end
+
+            % Formatting (no x-axis labels for middle plot)
+            ax.XTick = xPos;
+            ax.XTickLabel = {};
+            xlim(ax, [0.5 length(uniqueOps) + 0.5]);
+            grid(ax, 'on');
+        end
+
+        function drawIdleMetrics(app, ax)
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            cla(ax);
+            hold(ax, 'off');
+            ax.Color = [0 0 0];
+            ax.XColor = [1 1 1];
+            ax.YColor = [1 1 1];
+            ax.GridColor = [0.3 0.3 0.3];
+            ax.Box = 'on';
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                app.renderTurnoverPlaceholder(ax, 'Run the optimizer to see idle metrics.');
+                return;
+            end
+
+            cases = app.OptimizedSchedule.cases();
+            if isempty(cases)
+                app.renderTurnoverPlaceholder(ax, 'No cases available for idle analysis.');
+                return;
+            end
+
+            % Get operator metrics from analytics
+            metrics = conduction.analytics.OperatorAnalyzer.analyze(app.OptimizedSchedule);
+            if ~isfield(metrics, 'operatorMetrics')
+                app.renderTurnoverPlaceholder(ax, 'Operator metrics unavailable.');
+                return;
+            end
+
+            opMetrics = metrics.operatorMetrics;
+            if ~isfield(opMetrics, 'idlePerTurnoverRatio')
+                app.renderTurnoverPlaceholder(ax, 'Idle metrics not computed.');
+                return;
+            end
+
+            % Get all operators from cases (same ordering as utilization plot)
+            operatorNames = string({cases.operator});
+            operatorNames = operatorNames(strlength(operatorNames) > 0);
+            uniqueOps = unique(operatorNames, 'stable');
+            
+            if isempty(uniqueOps)
+                app.renderTurnoverPlaceholder(ax, 'No operators found.');
+                return;
+            end
+
+            % Extract idle data
+            idleMap = opMetrics.idlePerTurnoverRatio;
+            idleRatios = zeros(length(uniqueOps), 1);
+            hasIdleData = false(length(uniqueOps), 1);
+            
+            for i = 1:length(uniqueOps)
+                opName = char(uniqueOps(i));
                 if idleMap.isKey(opName)
                     idleRatios(i) = idleMap(opName); % Minutes per turnover
                     hasIdleData(i) = true;
                 end
             end
 
-            % Create dual y-axis plot
+            % Create bar plot
             xPos = 1:length(uniqueOps);
-            
-            % Left y-axis for flip percentage
-            yyaxis(ax, 'left');
-            flipBars = bar(ax, xPos - 0.2, flipRatios, 0.4, 'FaceColor', [0.2 0.6 0.9]);
-            ax.YAxis(1).Color = [0.2 0.6 0.9];
-            ylim(ax, [0 120]);
-            ylabel(ax, 'Flip per Turnover (%)', 'Color', [0.9 0.9 0.9]);
-            
-            % Add flip percentage labels
-            for i = 1:length(uniqueOps)
-                if hasFlipData(i) && flipRatios(i) > 0
-                    text(ax, i - 0.2, flipRatios(i) + max(flipRatios) * 0.05, sprintf('%.0f%%', flipRatios(i)), ...
-                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
-                        'Color', [0.2 0.6 0.9], 'FontSize', 9, 'FontWeight', 'bold');
-                end
+            idleBars = bar(ax, xPos, idleRatios, 0.6, 'FaceColor', [0.95 0.6 0.2]);
+            % Set y-axis limit to 120% of max data
+            if max(idleRatios) > 0
+                ylim(ax, [0 max(idleRatios) * 1.2]);
             end
-            
-            % Right y-axis for idle ratio
-            yyaxis(ax, 'right');
-            idleBars = bar(ax, xPos + 0.2, idleRatios, 0.4, 'FaceColor', [0.95 0.6 0.2]);
-            ax.YAxis(2).Color = [0.95 0.6 0.2];
-            ylabel(ax, 'Idle per Turnover (min)', 'Color', [0.9 0.9 0.9]);
+            ylabel(ax, 'Idle per Turnover (min)', 'Color', [1 1 1]);
             
             % Add idle ratio labels
             for i = 1:length(uniqueOps)
                 if hasIdleData(i) && idleRatios(i) > 0
-                    text(ax, i + 0.2, idleRatios(i) + max(idleRatios) * 0.05, sprintf('%.1fm', idleRatios(i)), ...
+                    text(ax, i, idleRatios(i) + max(idleRatios) * 0.05, sprintf('%.0fm', round(idleRatios(i))), ...
                         'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
-                        'Color', [0.95 0.6 0.2], 'FontSize', 9, 'FontWeight', 'bold');
+                        'Color', [1 1 1], 'FontSize', 10, 'FontWeight', 'bold');
                 end
             end
 
-            % Common formatting
+            % Formatting (x-axis labels only on bottom plot)
             ax.XTick = xPos;
             ax.XTickLabel = cellstr(uniqueOps);
             ax.XTickLabelRotation = 30;
-            title(ax, 'Operator Turnover Metrics', 'Color', [0.9 0.9 0.9]);
-            legend(ax, [flipBars, idleBars], {'Flip %', 'Idle (min)'}, 'TextColor', [0.9 0.9 0.9], ...
-                'Location', 'northoutside', 'Orientation', 'horizontal');
+            xlim(ax, [0.5 length(uniqueOps) + 0.5]);
+            ax.XAxis.Label.Color = [1 1 1];
             grid(ax, 'on');
         end
 
