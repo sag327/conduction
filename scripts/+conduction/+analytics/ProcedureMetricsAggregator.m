@@ -89,6 +89,13 @@ classdef ProcedureMetricsAggregator < conduction.analytics.interfaces.Aggregator
                 );
             end
         end
+
+        function map = getProcedureMap(obj)
+            %GETPROCEDUREMAP Public accessor for the internal ProcedureMap.
+            %   Returns the raw procedure map containing ProcedureEntry objects
+            %   with operator metrics and sample data.
+            map = obj.ProcedureMap;
+        end
     end
 
     methods (Static, Access = private)
