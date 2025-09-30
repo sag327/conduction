@@ -66,6 +66,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ProcedureDropDown           matlab.ui.control.DropDown
 
         DurationStatsLabel          matlab.ui.control.Label
+        DurationHistogramButton     matlab.ui.control.Button
+        DurationHistogramPanel      matlab.ui.container.Panel
+        DurationHistogramAxes       matlab.ui.control.UIAxes
         DurationButtonGroup         matlab.ui.container.ButtonGroup
         MedianRadioButton           matlab.ui.control.RadioButton
         MedianValueLabel            matlab.ui.control.Label
@@ -346,7 +349,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function addGrid = configureAddTabLayout(app)
             addGrid = uigridlayout(app.TabAdd);
             addGrid.ColumnWidth = {100, 140, 80, '1x'};
-            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 90, 12, 24, 3, 24, 0, 12, 28, '1x'};
+            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 0, 90, 12, 24, 3, 24, 0, 12, 28, '1x'};
             addGrid.Padding = [10 10 10 10];
             addGrid.RowSpacing = 3;
             addGrid.ColumnSpacing = 6;
@@ -607,12 +610,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationStatsLabel.Text = 'Duration Options';
             app.DurationStatsLabel.FontWeight = 'bold';
             app.DurationStatsLabel.Layout.Row = 14;
-            app.DurationStatsLabel.Layout.Column = [1 4];
+            app.DurationStatsLabel.Layout.Column = [1 3];
+
+            % Histogram toggle button next to label
+            app.DurationHistogramButton = uibutton(leftGrid, 'push');
+            app.DurationHistogramButton.Text = '📊 View';
+            app.DurationHistogramButton.Layout.Row = 14;
+            app.DurationHistogramButton.Layout.Column = 4;
+            app.DurationHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @DurationHistogramButtonPushed, true);
+
+            % Collapsible histogram panel (row 14a, initially hidden)
+            app.DurationHistogramPanel = uipanel(leftGrid);
+            app.DurationHistogramPanel.Layout.Row = 15;
+            app.DurationHistogramPanel.Layout.Column = [1 4];
+            app.DurationHistogramPanel.BorderType = 'line';
+            app.DurationHistogramPanel.Visible = 'off';
+
+            app.DurationHistogramAxes = uiaxes(app.DurationHistogramPanel);
+            app.DurationHistogramAxes.Units = 'normalized';
+            app.DurationHistogramAxes.Position = [0, 0, 1, 1];
+            app.DurationHistogramAxes.Toolbar.Visible = 'off';
+            app.DurationHistogramAxes.Interactions = [];
+            disableDefaultInteractivity(app.DurationHistogramAxes);
 
             % Create the ButtonGroup with manual positioning for tight layout
             app.DurationButtonGroup = uibuttongroup(leftGrid);
             app.DurationButtonGroup.BorderType = 'none';
-            app.DurationButtonGroup.Layout.Row = 15;
+            app.DurationButtonGroup.Layout.Row = 16;
             app.DurationButtonGroup.Layout.Column = [1 4];
             app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
             app.DurationButtonGroup.AutoResizeChildren = 'off';
@@ -751,28 +775,28 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function buildConstraintSection(app, leftGrid)
-            % Admission status dropdown (always visible in row 17)
+            % Admission status dropdown (always visible in row 18)
             app.AdmissionStatusLabel = uilabel(leftGrid);
             app.AdmissionStatusLabel.Text = 'Status:';
-            app.AdmissionStatusLabel.Layout.Row = 17;
+            app.AdmissionStatusLabel.Layout.Row = 18;
             app.AdmissionStatusLabel.Layout.Column = 1;
 
             app.AdmissionStatusDropDown = uidropdown(leftGrid);
             app.AdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
             app.AdmissionStatusDropDown.Value = 'outpatient';
-            app.AdmissionStatusDropDown.Layout.Row = 17;
+            app.AdmissionStatusDropDown.Layout.Row = 18;
             app.AdmissionStatusDropDown.Layout.Column = 2;
 
-            % Add Constraint toggle button (smaller, left-justified in row 19)
+            % Add Constraint toggle button (smaller, left-justified in row 20)
             app.AddConstraintButton = uibutton(leftGrid, 'push');
             app.AddConstraintButton.Text = '+ Add constraint';
-            app.AddConstraintButton.Layout.Row = 19;
+            app.AddConstraintButton.Layout.Row = 20;
             app.AddConstraintButton.Layout.Column = [1 2];
             app.AddConstraintButton.ButtonPushedFcn = createCallbackFcn(app, @AddConstraintButtonPushed, true);
 
             % Collapsible Constraint Panel
             app.ConstraintPanel = uipanel(leftGrid);
-            app.ConstraintPanel.Layout.Row = 20;
+            app.ConstraintPanel.Layout.Row = 21;
             app.ConstraintPanel.Layout.Column = [1 4];
             app.ConstraintPanel.BorderType = 'none';
             app.ConstraintPanel.Visible = 'off';
@@ -807,7 +831,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Add Case button
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 22;
+            app.AddCaseButton.Layout.Row = 23;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
         end
@@ -1133,6 +1157,32 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.refreshDurationOptions();
         end
 
+        function DurationHistogramButtonPushed(app, event)
+            % Toggle histogram panel visibility
+            if strcmp(app.DurationHistogramPanel.Visible, 'off')
+                % Show panel
+                app.DurationHistogramPanel.Visible = 'on';
+                app.DurationHistogramButton.Text = '📊 Hide';
+
+                % Expand row 15 to fit the histogram
+                currentRowHeights = app.TabAdd.Children(1).RowHeight;
+                currentRowHeights{15} = 180;
+                app.TabAdd.Children(1).RowHeight = currentRowHeights;
+
+                % Update histogram with current operator/procedure
+                app.refreshDurationHistogram();
+            else
+                % Hide panel
+                app.DurationHistogramPanel.Visible = 'off';
+                app.DurationHistogramButton.Text = '📊 View';
+
+                % Collapse row 15
+                currentRowHeights = app.TabAdd.Children(1).RowHeight;
+                currentRowHeights{15} = 0;
+                app.TabAdd.Children(1).RowHeight = currentRowHeights;
+            end
+        end
+
         function AddConstraintButtonPushed(app, event)
             % Toggle constraint panel visibility
             if strcmp(app.ConstraintPanel.Visible, 'off')
@@ -1140,18 +1190,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ConstraintPanel.Visible = 'on';
                 app.AddConstraintButton.Text = '− Remove constraint';
 
-                % Expand row 20 to fit the panel (2 rows: 24 + 24 + padding)
+                % Expand row 21 to fit the panel (2 rows: 24 + 24 + padding)
                 currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{20} = 60;
+                currentRowHeights{21} = 60;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
             else
                 % Hide panel
                 app.ConstraintPanel.Visible = 'off';
                 app.AddConstraintButton.Text = '+ Add constraint';
 
-                % Collapse row 20
+                % Collapse row 21
                 currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{20} = 0;
+                currentRowHeights{21} = 0;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
             end
         end
@@ -1191,7 +1241,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.ConstraintPanel.Visible = 'off';
                     app.AddConstraintButton.Text = '+ Add constraint';
                     currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                    currentRowHeights{20} = 0;
+                    currentRowHeights{21} = 0;
                     app.TabAdd.Children(1).RowHeight = currentRowHeights;
                 end
 
@@ -2185,6 +2235,66 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateDurationHeader(summary);
             app.updateCustomSpinnerState();
+
+            % Update histogram if visible
+            if strcmp(app.DurationHistogramPanel.Visible, 'on')
+                app.refreshDurationHistogram();
+            end
+        end
+
+        function refreshDurationHistogram(app)
+            % Update histogram with current operator/procedure selection
+            operatorName = string(app.OperatorDropDown.Value);
+            procedureName = string(app.ProcedureDropDown.Value);
+
+            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+                return;
+            end
+
+            cla(app.DurationHistogramAxes);
+
+            if operatorName == "" || procedureName == "" || ...
+               strcmp(operatorName, 'Other...') || strcmp(procedureName, 'Other...')
+                app.showDurationHistogramMessage('Select operator and procedure');
+                return;
+            end
+
+            % Check if we have historical data
+            if isempty(app.CaseManager)
+                app.showDurationHistogramMessage('No historical data available');
+                return;
+            end
+
+            aggregator = app.CaseManager.getProcedureMetricsAggregator();
+            if isempty(aggregator)
+                app.showDurationHistogramMessage('No historical data available');
+                return;
+            end
+
+            % Plot using the shared plotting function
+            try
+                conduction.plotting.plotOperatorProcedureHistogram(...
+                    aggregator, ...
+                    operatorName, procedureName, 'procedureMinutes', ...
+                    'Parent', app.DurationHistogramAxes);
+            catch ME
+                app.showDurationHistogramMessage(sprintf('Error: %s', ME.message));
+            end
+        end
+
+        function showDurationHistogramMessage(app, msg)
+            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+                return;
+            end
+            cla(app.DurationHistogramAxes);
+            text(app.DurationHistogramAxes, 0.5, 0.5, msg, ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                'Color', [0.6 0.6 0.6], 'FontSize', 11);
+            app.DurationHistogramAxes.XLim = [0 1];
+            app.DurationHistogramAxes.YLim = [0 1];
+            app.DurationHistogramAxes.XTick = [];
+            app.DurationHistogramAxes.YTick = [];
+            app.DurationHistogramAxes.Box = 'off';
         end
 
         function clearDurationDisplay(app)
