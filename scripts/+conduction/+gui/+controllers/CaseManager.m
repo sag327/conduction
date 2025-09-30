@@ -9,6 +9,7 @@ classdef CaseManager < handle
         ChangeListeners cell = {}
         HistoricalCollection conduction.ScheduleCollection
         ProcedureAnalytics struct % Contains operator-specific procedure stats
+        ProcedureAggregator conduction.analytics.ProcedureMetricsAggregator % Cached aggregator with raw sample data
         ClinicalDataPath string
         DailySummary table
     end
@@ -240,6 +241,12 @@ classdef CaseManager < handle
         function collection = getHistoricalCollection(obj)
             %GETHISTORICALCOLLECTION Return the historical schedule collection.
             collection = obj.HistoricalCollection;
+        end
+
+        function aggregator = getProcedureMetricsAggregator(obj)
+            %GETPROCEDUREMETRICSAGGREGATOR Return the cached procedure metrics aggregator.
+            %   Returns the pre-computed aggregator with raw sample data for fast histogram plotting.
+            aggregator = obj.ProcedureAggregator;
         end
 
         function stats = getOperatorProcedureStats(obj, operatorName, procedureName)
@@ -619,16 +626,27 @@ classdef CaseManager < handle
             % Compute procedure analytics from historical collection
             if isempty(obj.HistoricalCollection)
                 obj.ProcedureAnalytics = struct();
+                obj.ProcedureAggregator = conduction.analytics.ProcedureMetricsAggregator.empty();
                 return;
             end
 
             try
-                % Run procedure analysis on the collection
-                obj.ProcedureAnalytics = conduction.analytics.runProcedureAnalysis(obj.HistoricalCollection);
+                % Build the aggregator with raw sample data (for histograms)
+                schedules = obj.HistoricalCollection.dailySchedules();
+                obj.ProcedureAggregator = conduction.analytics.ProcedureMetricsAggregator();
+
+                for i = 1:numel(schedules)
+                    result = conduction.analytics.ProcedureAnalyzer.analyze(schedules(i));
+                    obj.ProcedureAggregator.accumulate(result);
+                end
+
+                % Also compute the summary statistics (for dropdown options, etc.)
+                obj.ProcedureAnalytics = obj.ProcedureAggregator.summarize();
             catch ME
                 warning('CaseManager:AnalyticsFailed', ...
                     'Failed to compute procedure analytics: %s', ME.message);
                 obj.ProcedureAnalytics = struct();
+                obj.ProcedureAggregator = conduction.analytics.ProcedureMetricsAggregator.empty();
             end
         end
 

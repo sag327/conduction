@@ -1044,9 +1044,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if nargin < 2
                 caseId = string.empty;
             end
-            % Store the caseId but don't populate yet - let animation complete first
+
+            % Check if drawer is already open
+            drawerAlreadyOpen = app.DrawerWidth >= 440;
+
+            % Store the caseId
             app.DrawerCurrentCaseId = caseId;
-            app.animateDrawerToWidth(440);
+
+            if drawerAlreadyOpen
+                % Drawer is already open, populate immediately
+                app.populateDrawer(caseId);
+            else
+                % Drawer is closed, animate open and populate after animation completes
+                app.animateDrawerToWidth(440);
+            end
         end
 
         function closeDrawer(app)
@@ -1638,6 +1649,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                 % Redraw histogram after drawer animation completes
                 if ~isempty(app.DrawerCurrentCaseId)
+                    % Force layout update before populating
+                    drawnow;
                     app.populateDrawer(app.DrawerCurrentCaseId);
                 end
             end
@@ -1699,16 +1712,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            historicalCollection = app.CaseManager.getHistoricalCollection();
-            if isempty(historicalCollection)
+            % Get the pre-computed aggregator (fast - no re-aggregation needed)
+            aggregator = app.CaseManager.getProcedureMetricsAggregator();
+            if isempty(aggregator)
                 app.showHistogramMessage('No historical data available');
                 return;
             end
 
-            % Plot using the shared plotting function
+            % Plot using the shared plotting function with cached aggregator
             try
                 conduction.plotting.plotOperatorProcedureHistogram(...
-                    historicalCollection, ...
+                    aggregator, ...
                     operatorName, procedureName, 'procedureMinutes', ...
                     'Parent', app.DrawerHistogramAxes);
             catch ME
