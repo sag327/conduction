@@ -227,6 +227,20 @@ classdef CaseManager < handle
             hasData = ~isempty(obj.HistoricalCollection) && ...
                      ~isempty(obj.ProcedureAnalytics);
         end
+        
+        function analytics = getProcedureAnalytics(obj)
+            %GETPROCEDUREANALYTICS Return the procedure analytics data for plotting.
+            if obj.hasClinicalData()
+                analytics = obj.ProcedureAnalytics;
+            else
+                analytics = struct();
+            end
+        end
+
+        function collection = getHistoricalCollection(obj)
+            %GETHISTORICALCOLLECTION Return the historical schedule collection.
+            collection = obj.HistoricalCollection;
+        end
 
         function stats = getOperatorProcedureStats(obj, operatorName, procedureName)
             % Get operator-specific procedure statistics if available

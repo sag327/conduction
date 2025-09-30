@@ -43,8 +43,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerTimingsValueLabel     matlab.ui.control.Label
         DrawerOptimizationTitle     matlab.ui.control.Label
         DrawerOptimizationGrid      matlab.ui.container.GridLayout
-        DrawerLogTitle              matlab.ui.control.Label
-        DrawerLogTextArea           matlab.ui.control.TextArea
+        DrawerHistogramTitle        matlab.ui.control.Label
+        DrawerHistogramPanel        matlab.ui.container.Panel
+        DrawerHistogramAxes         matlab.ui.control.UIAxes
 
         % Add/Edit Tab Components
         DataLoadingLabel            matlab.ui.control.Label
@@ -431,7 +432,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
+            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 230};
             app.DrawerLayout.ColumnWidth = {'1x'};
             app.DrawerLayout.Padding = [16 18 16 18];
             app.DrawerLayout.RowSpacing = 12;
@@ -507,21 +508,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerOptimizationRow(2, 'Labs', 'DrawerLabsValueLabel');
             app.createDrawerOptimizationRow(3, 'Timings', 'DrawerTimingsValueLabel');
 
-            app.DrawerLogTitle = uilabel(app.DrawerLayout);
-            app.DrawerLogTitle.Text = 'Why-not / Run log';
-            app.DrawerLogTitle.FontWeight = 'bold';
-            app.DrawerLogTitle.FontColor = [0.9 0.9 0.9];
-            app.DrawerLogTitle.Layout.Row = 6;
-            app.DrawerLogTitle.Layout.Column = 1;
+            app.DrawerHistogramTitle = uilabel(app.DrawerLayout);
+            app.DrawerHistogramTitle.Text = 'Historical Durations';
+            app.DrawerHistogramTitle.FontWeight = 'bold';
+            app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
+            app.DrawerHistogramTitle.Layout.Row = 6;
+            app.DrawerHistogramTitle.Layout.Column = 1;
 
-            app.DrawerLogTextArea = uitextarea(app.DrawerLayout);
-            app.DrawerLogTextArea.Layout.Row = 7;
-            app.DrawerLogTextArea.Layout.Column = 1;
-            app.DrawerLogTextArea.Editable = 'off';
-            app.DrawerLogTextArea.Value = {'Select a case to inspect diagnostics.'};
-            app.DrawerLogTextArea.WordWrap = 'on';
-            app.DrawerLogTextArea.BackgroundColor = [0.15 0.15 0.15];
-            app.DrawerLogTextArea.FontColor = [0.9 0.9 0.9];
+            app.DrawerHistogramPanel = uipanel(app.DrawerLayout);
+            app.DrawerHistogramPanel.Layout.Row = 7;
+            app.DrawerHistogramPanel.Layout.Column = 1;
+            app.DrawerHistogramPanel.BackgroundColor = [0.1 0.1 0.1];
+            app.DrawerHistogramPanel.BorderType = 'none';
+
+            % Create axes with fixed height but full width
+            app.DrawerHistogramAxes = uiaxes(app.DrawerHistogramPanel);
+            app.DrawerHistogramAxes.Units = 'normalized';
+            app.DrawerHistogramAxes.Position = [0, 0, 1, 1];  % Full width, fixed height controlled by panel
+            app.DrawerHistogramAxes.Toolbar.Visible = 'off';
+            app.DrawerHistogramAxes.Interactions = [];
+            disableDefaultInteractivity(app.DrawerHistogramAxes);
 
             app.setDrawerWidth(0);
         end
@@ -1034,7 +1040,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if nargin < 2
                 caseId = string.empty;
             end
-            app.populateDrawer(caseId);
+            % Store the caseId but don't populate yet - let animation complete first
+            app.DrawerCurrentCaseId = caseId;
             app.animateDrawerToWidth(440);
         end
 
@@ -1624,6 +1631,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     stop(timerObj);
                 end
                 app.clearDrawerTimer();
+
+                % Redraw histogram after drawer animation completes
+                if ~isempty(app.DrawerCurrentCaseId)
+                    app.populateDrawer(app.DrawerCurrentCaseId);
+                end
             end
         end
 
@@ -1631,7 +1643,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.Drawer) || ~isvalid(app.Drawer)
                 return;
             end
-            if isempty(app.DrawerLogTextArea) || ~isvalid(app.DrawerLogTextArea)
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
                 return;
             end
 
@@ -1642,7 +1654,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             caseId = string(caseId);
             if strlength(caseId) == 0
                 app.resetDrawerInspector();
-                app.DrawerLogTextArea.Value = {'Select a case to inspect diagnostics.'};
+                app.clearHistogram();
                 return;
             end
 
@@ -1655,8 +1667,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
             app.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
 
-            logLines = app.buildDrawerLog(details);
-            app.DrawerLogTextArea.Value = logLines;
+            app.updateHistogram(details.Operator, details.Procedure);
 
             app.DrawerCurrentCaseId = caseId;
         end
@@ -1668,6 +1679,63 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.setLabelText(app.DrawerLabValueLabel, '--');
             app.setLabelText(app.DrawerStartValueLabel, '--');
             app.setLabelText(app.DrawerEndValueLabel, '--');
+        end
+
+        function updateHistogram(app, operatorName, procedureName)
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
+                return;
+            end
+
+            % Clear existing plot
+            cla(app.DrawerHistogramAxes);
+
+            % Check if we have historical data
+            if isempty(app.CaseManager)
+                app.showHistogramMessage('No historical data available');
+                return;
+            end
+
+            historicalCollection = app.CaseManager.getHistoricalCollection();
+            if isempty(historicalCollection)
+                app.showHistogramMessage('No historical data available');
+                return;
+            end
+
+            % Plot using the shared plotting function
+            try
+                conduction.plotting.plotOperatorProcedureHistogram(...
+                    historicalCollection, ...
+                    operatorName, procedureName, 'procedureMinutes', ...
+                    'Parent', app.DrawerHistogramAxes);
+            catch ME
+                app.showHistogramMessage(sprintf('Error: %s', ME.message));
+            end
+        end
+
+        function clearHistogram(app)
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
+                return;
+            end
+            cla(app.DrawerHistogramAxes);
+            app.showHistogramMessage('Select a case to view distribution');
+        end
+
+        function showHistogramMessage(app, msg)
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
+                return;
+            end
+            cla(app.DrawerHistogramAxes);
+            text(app.DrawerHistogramAxes, 0.5, 0.5, msg, ...
+                'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'middle', ...
+                'Color', [0.6 0.6 0.6], ...
+                'FontSize', 10);
+            app.DrawerHistogramAxes.XLim = [0 1];
+            app.DrawerHistogramAxes.YLim = [0 1];
+            app.DrawerHistogramAxes.Color = [0 0 0];
+            app.DrawerHistogramAxes.XTick = [];
+            app.DrawerHistogramAxes.YTick = [];
+            app.DrawerHistogramAxes.Box = 'off';
         end
 
         function setLabelText(~, labelHandle, textValue)
