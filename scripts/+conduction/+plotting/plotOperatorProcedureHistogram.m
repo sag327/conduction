@@ -29,30 +29,27 @@ function fig = plotOperatorProcedureHistogram(scheduleCollectionOrAggregator, op
 parser = inputParser;
 addParameter(parser, 'BinCount', [], @(x) isempty(x) || (isnumeric(x) && isscalar(x) && x > 0));
 addParameter(parser, 'Parent', [], @(x) isempty(x) || isa(x, 'matlab.ui.control.UIAxes') || isa(x, 'matlab.graphics.axis.Axes'));
+addParameter(parser, 'MinimalMode', false, @islogical);
+addParameter(parser, 'BackgroundColor', [0 0 0], @(x) isnumeric(x) && numel(x) == 3);
 parse(parser, varargin{:});
 
 binCount = parser.Results.BinCount;
 parentAxes = parser.Results.Parent;
+minimalMode = parser.Results.MinimalMode;
+bgColor = parser.Results.BackgroundColor;
 
 % Extract duration data using helper
 durations = conduction.analytics.helpers.OperatorProcedureDurationHelper...
     .getOperatorProcedureDurations(scheduleCollectionOrAggregator, operatorName, procedureName, durationField);
 
-if isempty(durations)
-    error('plotOperatorProcedureHistogram:NoData', ...
-        'No data found for operator "%s" performing "%s".', operatorName, procedureName);
-end
-
-% Remove NaN values
-durations = durations(~isnan(durations));
-if isempty(durations)
-    error('plotOperatorProcedureHistogram:NoValidData', ...
-        'No valid duration data found for operator "%s" performing "%s".', operatorName, procedureName);
+% Remove NaN values from operator-specific data
+if ~isempty(durations)
+    durations = durations(~isnan(durations));
 end
 
 % Check if we have fewer than 3 procedures - if so, use all operators for this procedure
 usedAllOperators = false;
-if length(durations) < 3
+if isempty(durations) || length(durations) < 3
     % Get data for all operators performing this procedure
     durationsAllOps = conduction.analytics.helpers.OperatorProcedureDurationHelper...
         .getAllOperatorsProcedureDurations(scheduleCollectionOrAggregator, procedureName, durationField);
@@ -64,6 +61,12 @@ if length(durations) < 3
             usedAllOperators = true;
         end
     end
+end
+
+% Final check - if still no data, throw error
+if isempty(durations)
+    error('plotOperatorProcedureHistogram:NoData', ...
+        'No data found for operator "%s" performing "%s".', operatorName, procedureName);
 end
 
 % Calculate statistics
@@ -104,69 +107,82 @@ scatter(ax, medianVal, yLimits(2), circleSize, medianColor, 'filled');
 scatter(ax, p70Val, yLimits(2), circleSize, p70Color, 'filled');
 scatter(ax, p90Val, yLimits(2), circleSize, p90Color, 'filled');
 
-% Larger font size for better readability
-textFontSize = 13;
+% Only add text elements if not in minimal mode
+if ~minimalMode
 
-% Add floating legend text in upper right corner with aligned labels and values
-xLimits = xlim(ax);
-labelX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.88;  % Label right-aligned
-valueX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.90;  % Value left-aligned
-rightEdgeX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.98;  % Right edge for white text
-centerX = (labelX + valueX) / 2;  % Center point for sample count
-legendYStart = yLimits(2) * 0.75;  % Moved down from 0.95 to 0.75
-legendYSpacing = yLimits(2) * 0.065;  % Tighter spacing between lines
+    % Larger font size for better readability
+    textFontSize = 13;
 
-% Sample count line (right-aligned with right edge of colored text)
-nSamples = length(durations);
-text(ax, rightEdgeX, legendYStart + legendYSpacing, sprintf('n = %d procedures', nSamples), ...
-    'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', [0.9 0.9 0.9], 'FontWeight', 'normal');
+    % Add floating legend text in upper right corner with aligned labels and values
+    xLimits = xlim(ax);
+    labelX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.88;  % Label right-aligned
+    valueX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.90;  % Value left-aligned
+    rightEdgeX = xLimits(1) + (xLimits(2) - xLimits(1)) * 0.98;  % Right edge for white text
+    centerX = (labelX + valueX) / 2;  % Center point for sample count
+    legendYStart = yLimits(2) * 0.75;  % Moved down from 0.95 to 0.75
+    legendYSpacing = yLimits(2) * 0.065;  % Tighter spacing between lines
 
-% Median
-text(ax, labelX, legendYStart, 'median', ...
-    'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', medianColor);
-text(ax, valueX, legendYStart, sprintf('%.0fm', medianVal), ...
-    'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', medianColor);
-
-% P70
-text(ax, labelX, legendYStart - legendYSpacing, 'p70', ...
-    'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', p70Color);
-text(ax, valueX, legendYStart - legendYSpacing, sprintf('%.0fm', p70Val), ...
-    'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', p70Color);
-
-% P90
-text(ax, labelX, legendYStart - 2*legendYSpacing, 'p90', ...
-    'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', p90Color);
-text(ax, valueX, legendYStart - 2*legendYSpacing, sprintf('%.0fm', p90Val), ...
-    'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
-    'FontSize', textFontSize, 'Color', p90Color);
-
-% Add note if using all operators data (below the statistics with double space, three lines)
-if usedAllOperators
-    text(ax, rightEdgeX, legendYStart - 4*legendYSpacing, '(too few procedures:', ...
+    % Sample count line (right-aligned with right edge of colored text)
+    nSamples = length(durations);
+    text(ax, rightEdgeX, legendYStart + legendYSpacing, sprintf('n = %d procedures', nSamples), ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-        'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
-    text(ax, rightEdgeX, legendYStart - 4.8*legendYSpacing, 'using data from', ...
+        'FontSize', textFontSize, 'Color', [0.9 0.9 0.9], 'FontWeight', 'normal');
+
+    % Median
+    text(ax, labelX, legendYStart, 'median', ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-        'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
-    text(ax, rightEdgeX, legendYStart - 5.6*legendYSpacing, 'all operators)', ...
+        'FontSize', textFontSize, 'Color', medianColor);
+    text(ax, valueX, legendYStart, sprintf('%.0fm', medianVal), ...
+        'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
+        'FontSize', textFontSize, 'Color', medianColor);
+
+    % P70
+    text(ax, labelX, legendYStart - legendYSpacing, 'p70', ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-        'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
+        'FontSize', textFontSize, 'Color', p70Color);
+    text(ax, valueX, legendYStart - legendYSpacing, sprintf('%.0fm', p70Val), ...
+        'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
+        'FontSize', textFontSize, 'Color', p70Color);
+
+    % P90
+    text(ax, labelX, legendYStart - 2*legendYSpacing, 'p90', ...
+        'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+        'FontSize', textFontSize, 'Color', p90Color);
+    text(ax, valueX, legendYStart - 2*legendYSpacing, sprintf('%.0fm', p90Val), ...
+        'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
+        'FontSize', textFontSize, 'Color', p90Color);
+
+    % Add note if using all operators data (below the statistics with double space, three lines)
+    if usedAllOperators
+        text(ax, rightEdgeX, legendYStart - 4*legendYSpacing, '(too few procedures:', ...
+            'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+            'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
+        text(ax, rightEdgeX, legendYStart - 4.8*legendYSpacing, 'using data from', ...
+            'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+            'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
+        text(ax, rightEdgeX, legendYStart - 5.6*legendYSpacing, 'all operators)', ...
+            'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+            'FontSize', textFontSize, 'Color', [0.8 0.8 0.8], 'FontAngle', 'italic');
+    end
 end
 
 % Dark mode styling - remove y-axis, titles, labels
 set(ax, 'YTick', [], 'YTickLabel', [], 'YColor', 'none');
-set(ax, 'XTick', [], 'XTickLabel', [], 'Box', 'on');
-set(ax, 'XColor', [1 1 1], 'YColor', [1 1 1]);  % White box border
-set(ax, 'LineWidth', 1);
+set(ax, 'XTick', [], 'XTickLabel', []);
 
-% Set background color - black for histogram, matches figure background
-set(ax, 'Color', [0 0 0]);
+if minimalMode
+    % No box outline in minimal mode
+    set(ax, 'Box', 'off');
+    set(ax, 'XColor', 'none', 'YColor', 'none');
+else
+    % White box border for full mode
+    set(ax, 'Box', 'on');
+    set(ax, 'XColor', [1 1 1], 'YColor', [1 1 1]);
+    set(ax, 'LineWidth', 1);
+end
+
+% Set background color
+set(ax, 'Color', bgColor);
 
 % Don't override position when parent is provided - respect the fixed pixel size
 if isempty(parentAxes)

@@ -9,6 +9,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         MiddleLayout                matlab.ui.container.GridLayout
         BottomBarLayout             matlab.ui.container.GridLayout
 
+        LoadDataButton              matlab.ui.control.Button
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
         TestToggle                  matlab.ui.control.Switch
@@ -48,9 +49,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerHistogramAxes         matlab.ui.control.UIAxes
 
         % Add/Edit Tab Components
-        DataLoadingLabel            matlab.ui.control.Label
-        LoadDataButton              matlab.ui.control.Button
-        DataStatusLabel             matlab.ui.control.Label
+        DateLabel                   matlab.ui.control.Label
         TestingSectionLabel         matlab.ui.control.Label
         TestingDatasetLabel         matlab.ui.control.Label
         TestingDateLabel            matlab.ui.control.Label
@@ -66,9 +65,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ProcedureDropDown           matlab.ui.control.DropDown
 
         DurationStatsLabel          matlab.ui.control.Label
-        DurationHistogramButton     matlab.ui.control.Button
-        DurationHistogramPanel      matlab.ui.container.Panel
-        DurationHistogramAxes       matlab.ui.control.UIAxes
+        DurationMiniHistogramAxes   matlab.ui.control.UIAxes
         DurationButtonGroup         matlab.ui.container.ButtonGroup
         MedianRadioButton           matlab.ui.control.RadioButton
         MedianValueLabel            matlab.ui.control.Label
@@ -149,7 +146,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
-        DurationHistogramTimer timer = timer.empty
     end
 
     % Component initialization
@@ -181,11 +177,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
-            app.DatePicker = uidatepicker(app.TopBarLayout);
-            app.DatePicker.Layout.Column = 1;
-            if ~isempty(app.TargetDate)
-                app.DatePicker.Value = app.TargetDate;
-            end
+            app.LoadDataButton = uibutton(app.TopBarLayout, 'push');
+            app.LoadDataButton.Text = 'Load Baseline Data';
+            app.LoadDataButton.Layout.Column = 1;
+            app.LoadDataButton.ButtonPushedFcn = createCallbackFcn(app, @LoadDataButtonPushed, true);
 
             app.RunBtn = uibutton(app.TopBarLayout, 'push');
             app.RunBtn.Text = 'Optimize Schedule';
@@ -220,7 +215,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TabOptimization = uitab(app.TabGroup, 'Title', 'Optimization');
 
             addGrid = app.configureAddTabLayout();
-            app.buildDataSection(addGrid);
+            app.buildDateSection(addGrid);
             app.buildCaseDetailsSection(addGrid);
             app.buildDurationSection(addGrid);
             app.buildConstraintSection(addGrid);
@@ -349,31 +344,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function addGrid = configureAddTabLayout(app)
             addGrid = uigridlayout(app.TabAdd);
-            addGrid.ColumnWidth = {100, 140, 80, '1x'};
-            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 0, 90, 12, 24, 3, 24, 0, 12, 28, '1x'};
+            addGrid.ColumnWidth = {90, 110, 90, '1x'};
+            addGrid.RowHeight = {30, 0, 0, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 0, 90, 12, 24, 3, 24, 0, 12, 28, 32, '1x'};
             addGrid.Padding = [10 10 10 10];
             addGrid.RowSpacing = 3;
             addGrid.ColumnSpacing = 6;
         end
 
-        function buildDataSection(app, leftGrid)
-            app.DataLoadingLabel = uilabel(leftGrid);
-            app.DataLoadingLabel.Text = 'Baseline Clinical Data';
-            app.DataLoadingLabel.FontWeight = 'bold';
-            app.DataLoadingLabel.Layout.Row = 1;
-            app.DataLoadingLabel.Layout.Column = [1 4];
+        function buildDateSection(app, leftGrid)
+            app.DateLabel = uilabel(leftGrid);
+            app.DateLabel.Text = 'Date:';
+            app.DateLabel.Layout.Row = 1;
+            app.DateLabel.Layout.Column = 1;
 
-            app.LoadDataButton = uibutton(leftGrid, 'push');
-            app.LoadDataButton.Text = 'Load Data File...';
-            app.LoadDataButton.Layout.Row = 2;
-            app.LoadDataButton.Layout.Column = [1 4];
-            app.LoadDataButton.ButtonPushedFcn = createCallbackFcn(app, @LoadDataButtonPushed, true);
-
-            app.DataStatusLabel = uilabel(leftGrid);
-            app.DataStatusLabel.Text = 'No clinical data loaded';
-            app.DataStatusLabel.FontColor = [0.6 0.6 0.6];
-            app.DataStatusLabel.Layout.Row = 3;
-            app.DataStatusLabel.Layout.Column = [1 4];
+            app.DatePicker = uidatepicker(leftGrid);
+            app.DatePicker.Layout.Row = 1;
+            app.DatePicker.Layout.Column = [2 4];
+            if ~isempty(app.TargetDate)
+                app.DatePicker.Value = app.TargetDate;
+            end
         end
 
         function buildTestingPanel(app)
@@ -608,81 +597,69 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function buildDurationSection(app, leftGrid)
             app.DurationStatsLabel = uilabel(leftGrid);
-            app.DurationStatsLabel.Text = 'Duration Options';
+            app.DurationStatsLabel.Text = 'Duration';
             app.DurationStatsLabel.FontWeight = 'bold';
             app.DurationStatsLabel.Layout.Row = 14;
-            app.DurationStatsLabel.Layout.Column = [1 2];
-
-            % Histogram toggle button next to label
-            app.DurationHistogramButton = uibutton(leftGrid, 'push');
-            app.DurationHistogramButton.Text = '📊 View';
-            app.DurationHistogramButton.Layout.Row = 14;
-            app.DurationHistogramButton.Layout.Column = [3 4];
-            app.DurationHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @DurationHistogramButtonPushed, true);
-
-            % Collapsible histogram panel (row 14a, initially hidden)
-            app.DurationHistogramPanel = uipanel(leftGrid);
-            app.DurationHistogramPanel.Layout.Row = 15;
-            app.DurationHistogramPanel.Layout.Column = [1 4];
-            app.DurationHistogramPanel.BorderType = 'line';
-            app.DurationHistogramPanel.Visible = 'off';
-
-            app.DurationHistogramAxes = uiaxes(app.DurationHistogramPanel);
-            app.DurationHistogramAxes.Units = 'normalized';
-            app.DurationHistogramAxes.Position = [0, 0, 1, 1];
-            app.DurationHistogramAxes.Toolbar.Visible = 'off';
-            app.DurationHistogramAxes.Interactions = [];
-            disableDefaultInteractivity(app.DurationHistogramAxes);
+            app.DurationStatsLabel.Layout.Column = [1 4];
 
             % Create the ButtonGroup with manual positioning for tight layout
             app.DurationButtonGroup = uibuttongroup(leftGrid);
             app.DurationButtonGroup.BorderType = 'none';
             app.DurationButtonGroup.Layout.Row = 16;
-            app.DurationButtonGroup.Layout.Column = [1 4];
+            app.DurationButtonGroup.Layout.Column = [1 2];
             app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
             app.DurationButtonGroup.AutoResizeChildren = 'off';
 
+            % Mini histogram axes to the right of button group
+            app.DurationMiniHistogramAxes = uiaxes(leftGrid);
+            app.DurationMiniHistogramAxes.Layout.Row = 16;
+            app.DurationMiniHistogramAxes.Layout.Column = [3 4];
+            app.DurationMiniHistogramAxes.Toolbar.Visible = 'off';
+            app.DurationMiniHistogramAxes.Interactions = [];
+            app.DurationMiniHistogramAxes.Visible = 'off';
+            disableDefaultInteractivity(app.DurationMiniHistogramAxes);
+
             startY = 68;
             rowSpacing = 22;
-            labelX = 125;
+            labelX = 85;
 
             app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
             app.MedianRadioButton.Interpreter = 'html';
             app.MedianRadioButton.Text = 'Median';
             app.MedianRadioButton.Tag = 'median';
-            app.MedianRadioButton.Position = [5 startY 110 22];
+            app.MedianRadioButton.Position = [5 startY 75 22];
 
             app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
             app.P70RadioButton.Interpreter = 'html';
             app.P70RadioButton.Text = 'P70';
             app.P70RadioButton.Tag = 'p70';
-            app.P70RadioButton.Position = [5 startY - rowSpacing 110 22];
+            app.P70RadioButton.Position = [5 startY - rowSpacing 75 22];
 
             app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
             app.P90RadioButton.Interpreter = 'html';
             app.P90RadioButton.Text = 'P90';
             app.P90RadioButton.Tag = 'p90';
-            app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 110 22];
+            app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 75 22];
 
             app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
             app.CustomRadioButton.Interpreter = 'html';
             app.CustomRadioButton.Text = 'Custom';
             app.CustomRadioButton.Tag = 'custom';
-            app.CustomRadioButton.Position = [5 startY - 3 * rowSpacing 110 22];
+            app.CustomRadioButton.Position = [5 startY - 3 * rowSpacing 75 22];
 
             app.MedianValueLabel = uilabel(app.DurationButtonGroup);
             app.MedianValueLabel.Text = '-';
-            app.MedianValueLabel.Position = [labelX startY 140 22];
+            app.MedianValueLabel.Position = [labelX startY 110 22];
             app.MedianValueLabel.HorizontalAlignment = 'left';
 
             app.P70ValueLabel = uilabel(app.DurationButtonGroup);
             app.P70ValueLabel.Text = '-';
-            app.P70ValueLabel.Position = [labelX startY - rowSpacing 140 22];
+            app.P70ValueLabel.Position = [labelX startY - rowSpacing 110 22];
             app.P70ValueLabel.HorizontalAlignment = 'left';
 
             app.P90ValueLabel = uilabel(app.DurationButtonGroup);
             app.P90ValueLabel.Text = '-';
-            app.P90ValueLabel.Position = [labelX startY - 2 * rowSpacing 140 22];
+            app.P90ValueLabel.Position = [labelX startY - 2 * rowSpacing 110 22];
             app.P90ValueLabel.HorizontalAlignment = 'left';
 
             app.CustomDurationSpinner = uispinner(app.DurationButtonGroup);
@@ -713,11 +690,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            labels = [app.MedianValueLabel, app.P70ValueLabel, app.P90ValueLabel];
-            for idx = 1:numel(labels)
-                if ~isempty(labels(idx)) && isvalid(labels(idx))
-                    labels(idx).FontColor = primaryTextColor;
-                end
+            % Apply histogram-matching colors to value labels
+            medianColor = [0.9 0.3 0.3];  % Red
+            p70Color = [0.9 0.7 0.2];     % Orange/Yellow
+            p90Color = [0.5 0.9 0.5];     % Green
+
+            if ~isempty(app.MedianValueLabel) && isvalid(app.MedianValueLabel)
+                app.MedianValueLabel.FontColor = medianColor;
+            end
+            if ~isempty(app.P70ValueLabel) && isvalid(app.P70ValueLabel)
+                app.P70ValueLabel.FontColor = p70Color;
+            end
+            if ~isempty(app.P90ValueLabel) && isvalid(app.P90ValueLabel)
+                app.P90ValueLabel.FontColor = p90Color;
             end
 
             if ~isempty(app.CustomDurationSpinner) && isvalid(app.CustomDurationSpinner)
@@ -829,12 +814,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SpecificLabDropDown.Layout.Row = 2;
             app.SpecificLabDropDown.Layout.Column = 2;
 
-            % Add Case button
+            % Add Case button at bottom
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 23;
+            app.AddCaseButton.Layout.Row = 24;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
+            app.AddCaseButton.FontSize = 16;
         end
 
         function buildOptimizationSection(app, leftGrid)
@@ -1077,8 +1063,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Initialize optimization state
             app.initializeOptimizationState();
 
-            % Update data status
-            app.updateDataStatus();
+            % Update initial state
             app.refreshTestingAvailability();
             app.onCaseManagerChanged();
 
@@ -1112,7 +1097,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function delete(app)
-            app.clearDurationHistogramTimer();
             app.clearDrawerTimer();
             delete(app.UIFigure);
         end
@@ -1159,36 +1143,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.refreshDurationOptions();
         end
 
-        function DurationHistogramButtonPushed(app, event)
-            % Toggle histogram panel visibility
-            if strcmp(app.DurationHistogramPanel.Visible, 'off')
-                % Show panel
-                app.DurationHistogramPanel.Visible = 'on';
-                app.DurationHistogramButton.Text = '📊 Hide';
-
-                % Expand row 15 to fit the histogram
-                currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{15} = 180;
-                app.TabAdd.Children(1).RowHeight = currentRowHeights;
-
-                % Allow layout to catch up before plotting
-                drawnow limitrate;
-
-                % Update histogram with current operator/procedure
-                app.clearDurationHistogramTimer();
-                app.refreshDurationHistogram();
-            else
-                % Hide panel
-                app.clearDurationHistogramTimer();
-                app.DurationHistogramPanel.Visible = 'off';
-                app.DurationHistogramButton.Text = '📊 View';
-
-                % Collapse row 15
-                currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{15} = 0;
-                app.TabAdd.Children(1).RowHeight = currentRowHeights;
-            end
-        end
 
         function AddConstraintButtonPushed(app, event)
             % Toggle constraint panel visibility
@@ -1276,22 +1230,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function LoadDataButtonPushed(app, event)
-            % Show loading message
-            app.DataStatusLabel.Text = 'Loading clinical data...';
-            app.DataStatusLabel.FontColor = [0.8 0.6 0];
+            % Load data interactively
             app.LoadDataButton.Enable = 'off';
             drawnow;
 
-            % Load data interactively
             success = app.CaseManager.loadClinicalDataInteractive();
 
             if success
-                app.updateDataStatus();
                 app.updateDropdowns();
                 app.refreshDurationOptions(); % Refresh duration options with new data
-            else
-                app.DataStatusLabel.Text = 'No clinical data loaded';
-                app.DataStatusLabel.FontColor = [0.6 0.6 0.6];
             end
 
             app.refreshTestingAvailability();
@@ -1698,86 +1645,97 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function clearDrawerTimer(app)
-            if ~isempty(app.DrawerTimer)
-                try
-                    if isvalid(app.DrawerTimer)
-                        stop(app.DrawerTimer);
-                    end
-                catch
-                end
-                if isvalid(app.DrawerTimer)
-                    delete(app.DrawerTimer);
-                end
-            end
-            app.DrawerTimer = timer.empty;
+            app.clearTimerProperty('DrawerTimer');
         end
 
-        function clearDurationHistogramTimer(app)
-            if ~isempty(app.DurationHistogramTimer)
-                try
-                    if isvalid(app.DurationHistogramTimer)
-                        stop(app.DurationHistogramTimer);
-                    end
-                catch
-                end
-                if isvalid(app.DurationHistogramTimer)
-                    delete(app.DurationHistogramTimer);
-                end
-            end
-            app.DurationHistogramTimer = timer.empty;
-        end
-
-        function scheduleDurationHistogramRefresh(app)
-            if strcmp(app.DurationHistogramPanel.Visible, 'off')
+        function clearTimerProperty(app, propName)
+            if ~isprop(app, propName)
                 return;
             end
 
-            app.clearDurationHistogramTimer();
-
-            try
-                delayTimer = timer('ExecutionMode', 'singleShot', ...
-                    'StartDelay', 0.03, ...
-                    'TimerFcn', @(~,~) app.onDurationHistogramTimer());
-            catch
+            timerObj = app.(propName);
+            if isempty(timerObj) || ~isa(timerObj, 'timer')
+                app.(propName) = timer.empty;
                 return;
             end
 
-            app.DurationHistogramTimer = delayTimer;
-
             try
-                start(delayTimer);
+                if isvalid(timerObj)
+                    stop(timerObj);
+                end
             catch
-                app.clearDurationHistogramTimer();
             end
+
+            if isvalid(timerObj)
+                delete(timerObj);
+            end
+
+            app.(propName) = timer.empty;
         end
 
-        function onDurationHistogramTimer(app)
-            app.DurationHistogramTimer = timer.empty;
-
-            if strcmp(app.DurationHistogramPanel.Visible, 'on')
-                app.refreshDurationHistogram();
-            end
-        end
-
-        function isReady = isDurationHistogramAxesReady(app)
+        function isReady = isAxesSized(app, axesHandle, minWidth, minHeight)
+            %#ok<INUSD> suppress unused warning for app in static call contexts
             isReady = false;
 
-            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+            if isempty(axesHandle) || ~isvalid(axesHandle)
                 return;
             end
 
             try
-                oldUnits = app.DurationHistogramAxes.Units;
-                app.DurationHistogramAxes.Units = 'pixels';
-                axesPos = app.DurationHistogramAxes.InnerPosition;
-                app.DurationHistogramAxes.Units = oldUnits;
+                oldUnits = axesHandle.Units;
+                axesHandle.Units = 'pixels';
+                axesPos = axesHandle.InnerPosition;
+                axesHandle.Units = oldUnits;
 
-                minWidth = 150;
-                minHeight = 100;
                 isReady = axesPos(3) >= minWidth && axesPos(4) >= minHeight;
             catch
                 isReady = false;
             end
+        end
+
+        function executeWhenAxesReady(app, axesHandle, minWidth, minHeight, timerPropName, callbackFcn, conditionFcn)
+            if nargin < 7 || isempty(conditionFcn)
+                conditionFcn = @() true;
+            end
+
+            if isempty(axesHandle) || ~isvalid(axesHandle)
+                app.clearTimerProperty(timerPropName);
+                return;
+            end
+
+            if ~conditionFcn()
+                app.clearTimerProperty(timerPropName);
+                return;
+            end
+
+            if ~app.isAxesSized(axesHandle, minWidth, minHeight)
+                app.clearTimerProperty(timerPropName);
+
+                try
+                    delayTimer = timer('ExecutionMode', 'singleShot', ...
+                        'StartDelay', 0.03, ...
+                        'TimerFcn', @(~,~) app.executeWhenAxesReady(axesHandle, minWidth, minHeight, timerPropName, callbackFcn, conditionFcn));
+                catch
+                    return;
+                end
+
+                app.(timerPropName) = delayTimer;
+
+                try
+                    start(delayTimer);
+                catch
+                    app.clearTimerProperty(timerPropName);
+                end
+                return;
+            end
+
+            app.clearTimerProperty(timerPropName);
+
+            if ~conditionFcn()
+                return;
+            end
+
+            callbackFcn();
         end
 
         function setDrawerToWidth(app, targetWidth)
@@ -1801,41 +1759,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Only populate drawer content after axes have reached proper size
             if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
-                % Wait for axes to be properly sized before drawing histogram
-                % This is especially important on first drawer open
-                app.waitForAxesThenPopulate();
-            end
-        end
-
-        function waitForAxesThenPopulate(app)
-            % Check if axes are properly sized using InnerPosition (in pixels)
-            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
-                return;
-            end
-
-            try
-                oldUnits = app.DrawerHistogramAxes.Units;
-                app.DrawerHistogramAxes.Units = 'pixels';
-                axesPos = app.DrawerHistogramAxes.InnerPosition;
-                app.DrawerHistogramAxes.Units = oldUnits;
-
-                % Require both width and height so legend text isn't cramped on first draw
-                minWidth = 220;
-                minHeight = 100;
-
-                if axesPos(3) >= minWidth && axesPos(4) >= minHeight
-                    app.populateDrawer(app.DrawerCurrentCaseId);
-                else
-                    % Axes not yet sized, wait and check again
-                    delayTimer = timer('ExecutionMode', 'singleShot', ...
-                        'StartDelay', 0.03, ...
-                        'TimerFcn', @(~,~) app.waitForAxesThenPopulate());
-                    app.DrawerTimer = delayTimer;
-                    start(delayTimer);
-                end
-            catch
-                % If there's an error, just populate anyway
-                app.populateDrawer(app.DrawerCurrentCaseId);
+                % Ensure drawer axes are ready before populating to avoid cramped first draw
+                conditionFcn = @() app.DrawerWidth > 0;
+                callbackFcn = @() app.populateDrawer(app.DrawerCurrentCaseId);
+                app.executeWhenAxesReady(app.DrawerHistogramAxes, 220, 100, ...
+                    'DrawerTimer', callbackFcn, conditionFcn);
             end
         end
 
@@ -2311,76 +2239,69 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateDurationHeader(summary);
             app.updateCustomSpinnerState();
 
-            % Update histogram if visible
-            if strcmp(app.DurationHistogramPanel.Visible, 'on')
-                app.refreshDurationHistogram();
-            end
+            % Update mini histogram
+            app.refreshMiniHistogram();
         end
 
-        function refreshDurationHistogram(app)
-            % Update histogram with current operator/procedure selection
+        function refreshMiniHistogram(app)
+            % Update mini histogram with current operator/procedure selection
+            if isempty(app.DurationMiniHistogramAxes) || ~isvalid(app.DurationMiniHistogramAxes)
+                return;
+            end
+
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
 
-            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
-                return;
-            end
+            cla(app.DurationMiniHistogramAxes);
 
-            if strcmp(app.DurationHistogramPanel.Visible, 'off')
-                return;
-            end
-
-            if ~app.isDurationHistogramAxesReady()
-                app.scheduleDurationHistogramRefresh();
-                return;
-            end
-
-            app.clearDurationHistogramTimer();
-
-            cla(app.DurationHistogramAxes);
-
+            % Clear if no valid selection
             if operatorName == "" || procedureName == "" || ...
                strcmp(operatorName, 'Other...') || strcmp(procedureName, 'Other...')
-                app.showDurationHistogramMessage('Select operator and procedure');
+                app.DurationMiniHistogramAxes.Visible = 'off';
                 return;
             end
 
-            % Check if we have historical data
+            % Clear if no data available
             if isempty(app.CaseManager)
-                app.showDurationHistogramMessage('No historical data available');
+                app.DurationMiniHistogramAxes.Visible = 'off';
+                return;
+            end
+
+            % Check if we have sufficient data by looking at the current duration summary
+            % This uses the same data retrieval logic that successfully populates the duration options
+            if isempty(app.CurrentDurationSummary) || ...
+               ~isfield(app.CurrentDurationSummary, 'dataSource') || ...
+               strcmp(app.CurrentDurationSummary.dataSource, 'heuristic')
+                % No historical data available, hide histogram
+                app.DurationMiniHistogramAxes.Visible = 'off';
                 return;
             end
 
             aggregator = app.CaseManager.getProcedureMetricsAggregator();
             if isempty(aggregator)
-                app.showDurationHistogramMessage('No historical data available');
+                app.DurationMiniHistogramAxes.Visible = 'off';
                 return;
             end
 
-            % Plot using the shared plotting function
+            % Get background color
+            [bgColor, ~] = app.getDurationThemeColors();
+
+            % Plot minimal histogram
+            % The plotting function will automatically fall back to all-operators data
+            % if operator-specific data is insufficient (< 3 cases)
             try
                 conduction.plotting.plotOperatorProcedureHistogram(...
                     aggregator, ...
                     operatorName, procedureName, 'procedureMinutes', ...
-                    'Parent', app.DurationHistogramAxes);
+                    'Parent', app.DurationMiniHistogramAxes, ...
+                    'MinimalMode', true, ...
+                    'BackgroundColor', bgColor);
+                app.DurationMiniHistogramAxes.Visible = 'on';
             catch ME
-                app.showDurationHistogramMessage(sprintf('Error: %s', ME.message));
+                % If plotting fails, it means no data is available (not even procedure-level)
+                % This shouldn't happen if we passed the dataSource check above, but handle gracefully
+                app.DurationMiniHistogramAxes.Visible = 'off';
             end
-        end
-
-        function showDurationHistogramMessage(app, msg)
-            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
-                return;
-            end
-            cla(app.DurationHistogramAxes);
-            text(app.DurationHistogramAxes, 0.5, 0.5, msg, ...
-                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                'Color', [0.6 0.6 0.6], 'FontSize', 11);
-            app.DurationHistogramAxes.XLim = [0 1];
-            app.DurationHistogramAxes.YLim = [0 1];
-            app.DurationHistogramAxes.XTick = [];
-            app.DurationHistogramAxes.YTick = [];
-            app.DurationHistogramAxes.Box = 'off';
         end
 
         function clearDurationDisplay(app)
@@ -2398,6 +2319,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CustomRadioButton.Enable = 'on';
             app.DurationButtonGroup.SelectedObject = app.CustomRadioButton;
             app.updateCustomSpinnerState();
+
+            % Hide mini histogram
+            if ~isempty(app.DurationMiniHistogramAxes) && isvalid(app.DurationMiniHistogramAxes)
+                cla(app.DurationMiniHistogramAxes);
+                app.DurationMiniHistogramAxes.Visible = 'off';
+            end
         end
 
         function duration = getSelectedDuration(app)
@@ -2454,16 +2381,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Check if we have operator-specific count but are using fallback statistics
-            if isfield(summary, 'isFallback') && summary.isFallback && ...
-               isfield(summary, 'operatorCount') && summary.operatorCount > 0
-                % Show operator count but indicate fallback statistics
-                opCount = summary.operatorCount;
-                
-                descriptor = sprintf('%d case%s -> overall stats', ...
-                    opCount, pluralSuffix(opCount));
+            % Check if we are using fallback statistics (0-2 cases)
+            if isfield(summary, 'isFallback') && summary.isFallback
+                % Using overall stats - show operator case count
+                opCount = 0;
+                if isfield(summary, 'operatorCount')
+                    opCount = summary.operatorCount;
+                end
+                text = sprintf('overall stats used (%d case%s)', opCount, pluralSuffix(opCount));
             else
-                % Standard display logic
+                % Using operator-specific stats (3+ cases)
                 count = 0;
                 if isfield(summary, 'primaryCount') && ~isempty(summary.primaryCount)
                     count = summary.primaryCount;
@@ -2478,22 +2405,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 switch dataSource
                     case "operator"
                         if count > 0
-                            descriptor = sprintf('%d operator-specific case%s', count, pluralSuffix(count));
+                            text = sprintf('source: %d case%s', count, pluralSuffix(count));
                         else
-                            descriptor = 'operator history';
+                            text = 'source: operator history';
                         end
                     case "procedure"
                         if count > 0
-                            descriptor = sprintf('%d historical procedure%s', count, pluralSuffix(count));
+                            text = sprintf('source: %d historical procedure%s', count, pluralSuffix(count));
                         else
-                            descriptor = 'historical procedures';
+                            text = 'source: historical procedures';
                         end
                     otherwise
-                        descriptor = 'heuristic defaults';
+                        text = 'source: heuristic defaults';
                 end
             end
-
-            text = sprintf('source: %s', descriptor);
 
             function suffix = pluralSuffix(n)
                 if n == 1
@@ -2670,17 +2595,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ClearAllButton.Enable = 'on';
         end
 
-        function updateDataStatus(app)
-            if app.CaseManager.hasClinicalData()
-                opCount = app.CaseManager.OperatorCount;
-                procCount = app.CaseManager.ProcedureCount;
-                app.DataStatusLabel.Text = sprintf('Loaded: %d operators, %d procedures', opCount, procCount);
-                app.DataStatusLabel.FontColor = [0 0.6 0]; % Green
-            else
-                app.DataStatusLabel.Text = 'No clinical data loaded';
-                app.DataStatusLabel.FontColor = [0.6 0.6 0.6]; % Gray
-            end
-        end
 
         function showOptimizationOptionsDialog(app)
             if isempty(app.UIFigure) || ~isvalid(app.UIFigure)

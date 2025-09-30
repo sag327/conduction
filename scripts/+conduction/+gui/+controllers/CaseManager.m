@@ -388,7 +388,7 @@ classdef CaseManager < handle
                         if isfield(summary, 'operatorCount') && summary.operatorCount > 0
                             % Keep the operator count and fallback flag already set
                         else
-                            summary.isFallback = false;  % No operator data, so procedure stats are primary
+                            summary.isFallback = true;  % Using procedure fallback (operator has 0 cases)
                         end
                     end
                 end
