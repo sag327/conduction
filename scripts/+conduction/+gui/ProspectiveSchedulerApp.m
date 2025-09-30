@@ -76,7 +76,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CustomRadioButton           matlab.ui.control.RadioButton
         CustomDurationSpinner       matlab.ui.control.Spinner
 
-        ConstraintsLabel            matlab.ui.control.Label
+        AddConstraintButton         matlab.ui.control.Button
+        ConstraintPanel             matlab.ui.container.Panel
+        ConstraintPanelGrid         matlab.ui.container.GridLayout
         SpecificLabLabel            matlab.ui.control.Label
         SpecificLabDropDown         matlab.ui.control.DropDown
         FirstCaseCheckBox           matlab.ui.control.CheckBox
@@ -344,7 +346,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function addGrid = configureAddTabLayout(app)
             addGrid = uigridlayout(app.TabAdd);
             addGrid.ColumnWidth = {100, 140, 80, '1x'};
-            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 90, 12, 24, 24, 24, 32, 26, 22, 24, 28, 28, '1x'};
+            addGrid.RowHeight = {22, 30, 22, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 90, 12, 24, 3, 24, 0, 12, 28, '1x'};
             addGrid.Padding = [10 10 10 10];
             addGrid.RowSpacing = 3;
             addGrid.ColumnSpacing = 6;
@@ -749,43 +751,63 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function buildConstraintSection(app, leftGrid)
-            app.ConstraintsLabel = uilabel(leftGrid);
-            app.ConstraintsLabel.Text = 'Scheduling Constraints';
-            app.ConstraintsLabel.FontWeight = 'bold';
-            app.ConstraintsLabel.Layout.Row = 17;
-            app.ConstraintsLabel.Layout.Column = [1 4];
-
-            app.SpecificLabLabel = uilabel(leftGrid);
-            app.SpecificLabLabel.Text = 'Specific Lab:';
-            app.SpecificLabLabel.Layout.Row = 18;
-            app.SpecificLabLabel.Layout.Column = 1;
-
-            app.SpecificLabDropDown = uidropdown(leftGrid);
-            app.SpecificLabDropDown.Items = {'Any Lab'};
-            app.SpecificLabDropDown.Value = 'Any Lab';
-            app.SpecificLabDropDown.Layout.Row = 18;
-            app.SpecificLabDropDown.Layout.Column = 2;
-
-            app.FirstCaseCheckBox = uicheckbox(leftGrid);
-            app.FirstCaseCheckBox.Text = 'First case only';
-            app.FirstCaseCheckBox.Value = false;
-            app.FirstCaseCheckBox.Layout.Row = 19;
-            app.FirstCaseCheckBox.Layout.Column = [1 4];
-
+            % Admission status dropdown (always visible in row 17)
             app.AdmissionStatusLabel = uilabel(leftGrid);
             app.AdmissionStatusLabel.Text = 'Status:';
-            app.AdmissionStatusLabel.Layout.Row = 20;
+            app.AdmissionStatusLabel.Layout.Row = 17;
             app.AdmissionStatusLabel.Layout.Column = 1;
 
             app.AdmissionStatusDropDown = uidropdown(leftGrid);
             app.AdmissionStatusDropDown.Items = {'outpatient', 'inpatient'};
             app.AdmissionStatusDropDown.Value = 'outpatient';
-            app.AdmissionStatusDropDown.Layout.Row = 20;
+            app.AdmissionStatusDropDown.Layout.Row = 17;
             app.AdmissionStatusDropDown.Layout.Column = 2;
 
+            % Add Constraint toggle button (smaller, left-justified in row 19)
+            app.AddConstraintButton = uibutton(leftGrid, 'push');
+            app.AddConstraintButton.Text = '+ Add constraint';
+            app.AddConstraintButton.Layout.Row = 19;
+            app.AddConstraintButton.Layout.Column = [1 2];
+            app.AddConstraintButton.ButtonPushedFcn = createCallbackFcn(app, @AddConstraintButtonPushed, true);
+
+            % Collapsible Constraint Panel
+            app.ConstraintPanel = uipanel(leftGrid);
+            app.ConstraintPanel.Layout.Row = 20;
+            app.ConstraintPanel.Layout.Column = [1 4];
+            app.ConstraintPanel.BorderType = 'none';
+            app.ConstraintPanel.Visible = 'off';
+
+            % Grid inside the panel
+            app.ConstraintPanelGrid = uigridlayout(app.ConstraintPanel);
+            app.ConstraintPanelGrid.ColumnWidth = {100, 140, 80, '1x'};
+            app.ConstraintPanelGrid.RowHeight = {24, 24};
+            app.ConstraintPanelGrid.Padding = [0 5 0 5];
+            app.ConstraintPanelGrid.RowSpacing = 3;
+            app.ConstraintPanelGrid.ColumnSpacing = 6;
+
+            % First case only checkbox
+            app.FirstCaseCheckBox = uicheckbox(app.ConstraintPanelGrid);
+            app.FirstCaseCheckBox.Text = 'First case only';
+            app.FirstCaseCheckBox.Value = false;
+            app.FirstCaseCheckBox.Layout.Row = 1;
+            app.FirstCaseCheckBox.Layout.Column = [1 4];
+
+            % Specific lab dropdown
+            app.SpecificLabLabel = uilabel(app.ConstraintPanelGrid);
+            app.SpecificLabLabel.Text = 'Specific Lab:';
+            app.SpecificLabLabel.Layout.Row = 2;
+            app.SpecificLabLabel.Layout.Column = 1;
+
+            app.SpecificLabDropDown = uidropdown(app.ConstraintPanelGrid);
+            app.SpecificLabDropDown.Items = {'Any Lab'};
+            app.SpecificLabDropDown.Value = 'Any Lab';
+            app.SpecificLabDropDown.Layout.Row = 2;
+            app.SpecificLabDropDown.Layout.Column = 2;
+
+            % Add Case button
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 23;
+            app.AddCaseButton.Layout.Row = 22;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
         end
@@ -1111,6 +1133,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.refreshDurationOptions();
         end
 
+        function AddConstraintButtonPushed(app, event)
+            % Toggle constraint panel visibility
+            if strcmp(app.ConstraintPanel.Visible, 'off')
+                % Show panel
+                app.ConstraintPanel.Visible = 'on';
+                app.AddConstraintButton.Text = '− Remove constraint';
+
+                % Expand row 20 to fit the panel (2 rows: 24 + 24 + padding)
+                currentRowHeights = app.TabAdd.Children(1).RowHeight;
+                currentRowHeights{20} = 60;
+                app.TabAdd.Children(1).RowHeight = currentRowHeights;
+            else
+                % Hide panel
+                app.ConstraintPanel.Visible = 'off';
+                app.AddConstraintButton.Text = '+ Add constraint';
+
+                % Collapse row 20
+                currentRowHeights = app.TabAdd.Children(1).RowHeight;
+                currentRowHeights{20} = 0;
+                app.TabAdd.Children(1).RowHeight = currentRowHeights;
+            end
+        end
+
         function AddCaseButtonPushed(app, event)
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
@@ -1140,6 +1185,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.SpecificLabDropDown.Value = 'Any Lab';
                 app.FirstCaseCheckBox.Value = false;
                 app.AdmissionStatusDropDown.Value = 'outpatient';
+
+                % Collapse constraint panel
+                if strcmp(app.ConstraintPanel.Visible, 'on')
+                    app.ConstraintPanel.Visible = 'off';
+                    app.AddConstraintButton.Text = '+ Add constraint';
+                    currentRowHeights = app.TabAdd.Children(1).RowHeight;
+                    currentRowHeights{20} = 0;
+                    app.TabAdd.Children(1).RowHeight = currentRowHeights;
+                end
+
                 app.refreshDurationOptions(); % Refresh the display
 
             catch ME
@@ -1551,7 +1606,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             controls = {app.OperatorDropDown, app.ProcedureDropDown, ...
-                app.SpecificLabDropDown, app.FirstCaseCheckBox, app.AddCaseButton, ...
+                app.AddConstraintButton, app.SpecificLabDropDown, app.FirstCaseCheckBox, ...
+                app.AdmissionStatusDropDown, app.AddCaseButton, ...
                 app.MedianRadioButton, app.P70RadioButton, app.P90RadioButton, ...
                 app.CustomRadioButton, app.CustomDurationSpinner};
 
