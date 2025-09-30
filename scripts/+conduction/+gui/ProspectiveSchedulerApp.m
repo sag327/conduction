@@ -610,13 +610,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationStatsLabel.Text = 'Duration Options';
             app.DurationStatsLabel.FontWeight = 'bold';
             app.DurationStatsLabel.Layout.Row = 14;
-            app.DurationStatsLabel.Layout.Column = [1 3];
+            app.DurationStatsLabel.Layout.Column = [1 2];
 
             % Histogram toggle button next to label
             app.DurationHistogramButton = uibutton(leftGrid, 'push');
             app.DurationHistogramButton.Text = '📊 View';
             app.DurationHistogramButton.Layout.Row = 14;
-            app.DurationHistogramButton.Layout.Column = 4;
+            app.DurationHistogramButton.Layout.Column = [3 4];
             app.DurationHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @DurationHistogramButtonPushed, true);
 
             % Collapsible histogram panel (row 14a, initially hidden)
