@@ -12,9 +12,9 @@
 - [x] Step 1.1: Add IsLocked property to ProspectiveCase
 - [x] Step 1.2: Create progress tracker (this file)
 
-### ⏸️ Phase 2: Basic Lock State Management
-- [ ] Step 2.1: Add app properties (LockedCaseIds)
-- [ ] Step 2.2: Add toggleCaseLock() method
+### ✅ Phase 2: Basic Lock State Management - COMPLETE
+- [x] Step 2.1: Add app properties (LockedCaseIds)
+- [x] Step 2.2: Add toggleCaseLock() method
 
 ### ⏸️ Phase 3: Visual Indicator (Gold Border)
 - [ ] Step 3.1: Pass lock info to visualizer
@@ -46,8 +46,8 @@
 
 ## Current Status
 
-**Currently working on**: Phase 2 - Basic Lock State Management
+**Currently working on**: Phase 3 - Visual Indicator (Gold Border)
 
 **Last updated**: 2025-09-30
 
-**Notes**: Phase 1 complete! IsLocked property added to ProspectiveCase model.
+**Notes**: Phases 1-2 complete! Data model and lock state management ready. Next: visualization.

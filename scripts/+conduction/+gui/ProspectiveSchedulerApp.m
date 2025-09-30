@@ -146,6 +146,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
+        LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
     end
 
     % Component initialization
@@ -2042,6 +2043,42 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             logLines = lines(:);
+        end
+
+        function toggleCaseLock(app, caseId)
+            % CASE-LOCKING: Toggle lock state for a case
+            %   Adds or removes caseId from LockedCaseIds array
+            %   Updates the corresponding ProspectiveCase.IsLocked property
+            %   Re-renders the schedule to show visual change
+
+            caseId = string(caseId);
+
+            % Toggle in LockedCaseIds array
+            if ismember(caseId, app.LockedCaseIds)
+                % Unlock: remove from array
+                app.LockedCaseIds(app.LockedCaseIds == caseId) = [];
+                isNowLocked = false;
+            else
+                % Lock: add to array
+                app.LockedCaseIds(end+1) = caseId;
+                isNowLocked = true;
+            end
+
+            % Update ProspectiveCase.IsLocked property if case exists
+            if ~isempty(app.CaseManager)
+                cases = app.CaseManager.getCases();
+                for i = 1:numel(cases)
+                    if cases(i).OperatorId + "_" + cases(i).ProcedureId == caseId
+                        cases(i).IsLocked = isNowLocked;
+                        break;
+                    end
+                end
+            end
+
+            % Re-render schedule to show lock state change
+            if ~isempty(app.OptimizedSchedule) && isvalid(app.OptimizedSchedule)
+                app.renderOptimizedSchedule(app.OptimizedSchedule, app.OptimizationOutcome);
+            end
         end
 
         function solverLines = gatherSolverMessages(app)
