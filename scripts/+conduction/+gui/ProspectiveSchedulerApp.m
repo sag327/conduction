@@ -1169,11 +1169,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights{15} = 180;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
 
-                % Force layout update before plotting
+                % Force layout update
                 drawnow;
 
-                % Update histogram with current operator/procedure after panel is fully expanded
-                app.refreshDurationHistogram();
+                % Wait for axes to be properly sized before plotting (like drawer does)
+                app.waitForDurationHistogramAxesThenPlot();
             else
                 % Hide panel
                 app.DurationHistogramPanel.Visible = 'off';
@@ -1183,6 +1183,36 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights = app.TabAdd.Children(1).RowHeight;
                 currentRowHeights{15} = 0;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
+            end
+        end
+
+        function waitForDurationHistogramAxesThenPlot(app)
+            % Check if axes are properly sized using InnerPosition (in pixels)
+            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+                return;
+            end
+
+            try
+                oldUnits = app.DurationHistogramAxes.Units;
+                app.DurationHistogramAxes.Units = 'pixels';
+                axesPos = app.DurationHistogramAxes.InnerPosition;
+                app.DurationHistogramAxes.Units = oldUnits;
+
+                % Require minimum size before plotting
+                minWidth = 200;
+                minHeight = 80;
+
+                if axesPos(3) >= minWidth && axesPos(4) >= minHeight
+                    % Axes is properly sized, plot now
+                    app.refreshDurationHistogram();
+                else
+                    % Axes not yet sized, wait a bit and check again
+                    pause(0.03);
+                    app.waitForDurationHistogramAxesThenPlot();
+                end
+            catch
+                % If there's an error, just plot anyway
+                app.refreshDurationHistogram();
             end
         end
 
@@ -2252,16 +2282,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
                 return;
-            end
-
-            % Wait for axes to have valid size before plotting
-            maxAttempts = 10;
-            for attempt = 1:maxAttempts
-                pos = app.DurationHistogramAxes.Position;
-                if pos(3) > 0.1 && pos(4) > 0.1  % Width and height are reasonable
-                    break;
-                end
-                pause(0.02);
             end
 
             cla(app.DurationHistogramAxes);
