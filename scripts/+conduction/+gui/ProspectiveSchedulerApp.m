@@ -39,6 +39,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerLabValueLabel         matlab.ui.control.Label
         DrawerStartValueLabel       matlab.ui.control.Label
         DrawerEndValueLabel         matlab.ui.control.Label
+        DrawerLockToggle            matlab.ui.control.CheckBox  % CASE-LOCKING: Lock toggle in drawer
         DrawerMetricValueLabel      matlab.ui.control.Label
         DrawerLabsValueLabel        matlab.ui.control.Label
         DrawerTimingsValueLabel     matlab.ui.control.Label
@@ -432,7 +433,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};  % CASE-LOCKING: Added row for lock toggle
             app.DrawerLayout.ColumnWidth = {'1x'};
             app.DrawerLayout.Padding = [16 18 16 18];
             app.DrawerLayout.RowSpacing = 12;
@@ -486,16 +487,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
 
+            % CASE-LOCKING: Lock toggle button
+            app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
+            app.DrawerLockToggle.Text = '🔒 Lock Case in Place';
+            app.DrawerLockToggle.FontColor = [1 0.84 0];  % Gold color
+            app.DrawerLockToggle.Layout.Row = 4;
+            app.DrawerLockToggle.Layout.Column = 1;
+            app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
+
             % Optimization Parameters Section
             app.DrawerOptimizationTitle = uilabel(app.DrawerLayout);
             app.DrawerOptimizationTitle.Text = 'Optimization Parameters';
             app.DrawerOptimizationTitle.FontWeight = 'bold';
             app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
-            app.DrawerOptimizationTitle.Layout.Row = 4;
+            app.DrawerOptimizationTitle.Layout.Row = 5;  % CASE-LOCKING: Updated from row 4
             app.DrawerOptimizationTitle.Layout.Column = 1;
 
             app.DrawerOptimizationGrid = uigridlayout(app.DrawerLayout);
-            app.DrawerOptimizationGrid.Layout.Row = 5;
+            app.DrawerOptimizationGrid.Layout.Row = 6;  % CASE-LOCKING: Updated from row 5
             app.DrawerOptimizationGrid.Layout.Column = 1;
             app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
             app.DrawerOptimizationGrid.ColumnWidth = {90, '1x'};
@@ -512,11 +521,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramTitle.Text = 'Historical Durations';
             app.DrawerHistogramTitle.FontWeight = 'bold';
             app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
-            app.DrawerHistogramTitle.Layout.Row = 6;
+            app.DrawerHistogramTitle.Layout.Row = 7;  % CASE-LOCKING: Updated from row 6
             app.DrawerHistogramTitle.Layout.Column = 1;
 
             app.DrawerHistogramPanel = uipanel(app.DrawerLayout);
-            app.DrawerHistogramPanel.Layout.Row = 7;
+            app.DrawerHistogramPanel.Layout.Row = 8;  % CASE-LOCKING: Updated from row 7
             app.DrawerHistogramPanel.Layout.Column = 1;
             app.DrawerHistogramPanel.BackgroundColor = [0.1 0.1 0.1];
             app.DrawerHistogramPanel.BorderType = 'none';
@@ -1295,6 +1304,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.closeDrawer();
         end
 
+        function DrawerLockToggleChanged(app, event)
+            % CASE-LOCKING: Handle lock toggle change in drawer
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+
+            % Toggle the lock state
+            app.toggleCaseLock(app.DrawerCurrentCaseId);
+        end
+
         function CanvasTabGroupSelectionChanged(app, event)
             if isempty(event) || ~isprop(event, 'NewValue') || isempty(event.NewValue)
                 return;
@@ -1795,6 +1814,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.setLabelText(app.DrawerLabValueLabel, details.Lab);
             app.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
             app.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
+
+            % CASE-LOCKING: Update lock toggle state
+            if ~isempty(app.DrawerLockToggle) && isvalid(app.DrawerLockToggle)
+                isLocked = ismember(caseId, app.LockedCaseIds);
+                app.DrawerLockToggle.Value = isLocked;
+            end
 
             app.updateHistogram(details.Operator, details.Procedure);
 
