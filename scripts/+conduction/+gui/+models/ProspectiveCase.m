@@ -16,6 +16,7 @@ classdef ProspectiveCase < handle
         SpecificLab string = ""  % Required lab (empty = any lab)
         IsFirstCaseOfDay logical = false  % Must be first case of the day
         AdmissionStatus string = "outpatient"  % Outpatient or inpatient
+        IsLocked logical = false  % CASE-LOCKING: Lock case in place during re-optimization
     end
 
     methods
