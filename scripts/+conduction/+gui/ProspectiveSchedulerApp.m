@@ -1160,7 +1160,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function DurationHistogramButtonPushed(app, event)
             % Toggle histogram panel visibility
             if strcmp(app.DurationHistogramPanel.Visible, 'off')
-                % Show panel
+                % Show panel and expand row first
                 app.DurationHistogramPanel.Visible = 'on';
                 app.DurationHistogramButton.Text = '📊 Hide';
 
@@ -1169,7 +1169,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights{15} = 180;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
 
-                % Update histogram with current operator/procedure
+                % Force layout update before plotting
+                drawnow;
+
+                % Update histogram with current operator/procedure after panel is fully expanded
                 app.refreshDurationHistogram();
             else
                 % Hide panel
