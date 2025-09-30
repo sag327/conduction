@@ -1187,33 +1187,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function waitForDurationHistogramAxesThenPlot(app)
-            % Check if axes are properly sized using InnerPosition (in pixels)
-            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
-                return;
-            end
+            % Wait for axes to be properly sized before plotting
+            maxAttempts = 10;
+            attempt = 0;
 
-            try
-                oldUnits = app.DurationHistogramAxes.Units;
-                app.DurationHistogramAxes.Units = 'pixels';
-                axesPos = app.DurationHistogramAxes.InnerPosition;
-                app.DurationHistogramAxes.Units = oldUnits;
-
-                % Require minimum size before plotting
-                minWidth = 200;
-                minHeight = 80;
-
-                if axesPos(3) >= minWidth && axesPos(4) >= minHeight
+            while attempt < maxAttempts
+                if app.isDurationHistogramAxesReady()
                     % Axes is properly sized, plot now
                     app.refreshDurationHistogram();
-                else
-                    % Axes not yet sized, wait a bit and check again
-                    pause(0.03);
-                    app.waitForDurationHistogramAxesThenPlot();
+                    return;
                 end
-            catch
-                % If there's an error, just plot anyway
-                app.refreshDurationHistogram();
+
+                % Wait and try again
+                pause(0.03);
+                attempt = attempt + 1;
             end
+
+            % If we timeout, try to plot anyway
+            app.refreshDurationHistogram();
         end
 
         function AddConstraintButtonPushed(app, event)
@@ -2277,6 +2268,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function refreshDurationHistogram(app)
             % Update histogram with current operator/procedure selection
+            % Wait for axes to be properly sized before plotting
+            if ~app.isDurationHistogramAxesReady()
+                % Axes not ready, skip plotting
+                return;
+            end
+
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
 
@@ -2312,6 +2309,31 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     'Parent', app.DurationHistogramAxes);
             catch ME
                 app.showDurationHistogramMessage(sprintf('Error: %s', ME.message));
+            end
+        end
+
+        function isReady = isDurationHistogramAxesReady(app)
+            % Check if axes are properly sized for plotting
+            isReady = false;
+
+            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+                return;
+            end
+
+            try
+                oldUnits = app.DurationHistogramAxes.Units;
+                app.DurationHistogramAxes.Units = 'pixels';
+                axesPos = app.DurationHistogramAxes.InnerPosition;
+                app.DurationHistogramAxes.Units = oldUnits;
+
+                % Check minimum size
+                minWidth = 200;
+                minHeight = 80;
+
+                isReady = (axesPos(3) >= minWidth && axesPos(4) >= minHeight);
+            catch
+                % If there's an error, assume not ready
+                isReady = false;
             end
         end
 
