@@ -1169,8 +1169,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights{15} = 180;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
 
-                % Force layout update before plotting
+                % Force layout update and wait for axes to be ready
                 drawnow;
+                pause(0.05);  % Small delay to ensure axes is fully sized
 
                 % Update histogram with current operator/procedure after panel is fully expanded
                 app.refreshDurationHistogram();
