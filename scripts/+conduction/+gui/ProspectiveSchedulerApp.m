@@ -143,6 +143,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationLastRun datetime = NaT
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
+        DrawerAnimationStartWidth double = 0
+        DrawerAnimationTargetWidth double = 0
+        DrawerAnimationCurrentStep double = 0
+        DrawerAnimationTotalSteps double = 0
         DrawerCurrentCaseId string = ""
     end
 
@@ -1622,36 +1626,65 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.clearDrawerTimer();
 
-            distance = targetWidth - currentWidth;
-            steps = max(ceil(abs(distance) / 40), 5);
-            delta = distance / steps;
+            % Store animation parameters for easing calculation
+            app.DrawerAnimationStartWidth = currentWidth;
+            app.DrawerAnimationTargetWidth = targetWidth;
+            app.DrawerAnimationCurrentStep = 0;
+
+            % Optimize: fewer steps with longer period for smoother animation
+            distance = abs(targetWidth - currentWidth);
+            app.DrawerAnimationTotalSteps = max(ceil(distance / 50), 8);
 
             animationTimer = timer('ExecutionMode', 'fixedRate', ...
-                'Period', 0.02, 'TasksToExecute', steps);
-            animationTimer.TimerFcn = @(src, ~) app.stepDrawerAnimation(delta, targetWidth, src);
+                'Period', 0.03, 'TasksToExecute', app.DrawerAnimationTotalSteps);
+            animationTimer.TimerFcn = @(src, ~) app.stepDrawerAnimation(src);
             app.DrawerTimer = animationTimer;
             start(animationTimer);
         end
 
-        function stepDrawerAnimation(app, delta, targetWidth, timerObj)
-            nextWidth = app.DrawerWidth + delta;
-            if (delta > 0 && nextWidth >= targetWidth) || (delta < 0 && nextWidth <= targetWidth)
-                nextWidth = targetWidth;
-            end
+        function stepDrawerAnimation(app, timerObj)
+            % Increment step counter
+            app.DrawerAnimationCurrentStep = app.DrawerAnimationCurrentStep + 1;
 
-            app.setDrawerWidth(nextWidth);
+            % Check if animation is complete
+            isLastStep = app.DrawerAnimationCurrentStep >= app.DrawerAnimationTotalSteps;
 
-            if abs(nextWidth - targetWidth) < 1
-                if nargin >= 4 && isa(timerObj, 'timer') && isvalid(timerObj)
+            if isLastStep
+                % On final step, go directly to target without easing calculation
+                targetWidth = app.DrawerAnimationTargetWidth;
+                app.setDrawerWidth(targetWidth);
+
+                if nargin >= 1 && isa(timerObj, 'timer') && isvalid(timerObj)
                     stop(timerObj);
                 end
                 app.clearDrawerTimer();
 
+                % Single final layout update
+                drawnow;
+
                 % Redraw histogram after drawer animation completes
                 if ~isempty(app.DrawerCurrentCaseId)
-                    % Force layout update before populating
-                    drawnow;
                     app.populateDrawer(app.DrawerCurrentCaseId);
+                end
+            else
+                % Calculate progress (0 to 1)
+                progress = app.DrawerAnimationCurrentStep / app.DrawerAnimationTotalSteps;
+
+                % Apply ease-out-cubic easing: smooth deceleration
+                % Formula: 1 - (1-t)^3
+                easedProgress = 1 - (1 - progress)^3;
+
+                % Calculate current width based on eased progress
+                startWidth = app.DrawerAnimationStartWidth;
+                targetWidth = app.DrawerAnimationTargetWidth;
+                nextWidth = startWidth + (targetWidth - startWidth) * easedProgress;
+
+                % Update drawer width
+                app.setDrawerWidth(nextWidth);
+
+                % Only force layout update every other frame to reduce jank
+                if mod(app.DrawerAnimationCurrentStep, 2) == 0
+                    drawnow limitrate;
                 end
             end
         end
