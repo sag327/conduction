@@ -16,10 +16,10 @@
 - [x] Step 2.1: Add app properties (LockedCaseIds)
 - [x] Step 2.2: Add toggleCaseLock() method
 
-### ⏸️ Phase 3: Visual Indicator (Gold Border)
-- [ ] Step 3.1: Pass lock info to visualizer
-- [ ] Step 3.2: Add LockedCaseIds parameter
-- [ ] Step 3.3: Draw gold borders for locked cases
+### ✅ Phase 3: Visual Indicator (Gold Border) - COMPLETE
+- [x] Step 3.1: Pass lock info to visualizer
+- [x] Step 3.2: Add LockedCaseIds parameter
+- [x] Step 3.3: Draw gold borders for locked cases
 
 ### ⏸️ Phase 4: Drawer Toggle Button
 - [ ] Step 4.1: Add toggle UI element
@@ -46,8 +46,8 @@
 
 ## Current Status
 
-**Currently working on**: Phase 3 - Visual Indicator (Gold Border)
+**Currently working on**: Phase 4 - Drawer Toggle Button
 
 **Last updated**: 2025-09-30
 
-**Notes**: Phases 1-2 complete! Data model and lock state management ready. Next: visualization.
+**Notes**: Phases 1-3 complete! Locked cases now show with gold borders. Next: drawer toggle UI.

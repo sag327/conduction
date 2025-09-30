@@ -118,6 +118,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'ScheduleAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
+    addParameter(p, 'LockedCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % CASE-LOCKING: Array of locked case IDs
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -281,6 +282,12 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         caseClickedCallback = opts.CaseClickedFcn;
     end
 
+    % CASE-LOCKING: Extract locked case IDs
+    lockedCaseIds = string.empty;
+    if isstruct(opts) && isfield(opts, 'LockedCaseIds')
+        lockedCaseIds = string(opts.LockedCaseIds);
+    end
+
     set(ax, 'YDir', 'reverse');
     ylim(ax, [startHour, endHour]);
     xlim(ax, [0.5, numLabs + 0.5]);
@@ -290,11 +297,22 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     grayColor = [0.7, 0.7, 0.7];
     turnoverColor = [0.6, 0.6, 0.2];
     edgeColor = [0.2, 0.2, 0.2];
+    lockedEdgeColor = [1, 0.84, 0];  % CASE-LOCKING: Gold color for locked cases
 
     for idx = 1:numel(caseTimelines)
         entry = caseTimelines(idx);
         xPos = entry.labIndex;
         barWidth = 0.8;
+
+        % CASE-LOCKING: Check if this case is locked
+        isLocked = ismember(string(entry.caseId), lockedCaseIds);
+        if isLocked
+            currentEdgeColor = lockedEdgeColor;
+            currentLineWidth = 3;
+        else
+            currentEdgeColor = edgeColor;
+            currentLineWidth = 1;
+        end
 
         setupStartHour = entry.setupStart / 60;
         procStartHour = entry.procStart / 60;
@@ -306,7 +324,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
                 setupRect = rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
                 attachCaseClick(setupRect, entry, caseClickedCallback);
             end
         end
@@ -323,7 +341,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 opColor = [0.5, 0.5, 0.5];
             end
             procRect = rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
-                'FaceColor', opColor, 'EdgeColor', edgeColor, 'LineWidth', 1);
+                'FaceColor', opColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
             attachCaseClick(procRect, entry, caseClickedCallback);
         end
 
@@ -331,7 +349,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
                 postRect = rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
                 attachCaseClick(postRect, entry, caseClickedCallback);
             end
         end
@@ -340,7 +358,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
                 turnoverRect = rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
-                    'FaceColor', turnoverColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', turnoverColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
                 attachCaseClick(turnoverRect, entry, caseClickedCallback);
             end
         end
