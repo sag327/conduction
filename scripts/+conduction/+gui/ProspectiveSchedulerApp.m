@@ -149,6 +149,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
+        DurationHistogramTimer timer = timer.empty
     end
 
     % Component initialization
@@ -1111,6 +1112,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function delete(app)
+            app.clearDurationHistogramTimer();
             app.clearDrawerTimer();
             delete(app.UIFigure);
         end
@@ -1160,7 +1162,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function DurationHistogramButtonPushed(app, event)
             % Toggle histogram panel visibility
             if strcmp(app.DurationHistogramPanel.Visible, 'off')
-                % Show panel and expand row first
+                % Show panel
                 app.DurationHistogramPanel.Visible = 'on';
                 app.DurationHistogramButton.Text = '📊 Hide';
 
@@ -1169,13 +1171,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights{15} = 180;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
 
-                % Force layout update
-                drawnow;
+                % Allow layout to catch up before plotting
+                drawnow limitrate;
 
-                % Wait for axes to be properly sized before plotting (like drawer does)
-                app.waitForDurationHistogramAxesThenPlot();
+                % Update histogram with current operator/procedure
+                app.clearDurationHistogramTimer();
+                app.refreshDurationHistogram();
             else
                 % Hide panel
+                app.clearDurationHistogramTimer();
                 app.DurationHistogramPanel.Visible = 'off';
                 app.DurationHistogramButton.Text = '📊 View';
 
@@ -1184,27 +1188,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 currentRowHeights{15} = 0;
                 app.TabAdd.Children(1).RowHeight = currentRowHeights;
             end
-        end
-
-        function waitForDurationHistogramAxesThenPlot(app)
-            % Wait for axes to be properly sized before plotting
-            maxAttempts = 10;
-            attempt = 0;
-
-            while attempt < maxAttempts
-                if app.isDurationHistogramAxesReady()
-                    % Axes is properly sized, plot now
-                    app.refreshDurationHistogram();
-                    return;
-                end
-
-                % Wait and try again
-                pause(0.03);
-                attempt = attempt + 1;
-            end
-
-            % If we timeout, try to plot anyway
-            app.refreshDurationHistogram();
         end
 
         function AddConstraintButtonPushed(app, event)
@@ -1727,6 +1710,74 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
             app.DrawerTimer = timer.empty;
+        end
+
+        function clearDurationHistogramTimer(app)
+            if ~isempty(app.DurationHistogramTimer)
+                try
+                    if isvalid(app.DurationHistogramTimer)
+                        stop(app.DurationHistogramTimer);
+                    end
+                catch
+                end
+                if isvalid(app.DurationHistogramTimer)
+                    delete(app.DurationHistogramTimer);
+                end
+            end
+            app.DurationHistogramTimer = timer.empty;
+        end
+
+        function scheduleDurationHistogramRefresh(app)
+            if strcmp(app.DurationHistogramPanel.Visible, 'off')
+                return;
+            end
+
+            app.clearDurationHistogramTimer();
+
+            try
+                delayTimer = timer('ExecutionMode', 'singleShot', ...
+                    'StartDelay', 0.03, ...
+                    'TimerFcn', @(~,~) app.onDurationHistogramTimer());
+            catch
+                return;
+            end
+
+            app.DurationHistogramTimer = delayTimer;
+
+            try
+                start(delayTimer);
+            catch
+                app.clearDurationHistogramTimer();
+            end
+        end
+
+        function onDurationHistogramTimer(app)
+            app.DurationHistogramTimer = timer.empty;
+
+            if strcmp(app.DurationHistogramPanel.Visible, 'on')
+                app.refreshDurationHistogram();
+            end
+        end
+
+        function isReady = isDurationHistogramAxesReady(app)
+            isReady = false;
+
+            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
+                return;
+            end
+
+            try
+                oldUnits = app.DurationHistogramAxes.Units;
+                app.DurationHistogramAxes.Units = 'pixels';
+                axesPos = app.DurationHistogramAxes.InnerPosition;
+                app.DurationHistogramAxes.Units = oldUnits;
+
+                minWidth = 150;
+                minHeight = 100;
+                isReady = axesPos(3) >= minWidth && axesPos(4) >= minHeight;
+            catch
+                isReady = false;
+            end
         end
 
         function setDrawerToWidth(app, targetWidth)
@@ -2268,18 +2319,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function refreshDurationHistogram(app)
             % Update histogram with current operator/procedure selection
-            % Wait for axes to be properly sized before plotting
-            if ~app.isDurationHistogramAxesReady()
-                % Axes not ready, skip plotting
-                return;
-            end
-
             operatorName = string(app.OperatorDropDown.Value);
             procedureName = string(app.ProcedureDropDown.Value);
 
             if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
                 return;
             end
+
+            if strcmp(app.DurationHistogramPanel.Visible, 'off')
+                return;
+            end
+
+            if ~app.isDurationHistogramAxesReady()
+                app.scheduleDurationHistogramRefresh();
+                return;
+            end
+
+            app.clearDurationHistogramTimer();
 
             cla(app.DurationHistogramAxes);
 
@@ -2309,31 +2365,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     'Parent', app.DurationHistogramAxes);
             catch ME
                 app.showDurationHistogramMessage(sprintf('Error: %s', ME.message));
-            end
-        end
-
-        function isReady = isDurationHistogramAxesReady(app)
-            % Check if axes are properly sized for plotting
-            isReady = false;
-
-            if isempty(app.DurationHistogramAxes) || ~isvalid(app.DurationHistogramAxes)
-                return;
-            end
-
-            try
-                oldUnits = app.DurationHistogramAxes.Units;
-                app.DurationHistogramAxes.Units = 'pixels';
-                axesPos = app.DurationHistogramAxes.InnerPosition;
-                app.DurationHistogramAxes.Units = oldUnits;
-
-                % Check minimum size
-                minWidth = 200;
-                minHeight = 80;
-
-                isReady = (axesPos(3) >= minWidth && axesPos(4) >= minHeight);
-            catch
-                % If there's an error, assume not ready
-                isReady = false;
             end
         end
 
