@@ -628,7 +628,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.DurationHistogramAxes = uiaxes(app.DurationHistogramPanel);
             app.DurationHistogramAxes.Units = 'normalized';
-            app.DurationHistogramAxes.Position = [0, 0, 1, 1];
+            app.DurationHistogramAxes.Position = [0.08, 0.12, 0.88, 0.82];  % Add margins for labels
             app.DurationHistogramAxes.Toolbar.Visible = 'off';
             app.DurationHistogramAxes.Interactions = [];
             disableDefaultInteractivity(app.DurationHistogramAxes);
