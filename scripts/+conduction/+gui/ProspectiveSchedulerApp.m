@@ -1628,28 +1628,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function waitForAxesThenPopulate(app)
             % Check if axes are properly sized using InnerPosition (in pixels)
-            if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
-                try
-                    % Get position in pixels
-                    oldUnits = app.DrawerHistogramAxes.Units;
-                    app.DrawerHistogramAxes.Units = 'pixels';
-                    axesPos = app.DrawerHistogramAxes.InnerPosition;
-                    app.DrawerHistogramAxes.Units = oldUnits;
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
+                return;
+            end
 
-                    if axesPos(4) > 100  % Height > 100px means layout is complete
-                        app.populateDrawer(app.DrawerCurrentCaseId);
-                    else
-                        % Axes not yet sized, wait and check again
-                        delayTimer = timer('ExecutionMode', 'singleShot', ...
-                            'StartDelay', 0.02, ...
-                            'TimerFcn', @(~,~) app.waitForAxesThenPopulate());
-                        app.DrawerTimer = delayTimer;
-                        start(delayTimer);
-                    end
-                catch
-                    % If there's an error, just populate anyway
+            try
+                oldUnits = app.DrawerHistogramAxes.Units;
+                app.DrawerHistogramAxes.Units = 'pixels';
+                axesPos = app.DrawerHistogramAxes.InnerPosition;
+                app.DrawerHistogramAxes.Units = oldUnits;
+
+                % Require both width and height so legend text isn't cramped on first draw
+                minWidth = 220;
+                minHeight = 100;
+
+                if axesPos(3) >= minWidth && axesPos(4) >= minHeight
                     app.populateDrawer(app.DrawerCurrentCaseId);
+                else
+                    % Axes not yet sized, wait and check again
+                    delayTimer = timer('ExecutionMode', 'singleShot', ...
+                        'StartDelay', 0.03, ...
+                        'TimerFcn', @(~,~) app.waitForAxesThenPopulate());
+                    app.DrawerTimer = delayTimer;
+                    start(delayTimer);
                 end
+            catch
+                % If there's an error, just populate anyway
+                app.populateDrawer(app.DrawerCurrentCaseId);
             end
         end
 
