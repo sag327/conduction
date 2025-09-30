@@ -257,6 +257,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Title.FontSize = 14;
             app.ScheduleAxes.Box = 'on';
             app.ScheduleAxes.Color = [0 0 0];
+            app.ScheduleAxes.Toolbar.Visible = 'off';
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
             app.CanvasAnalyzeLayout.RowHeight = {'1.5x', '1x', '1.3x'};
@@ -274,6 +275,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UtilAxes.Title.FontWeight = 'bold';
             app.UtilAxes.Title.FontSize = 14;
             app.UtilAxes.Visible = 'on';
+            app.UtilAxes.Toolbar.Visible = 'off';
 
             app.FlipAxes = uiaxes(app.CanvasAnalyzeLayout);
             app.FlipAxes.Layout.Row = 2;
@@ -284,6 +286,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.FlipAxes.Title.FontWeight = 'bold';
             app.FlipAxes.Title.FontSize = 14;
             app.FlipAxes.Visible = 'on';
+            app.FlipAxes.Toolbar.Visible = 'off';
 
             app.IdleAxes = uiaxes(app.CanvasAnalyzeLayout);
             app.IdleAxes.Layout.Row = 3;
@@ -294,6 +297,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.IdleAxes.Title.FontWeight = 'bold';
             app.IdleAxes.Title.FontSize = 14;
             app.IdleAxes.Visible = 'on';
+            app.IdleAxes.Toolbar.Visible = 'off';
 
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
