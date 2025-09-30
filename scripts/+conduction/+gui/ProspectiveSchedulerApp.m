@@ -2087,7 +2087,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Re-render schedule to show lock state change
-            if ~isempty(app.OptimizedSchedule) && isvalid(app.OptimizedSchedule)
+            if ~isempty(app.OptimizedSchedule)
                 app.renderOptimizedSchedule(app.OptimizedSchedule, app.OptimizationOutcome);
             end
         end
