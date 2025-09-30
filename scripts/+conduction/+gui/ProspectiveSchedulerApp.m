@@ -143,10 +143,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationLastRun datetime = NaT
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
-        DrawerAnimationStartWidth double = 0
-        DrawerAnimationTargetWidth double = 0
-        DrawerAnimationCurrentStep double = 0
-        DrawerAnimationTotalSteps double = 0
         DrawerCurrentCaseId string = ""
     end
 
@@ -1049,23 +1045,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 caseId = string.empty;
             end
 
-            % Check if drawer is already open
-            drawerAlreadyOpen = app.DrawerWidth >= 440;
-
             % Store the caseId
             app.DrawerCurrentCaseId = caseId;
 
-            if drawerAlreadyOpen
-                % Drawer is already open, populate immediately
-                app.populateDrawer(caseId);
-            else
-                % Drawer is closed, animate open and populate after animation completes
-                app.animateDrawerToWidth(440);
-            end
+            % Instantly open drawer to 440px
+            app.setDrawerToWidth(440);
         end
 
         function closeDrawer(app)
-            app.animateDrawerToWidth(0);
+            % Instantly close drawer to 0px
+            app.setDrawerToWidth(0);
         end
 
         function onScheduleBlockClicked(app, caseId)
@@ -1610,81 +1599,56 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerTimer = timer.empty;
         end
 
-        function animateDrawerToWidth(app, targetWidth)
+        function setDrawerToWidth(app, targetWidth)
             if isempty(app.Drawer) || ~isvalid(app.Drawer)
                 return;
             end
 
             targetWidth = max(0, double(targetWidth));
-            currentWidth = app.DrawerWidth;
 
-            if abs(currentWidth - targetWidth) < 1
-                app.setDrawerWidth(targetWidth);
-                app.clearDrawerTimer();
-                return;
-            end
-
+            % Clear any existing timers for safety
             app.clearDrawerTimer();
 
-            % Store animation parameters for easing calculation
-            app.DrawerAnimationStartWidth = currentWidth;
-            app.DrawerAnimationTargetWidth = targetWidth;
-            app.DrawerAnimationCurrentStep = 0;
+            % Suspend graphics updates to prevent visible bouncing
+            drawnow;  % Process pending updates first
 
-            % Optimize: fewer steps with longer period for smoother animation
-            distance = abs(targetWidth - currentWidth);
-            app.DrawerAnimationTotalSteps = max(ceil(distance / 50), 8);
+            % Instantly set drawer to target width
+            app.setDrawerWidth(targetWidth);
 
-            animationTimer = timer('ExecutionMode', 'fixedRate', ...
-                'Period', 0.03, 'TasksToExecute', app.DrawerAnimationTotalSteps);
-            animationTimer.TimerFcn = @(src, ~) app.stepDrawerAnimation(src);
-            app.DrawerTimer = animationTimer;
-            start(animationTimer);
+            % Force single clean layout update at final size
+            drawnow;
+
+            % Only populate drawer content after axes have reached proper size
+            if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
+                % Wait for axes to be properly sized before drawing histogram
+                % This is especially important on first drawer open
+                app.waitForAxesThenPopulate();
+            end
         end
 
-        function stepDrawerAnimation(app, timerObj)
-            % Increment step counter
-            app.DrawerAnimationCurrentStep = app.DrawerAnimationCurrentStep + 1;
+        function waitForAxesThenPopulate(app)
+            % Check if axes are properly sized using InnerPosition (in pixels)
+            if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
+                try
+                    % Get position in pixels
+                    oldUnits = app.DrawerHistogramAxes.Units;
+                    app.DrawerHistogramAxes.Units = 'pixels';
+                    axesPos = app.DrawerHistogramAxes.InnerPosition;
+                    app.DrawerHistogramAxes.Units = oldUnits;
 
-            % Check if animation is complete
-            isLastStep = app.DrawerAnimationCurrentStep >= app.DrawerAnimationTotalSteps;
-
-            if isLastStep
-                % On final step, go directly to target without easing calculation
-                targetWidth = app.DrawerAnimationTargetWidth;
-                app.setDrawerWidth(targetWidth);
-
-                if nargin >= 1 && isa(timerObj, 'timer') && isvalid(timerObj)
-                    stop(timerObj);
-                end
-                app.clearDrawerTimer();
-
-                % Single final layout update
-                drawnow;
-
-                % Redraw histogram after drawer animation completes
-                if ~isempty(app.DrawerCurrentCaseId)
+                    if axesPos(4) > 100  % Height > 100px means layout is complete
+                        app.populateDrawer(app.DrawerCurrentCaseId);
+                    else
+                        % Axes not yet sized, wait and check again
+                        delayTimer = timer('ExecutionMode', 'singleShot', ...
+                            'StartDelay', 0.02, ...
+                            'TimerFcn', @(~,~) app.waitForAxesThenPopulate());
+                        app.DrawerTimer = delayTimer;
+                        start(delayTimer);
+                    end
+                catch
+                    % If there's an error, just populate anyway
                     app.populateDrawer(app.DrawerCurrentCaseId);
-                end
-            else
-                % Calculate progress (0 to 1)
-                progress = app.DrawerAnimationCurrentStep / app.DrawerAnimationTotalSteps;
-
-                % Apply ease-out-cubic easing: smooth deceleration
-                % Formula: 1 - (1-t)^3
-                easedProgress = 1 - (1 - progress)^3;
-
-                % Calculate current width based on eased progress
-                startWidth = app.DrawerAnimationStartWidth;
-                targetWidth = app.DrawerAnimationTargetWidth;
-                nextWidth = startWidth + (targetWidth - startWidth) * easedProgress;
-
-                % Update drawer width
-                app.setDrawerWidth(nextWidth);
-
-                % Only force layout update every other frame to reduce jank
-                if mod(app.DrawerAnimationCurrentStep, 2) == 0
-                    drawnow limitrate;
                 end
             end
         end
