@@ -2092,6 +2092,82 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function lockedAssignments = extractLockedCaseAssignments(app)
+            % CASE-LOCKING: Extract current assignments of locked cases
+            %   Returns a struct array with locked case assignments (lab, times, etc.)
+
+            lockedAssignments = struct([]);
+
+            if isempty(app.LockedCaseIds) || isempty(app.OptimizedSchedule)
+                return;
+            end
+
+            % Get all lab assignments from current schedule
+            labAssignments = app.OptimizedSchedule.labAssignments();
+            if isempty(labAssignments)
+                return;
+            end
+
+            % Search through all labs for locked cases
+            for labIdx = 1:numel(labAssignments)
+                labCases = labAssignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+
+                for caseIdx = 1:numel(labCases)
+                    caseEntry = labCases(caseIdx);
+                    caseId = string(caseEntry.caseID);
+
+                    % Check if this case is locked
+                    if ismember(caseId, app.LockedCaseIds)
+                        % Extract the full case assignment
+                        lockedAssignments(end+1) = caseEntry; %#ok<AGROW>
+                        lockedAssignments(end).assignedLab = labIdx; % Store which lab it's in
+                    end
+                end
+            end
+        end
+
+        function dailySchedule = mergeLockedCases(app, dailySchedule, lockedAssignments)
+            % CASE-LOCKING: Merge locked cases back into optimized schedule
+            %   Inserts locked cases at their original lab assignments and times
+
+            if isempty(lockedAssignments)
+                return;
+            end
+
+            % Get current lab assignments
+            labAssignments = dailySchedule.labAssignments();
+
+            % Insert each locked case back into its assigned lab
+            for i = 1:numel(lockedAssignments)
+                lockedCase = lockedAssignments(i);
+                labIdx = lockedCase.assignedLab;
+
+                % Ensure lab index is valid
+                if labIdx > numel(labAssignments)
+                    warning('Locked case assigned to invalid lab %d, skipping', labIdx);
+                    continue;
+                end
+
+                % Get existing cases in this lab
+                existingCases = labAssignments{labIdx};
+
+                % Add locked case to the lab
+                if isempty(existingCases)
+                    labAssignments{labIdx} = rmfield(lockedCase, 'assignedLab');
+                else
+                    % Append to existing cases
+                    lockedCaseClean = rmfield(lockedCase, 'assignedLab');
+                    labAssignments{labIdx} = [existingCases; lockedCaseClean];
+                end
+            end
+
+            % Update the schedule with merged assignments
+            dailySchedule = dailySchedule.withLabAssignments(labAssignments);
+        end
+
         function solverLines = gatherSolverMessages(app)
             solverLines = {};
             outcome = app.OptimizationOutcome;
@@ -2801,6 +2877,34 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
+            % CASE-LOCKING: Extract locked case assignments before optimization
+            % If this is the first optimization, there won't be any locked assignments yet
+            lockedAssignments = app.extractLockedCaseAssignments();
+
+            % CASE-LOCKING: Clear any stale locked IDs if no locked assignments found
+            if ~isempty(app.LockedCaseIds) && isempty(lockedAssignments)
+                app.LockedCaseIds = string.empty;
+            end
+
+            % CASE-LOCKING: Filter out locked cases from optimization
+            if ~isempty(app.LockedCaseIds) && ~isempty(lockedAssignments)
+                % Find indices of unlocked cases
+                unlockedMask = true(size(casesStruct));
+                for i = 1:numel(casesStruct)
+                    caseId = string(casesStruct(i).caseID);
+                    if ismember(caseId, app.LockedCaseIds)
+                        unlockedMask(i) = false;
+                    end
+                end
+                casesStruct = casesStruct(unlockedMask);
+
+                % Check if all cases are locked
+                if isempty(casesStruct)
+                    uialert(app.UIFigure, 'All cases are locked. Nothing to optimize.', 'Optimization');
+                    return;
+                end
+            end
+
             app.IsOptimizationRunning = true;
             app.updateOptimizationStatus();
             app.updateOptimizationActionAvailability();
@@ -2809,6 +2913,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             try
                 scheduleOptions = app.buildSchedulingOptions();
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
+
+                % CASE-LOCKING: Merge locked cases back into the optimized schedule
+                if ~isempty(lockedAssignments)
+                    dailySchedule = app.mergeLockedCases(dailySchedule, lockedAssignments);
+                end
+
                 app.OptimizedSchedule = dailySchedule;
                 app.OptimizationOutcome = outcome;
                 app.IsOptimizationDirty = false;

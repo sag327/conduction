@@ -32,10 +32,10 @@
 - [ ] Step 5.3: Make icons clickable
 - [ ] Step 5.4: Connect app to icon callback
 
-### ⏸️ Phase 6: Optimization Integration
-- [ ] Step 6.1: Filter locked cases before optimization
-- [ ] Step 6.2: Preserve locked assignments
-- [ ] Step 6.3: Handle edge cases
+### ✅ Phase 6: Optimization Integration - COMPLETE
+- [x] Step 6.1: Filter locked cases before optimization
+- [x] Step 6.2: Preserve locked assignments and merge back
+- [x] Step 6.3: Handle edge cases (all locked, no schedule, stale IDs)
 
 ### ⏸️ Phase 7: Polish & Testing
 - [ ] Step 7.1: Visual polish
@@ -46,8 +46,8 @@
 
 ## Current Status
 
-**Currently working on**: Phase 5 - Clickable Lock Icons
+**Currently working on**: Phase 7 - Polish & Testing
 
 **Last updated**: 2025-09-30
 
-**Notes**: Phases 1-4 complete! Full UI workflow ready - drawer toggle + gold borders working!
+**Notes**: Phases 1-4 & 6 complete! Lock feature FULLY FUNCTIONAL - locks now respected during re-optimization!
