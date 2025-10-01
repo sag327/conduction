@@ -1249,7 +1249,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     % Helper methods
-    methods (Access = private)
+    methods (Access = public)
 
         function updateDropdowns(app)
             % Update operator dropdown

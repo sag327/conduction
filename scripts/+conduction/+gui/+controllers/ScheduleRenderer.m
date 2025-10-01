@@ -5,7 +5,7 @@ classdef ScheduleRenderer < handle
 
         function renderEmptySchedule(~, app, labNumbers)
             % Display empty schedule with time grid and lab rows
-            app.closeDrawer();
+            app.DrawerController.closeDrawer(app);
             app.DrawerCurrentCaseId = "";
 
             % Default time window: 6 AM to 8 PM (6 to 20 hours)
@@ -51,9 +51,9 @@ classdef ScheduleRenderer < handle
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
-                app.drawUtilization(app.UtilAxes);
-                app.drawFlipMetrics(app.FlipAxes);
-                app.drawIdleMetrics(app.IdleAxes);
+                app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
+                app.AnalyticsRenderer.drawFlipMetrics(app, app.FlipAxes);
+                app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
             end
         end
 
