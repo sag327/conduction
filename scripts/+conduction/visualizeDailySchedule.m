@@ -1,5 +1,6 @@
-function visualizeDailySchedule(scheduleInput, varargin)
+function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 %VISUALIZEDAILYSCHEDULE Visualize lab assignments and operator timelines.
+%   Returns the updated operator color map to persist colors across re-optimizations.
 %   visualizeDailySchedule(dailySchedule) plots the schedule stored in a
 %   conduction.DailySchedule instance. Legacy schedule/results structs are
 %   supported via visualizeDailySchedule(scheduleStruct, resultsStruct).

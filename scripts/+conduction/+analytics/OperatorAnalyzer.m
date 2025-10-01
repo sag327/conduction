@@ -35,18 +35,22 @@ classdef OperatorAnalyzer
             turnoverFlipFlags = false(0, 1);
 
             for idx = 1:numel(uniqueOps)
-                opName = uniqueOps{idx};
+                opName = char(uniqueOps{idx});  % Ensure char type for containers.Map key
                 opCases = caseStructs(strcmp(operatorNames, opName));
                 [sortedStart, order] = sort([opCases.procStartTime]);
                 opCases = opCases(order);
                 procEndTimes = arrayfun(@conduction.analytics.OperatorAnalyzer.procEnd, opCases);
 
                 if numel(opCases) > 1
+                    % Ensure both vectors have consistent orientation before subtraction
+                    sortedStart = sortedStart(:)';  % Force row vector
+                    procEndTimes = procEndTimes(:)';  % Force row vector
                     idleGaps = max(0, sortedStart(2:end) - procEndTimes(1:end-1));
                 else
                     idleGaps = zeros(0,1);
                 end
-                idleMinutes = sum(idleGaps);
+                idleMinutes = sum(idleGaps(:));  % Sum all elements, returns scalar
+
                 operatorData.totalIdleTime(opName) = idleMinutes;
                 if ~isKey(operatorData.operatorNames, opName)
                     operatorData.operatorNames(opName) = char(opName);
