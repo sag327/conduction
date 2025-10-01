@@ -281,9 +281,15 @@ classdef DrawerController < handle
 
                     % Check if this case is locked
                     if ismember(caseId, app.LockedCaseIds)
+                        % Add lab assignment to the case entry first
+                        caseEntry.assignedLab = labIdx;
+
                         % Extract the full case assignment
-                        lockedAssignments(end+1) = caseEntry; %#ok<AGROW>
-                        lockedAssignments(end).assignedLab = labIdx; % Store which lab it's in
+                        if isempty(lockedAssignments)
+                            lockedAssignments = caseEntry;  % First element
+                        else
+                            lockedAssignments(end+1) = caseEntry; %#ok<AGROW>
+                        end
                     end
                 end
             end
@@ -314,18 +320,67 @@ classdef DrawerController < handle
                 % Get existing cases in this lab
                 existingCases = labAssignments{labIdx};
 
+                % Remove the assignedLab field before merging
+                lockedCaseClean = rmfield(lockedCase, 'assignedLab');
+
                 % Add locked case to the lab
                 if isempty(existingCases)
-                    labAssignments{labIdx} = rmfield(lockedCase, 'assignedLab');
+                    labAssignments{labIdx} = lockedCaseClean;
                 else
-                    % Append to existing cases
-                    lockedCaseClean = rmfield(lockedCase, 'assignedLab');
-                    labAssignments{labIdx} = [existingCases; lockedCaseClean];
+                    % Convert both to column vectors and ensure field compatibility
+                    existingCases = existingCases(:);  % Force column orientation
+
+                    % Get all fields from both structs
+                    existingFields = fieldnames(existingCases);
+                    lockedFields = fieldnames(lockedCaseClean);
+                    allFields = union(existingFields, lockedFields, 'stable');
+
+                    % Add missing fields with empty values
+                    for f = 1:numel(allFields)
+                        fieldName = allFields{f};
+
+                        % Add to lockedCaseClean if missing
+                        if ~isfield(lockedCaseClean, fieldName)
+                            lockedCaseClean.(fieldName) = [];
+                        end
+
+                        % Add to all elements of existingCases if missing
+                        if ~isfield(existingCases, fieldName)
+                            for idx = 1:numel(existingCases)
+                                existingCases(idx).(fieldName) = [];
+                            end
+                        end
+                    end
+
+                    % Reorder both to have the same field order
+                    existingCases = orderfields(existingCases, allFields);
+                    lockedCaseClean = orderfields(lockedCaseClean, allFields);
+
+                    % Now concatenate (both are column-oriented with matching fields)
+                    try
+                        labAssignments{labIdx} = [existingCases; lockedCaseClean];
+                    catch ME
+                        % If concatenation still fails, create a new array manually
+                        warning('Direct concatenation failed: %s. Creating new array manually.', ME.message);
+                        newArray = repmat(existingCases(1), numel(existingCases) + 1, 1);
+                        for idx = 1:numel(existingCases)
+                            newArray(idx) = existingCases(idx);
+                        end
+                        newArray(end) = lockedCaseClean;
+                        labAssignments{labIdx} = newArray;
+                    end
                 end
             end
 
-            % Update the schedule with merged assignments
-            dailySchedule = dailySchedule.withLabAssignments(labAssignments);
+            % Ensure ALL lab assignments are column vectors (not just the merged ones)
+            for labIdx = 1:numel(labAssignments)
+                if ~isempty(labAssignments{labIdx})
+                    labAssignments{labIdx} = labAssignments{labIdx}(:);
+                end
+            end
+
+            % Update the schedule with merged assignments by creating a new DailySchedule
+            dailySchedule = conduction.DailySchedule(dailySchedule.Date, dailySchedule.Labs, labAssignments, dailySchedule.metrics());
         end
 
         function clearDrawerTimer(obj, app)

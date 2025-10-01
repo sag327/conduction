@@ -32,7 +32,6 @@ classdef OptimizationController < handle
             end
 
             % CASE-LOCKING: Extract locked case assignments before optimization
-            % If this is the first optimization, there won't be any locked assignments yet
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
 
             % CASE-LOCKING: Clear any stale locked IDs if no locked assignments found
@@ -40,23 +39,34 @@ classdef OptimizationController < handle
                 app.LockedCaseIds = string.empty;
             end
 
-            % CASE-LOCKING: Filter out locked cases from optimization
-            if ~isempty(app.LockedCaseIds) && ~isempty(lockedAssignments)
-                % Find indices of unlocked cases
-                unlockedMask = true(size(casesStruct));
-                for i = 1:numel(casesStruct)
-                    caseId = string(casesStruct(i).caseID);
-                    if ismember(caseId, app.LockedCaseIds)
-                        unlockedMask(i) = false;
-                    end
-                end
-                casesStruct = casesStruct(unlockedMask);
+            % CASE-LOCKING: Build locked case constraints for optimizer
+            % The optimizer will enforce these as hard constraints during optimization
+            lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
 
-                % Check if all cases are locked
-                if isempty(casesStruct)
-                    uialert(app.UIFigure, 'All cases are locked. Nothing to optimize.', 'Optimization');
-                    return;
-                end
+            % DEBUG: Log state before merge
+            fprintf('[DEBUG] Before merge: %d cases in casesStruct\n', numel(casesStruct));
+            fprintf('[DEBUG] Number of locked constraints: %d\n', numel(lockedConstraints));
+            if ~isempty(casesStruct)
+                caseIds = arrayfun(@(x) string(x.caseID), casesStruct);
+                fprintf('[DEBUG] Case IDs in casesStruct: %s\n', strjoin(caseIds, ', '));
+            end
+            if ~isempty(lockedConstraints)
+                lockedIds = arrayfun(@(x) string(x.caseID), lockedConstraints);
+                fprintf('[DEBUG] Locked case IDs: %s\n', strjoin(lockedIds, ', '));
+            end
+
+            % CASE-LOCKING: Merge locked cases into optimization input
+            % Locked cases from the schedule need to be part of casesStruct
+            if ~isempty(lockedAssignments)
+                casesStruct = app.OptimizationController.mergeLockedCasesIntoInput(...
+                    casesStruct, lockedAssignments, defaults);
+            end
+
+            % DEBUG: Log state after merge
+            fprintf('[DEBUG] After merge: %d cases in casesStruct\n', numel(casesStruct));
+            if ~isempty(casesStruct)
+                caseIdsAfter = arrayfun(@(x) string(x.caseID), casesStruct);
+                fprintf('[DEBUG] Case IDs after merge: %s\n', strjoin(caseIdsAfter, ', '));
             end
 
             app.IsOptimizationRunning = true;
@@ -65,13 +75,8 @@ classdef OptimizationController < handle
             drawnow;
 
             try
-                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app);
+                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
-
-                % CASE-LOCKING: Merge locked cases back into the optimized schedule
-                if ~isempty(lockedAssignments)
-                    dailySchedule = app.DrawerController.mergeLockedCases(app, dailySchedule, lockedAssignments);
-                end
 
                 app.OptimizedSchedule = dailySchedule;
                 app.OptimizationOutcome = outcome;
@@ -112,7 +117,11 @@ classdef OptimizationController < handle
             obj.updateOptimizationActionAvailability(app);
         end
 
-        function scheduleOptions = buildSchedulingOptions(~, app)
+        function scheduleOptions = buildSchedulingOptions(~, app, lockedConstraints)
+            if nargin < 3
+                lockedConstraints = struct([]);
+            end
+
             numLabs = max(1, round(app.Opts.labs));
             startTimes = repmat({'08:00'}, 1, numLabs);
 
@@ -124,7 +133,8 @@ classdef OptimizationController < handle
                 'MaxOperatorTime', app.Opts.maxOpMin, ...
                 'TurnoverTime', app.Opts.turnover, ...
                 'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
-                'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt));
+                'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt), ...
+                'LockedCaseConstraints', lockedConstraints);
         end
 
         function showOptimizationOptionsDialog(~, app)
@@ -389,6 +399,304 @@ classdef OptimizationController < handle
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
                 'LockedCaseIds', app.LockedCaseIds, ...  % CASE-LOCKING: Pass locked case IDs
                 'OperatorColors', app.OperatorColors);  % Pass persistent operator colors
+        end
+
+        function constraints = buildLockedCaseConstraints(~, lockedAssignments)
+            % CASE-LOCKING: Build optimizer constraints from locked case assignments
+            %   Converts locked assignments to constraint format for ILP model
+            %   Returns struct array with fields: caseID, operator, startTime, endTime, procStartTime, procEndTime
+
+            constraints = struct([]);
+
+            if isempty(lockedAssignments)
+                return;
+            end
+
+            for i = 1:numel(lockedAssignments)
+                locked = lockedAssignments(i);
+
+                % Extract required fields
+                if ~isfield(locked, 'caseID') || ~isfield(locked, 'operator')
+                    continue;  % Skip if missing critical fields
+                end
+
+                constraint = struct();
+                constraint.caseID = char(string(locked.caseID));
+                constraint.operator = char(string(locked.operator));
+
+                % Extract timing fields
+                % startTime includes setup, procStartTime is procedure start
+                if isfield(locked, 'startTime') && ~isempty(locked.startTime)
+                    constraint.startTime = double(locked.startTime);
+                else
+                    continue;  % Skip if no start time
+                end
+
+                if isfield(locked, 'procStartTime') && ~isempty(locked.procStartTime)
+                    constraint.procStartTime = double(locked.procStartTime);
+                else
+                    constraint.procStartTime = constraint.startTime;
+                end
+
+                % Extract end times
+                if isfield(locked, 'procEndTime') && ~isempty(locked.procEndTime)
+                    constraint.procEndTime = double(locked.procEndTime);
+                else
+                    continue;  % Skip if no procedure end time
+                end
+
+                % Calculate total end time (including post and turnover)
+                constraint.endTime = constraint.procEndTime;
+                if isfield(locked, 'postTime') && ~isempty(locked.postTime)
+                    constraint.endTime = constraint.endTime + double(locked.postTime);
+                end
+                if isfield(locked, 'turnoverTime') && ~isempty(locked.turnoverTime)
+                    constraint.endTime = constraint.endTime + double(locked.turnoverTime);
+                end
+
+                % Add to constraints array
+                if isempty(constraints)
+                    constraints = constraint;
+                else
+                    constraints(end+1) = constraint; %#ok<AGROW>
+                end
+            end
+        end
+
+        function casesStruct = mergeLockedCasesIntoInput(obj, casesStruct, lockedAssignments, defaults)
+            % CASE-LOCKING: Merge locked cases from schedule into optimization input
+            %   Ensures locked cases are part of the optimization input so constraints can reference them
+            %   Handles duplicate case IDs by keeping the locked version
+
+            if isempty(lockedAssignments)
+                return;
+            end
+
+            % Build template for optimizer case format
+            template = struct( ...
+                'caseID', '', ...
+                'operator', '', ...
+                'procedure', '', ...
+                'setupTime', 0, ...
+                'procTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'priority', [], ...
+                'preferredLab', [], ...
+                'admissionStatus', '', ...
+                'date', NaT);
+
+            % Extract existing case IDs for duplicate detection
+            existingIds = {};
+            if ~isempty(casesStruct)
+                existingIds = {casesStruct.caseID};
+            end
+
+            % Convert locked assignments to optimizer format
+            for i = 1:numel(lockedAssignments)
+                locked = lockedAssignments(i);
+
+                % Check if this case is already in casesStruct
+                caseId = char(string(locked.caseID));
+                isDuplicate = false;
+                duplicateIdx = 0;
+
+                for j = 1:numel(existingIds)
+                    % Convert both to strings for comparison
+                    existingId = char(string(existingIds{j}));
+                    if strcmp(existingId, caseId)
+                        isDuplicate = true;
+                        duplicateIdx = j;
+                        fprintf('[DEBUG mergeLockedCases] Found duplicate case ID: %s at index %d\n', caseId, j);
+                        break;
+                    end
+                end
+
+                % Build optimizer case struct
+                newCase = template;
+                newCase.caseID = caseId;
+                newCase.operator = char(string(obj.getFieldOr(locked, 'operator', 'Unknown')));
+                newCase.procedure = char(string(obj.getFieldOr(locked, 'procedureName', '')));
+                newCase.setupTime = double(obj.getFieldOr(locked, 'setupTime', defaults.SetupMinutes));
+                newCase.postTime = double(obj.getFieldOr(locked, 'postTime', defaults.PostMinutes));
+                newCase.turnoverTime = double(obj.getFieldOr(locked, 'turnoverTime', defaults.TurnoverMinutes));
+
+                % Calculate procTime from timing fields
+                procTime = obj.getFieldOr(locked, 'procTime', NaN);
+                if isnan(procTime)
+                    procStart = obj.getFieldOr(locked, 'procStartTime', NaN);
+                    procEnd = obj.getFieldOr(locked, 'procEndTime', NaN);
+                    if ~isnan(procStart) && ~isnan(procEnd)
+                        procTime = procEnd - procStart;
+                    end
+                end
+                newCase.procTime = procTime;
+
+                newCase.priority = obj.getFieldOr(locked, 'priority', []);
+                newCase.preferredLab = obj.getFieldOr(locked, 'preferredLab', []);
+                newCase.admissionStatus = char(string(obj.getFieldOr(locked, 'admissionStatus', defaults.AdmissionStatus)));
+                newCase.date = obj.getFieldOr(locked, 'date', NaT);
+
+                % Add or replace in casesStruct
+                if isDuplicate
+                    % Replace the queued version with the locked version
+                    fprintf('[DEBUG mergeLockedCases] REPLACING case at index %d with locked version\n', duplicateIdx);
+                    casesStruct(duplicateIdx) = newCase;
+                else
+                    % Add new locked case
+                    fprintf('[DEBUG mergeLockedCases] ADDING new locked case: %s\n', caseId);
+                    if isempty(casesStruct)
+                        casesStruct = newCase;
+                    else
+                        casesStruct(end+1) = newCase; %#ok<AGROW>
+                    end
+                    existingIds{end+1} = caseId; %#ok<AGROW>
+                end
+            end
+        end
+
+        function value = getFieldOr(~, src, fieldName, defaultValue)
+            % Helper to safely extract struct field with fallback
+            if isstruct(src) && isfield(src, fieldName) && ~isempty(src.(fieldName))
+                value = src.(fieldName);
+            else
+                value = defaultValue;
+            end
+        end
+
+        function busyWindows = extractLockedCaseBusyWindows(~, lockedAssignments)
+            % CASE-LOCKING: Extract time windows where operators are busy with locked cases
+            %   Returns struct array with fields: operator, labIdx, startTime, endTime
+
+            busyWindows = struct('operator', {}, 'labIdx', {}, 'startTime', {}, 'endTime', {});
+
+            if isempty(lockedAssignments)
+                return;
+            end
+
+            for i = 1:numel(lockedAssignments)
+                locked = lockedAssignments(i);
+
+                % Extract operator name
+                if isfield(locked, 'operator')
+                    operatorName = string(locked.operator);
+                else
+                    continue;  % Skip if no operator field
+                end
+
+                % Extract lab index
+                if isfield(locked, 'assignedLab')
+                    labIdx = locked.assignedLab;
+                else
+                    continue;  % Skip if no lab assignment
+                end
+
+                % Extract start and end times
+                startTime = NaN;
+                endTime = NaN;
+
+                % Try to get start time (setup start)
+                if isfield(locked, 'startTime') && ~isempty(locked.startTime)
+                    startTime = double(locked.startTime);
+                elseif isfield(locked, 'procStartTime') && ~isempty(locked.procStartTime)
+                    % If no startTime, use procStartTime minus setup
+                    startTime = double(locked.procStartTime);
+                    if isfield(locked, 'setupTime') && ~isempty(locked.setupTime)
+                        startTime = startTime - double(locked.setupTime);
+                    end
+                end
+
+                % Try to get end time (procedure end + post + turnover)
+                if isfield(locked, 'procEndTime') && ~isempty(locked.procEndTime)
+                    endTime = double(locked.procEndTime);
+                    % Add post-procedure time
+                    if isfield(locked, 'postTime') && ~isempty(locked.postTime)
+                        endTime = endTime + double(locked.postTime);
+                    end
+                    % Add turnover time
+                    if isfield(locked, 'turnoverTime') && ~isempty(locked.turnoverTime)
+                        endTime = endTime + double(locked.turnoverTime);
+                    end
+                end
+
+                % Only add if we have valid times
+                if ~isnan(startTime) && ~isnan(endTime) && strlength(operatorName) > 0
+                    window = struct();
+                    window.operator = char(operatorName);
+                    window.labIdx = labIdx;
+                    window.startTime = startTime;
+                    window.endTime = endTime;
+                    busyWindows(end+1) = window; %#ok<AGROW>
+                end
+            end
+        end
+
+        function dailySchedule = restoreLockedCasesToOriginalPositions(~, app, dailySchedule, lockedAssignments)
+            % CASE-LOCKING: Restore locked cases to their exact original positions
+            %   The optimizer may have moved them, but we force them back
+
+            if isempty(lockedAssignments)
+                return;
+            end
+
+            % Get current lab assignments from optimized schedule
+            labAssignments = dailySchedule.labAssignments();
+
+            % For each locked case, remove it from optimizer's position and restore to original
+            for i = 1:numel(lockedAssignments)
+                lockedCase = lockedAssignments(i);
+                caseId = string(lockedCase.caseID);
+                originalLabIdx = lockedCase.assignedLab;
+
+                fprintf('Restoring locked case "%s" to original Lab %d\n', caseId, originalLabIdx);
+
+                % Remove this case from wherever the optimizer placed it
+                for labIdx = 1:numel(labAssignments)
+                    if isempty(labAssignments{labIdx})
+                        continue;
+                    end
+
+                    cases = labAssignments{labIdx};
+                    removeIdx = [];
+
+                    for cIdx = 1:numel(cases)
+                        if strcmp(string(cases(cIdx).caseID), caseId)
+                            removeIdx = cIdx;
+                            break;
+                        end
+                    end
+
+                    if ~isempty(removeIdx)
+                        fprintf('  Removed from Lab %d\n', labIdx);
+                        cases(removeIdx) = [];
+                        labAssignments{labIdx} = cases;
+                        break;
+                    end
+                end
+
+                % Add the locked case back to its ORIGINAL lab
+                lockedCaseClean = rmfield(lockedCase, 'assignedLab');
+                originalLab = labAssignments{originalLabIdx};
+
+                if isempty(originalLab)
+                    labAssignments{originalLabIdx} = lockedCaseClean;
+                    fprintf('  Restored to Lab %d (was empty)\n', originalLabIdx);
+                else
+                    originalLab = originalLab(:);
+                    labAssignments{originalLabIdx} = [originalLab; lockedCaseClean];
+                    fprintf('  Restored to Lab %d (has %d other cases)\n', originalLabIdx, numel(originalLab));
+                end
+            end
+
+            % Ensure all lab assignments are column vectors
+            for labIdx = 1:numel(labAssignments)
+                if ~isempty(labAssignments{labIdx})
+                    labAssignments{labIdx} = labAssignments{labIdx}(:);
+                end
+            end
+
+            % Create new DailySchedule with restored assignments
+            dailySchedule = conduction.DailySchedule(dailySchedule.Date, dailySchedule.Labs, labAssignments, dailySchedule.metrics());
         end
 
     end

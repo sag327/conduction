@@ -31,6 +31,9 @@ classdef OptimizationModelBuilder
             labPreferences = prepared.labPreferences;
             caseOperators = prepared.operatorIndex;
 
+            % Locked case information
+            lockedStartTimes = prepared.lockedStartTimes;
+
             optimizationMetric = options.normalizedMetric();
 
             if verbose
@@ -95,8 +98,12 @@ classdef OptimizationModelBuilder
                 numConstraint6 = 0;
             end
 
-            totalConstraints = numConstraint1 + numConstraint2 + numConstraint3 + numConstraint4 + numConstraint5 + numConstraint6;
-            totalEqConstraints = numConstraint1;
+            % Locked case constraints count
+            numLockedCases = sum(~isnan(lockedStartTimes));
+            numConstraint8 = numLockedCases;  % One equality constraint per locked case
+
+            totalConstraints = numConstraint1 + numConstraint2 + numConstraint3 + numConstraint4 + numConstraint5 + numConstraint6 + numConstraint8;
+            totalEqConstraints = numConstraint1 + numConstraint8;  % Case assignment + locked case constraints
 
             avgNonZerosPerRow = min(10, numVars/10);
             Aeq = spalloc(totalEqConstraints, numVars, totalEqConstraints * avgNonZerosPerRow);
@@ -200,6 +207,12 @@ classdef OptimizationModelBuilder
                     fprintf('Constraint 3.5/6: operator carryover...');
                 end
                 for caseIdx = 1:numCases
+                    % CASE-LOCKING: Skip operator availability constraint for locked cases
+                    % Locked cases are already constrained to their specific time
+                    if ~isnan(lockedStartTimes(caseIdx))
+                        continue;
+                    end
+
                     operatorName = cases(caseIdx).operator;
                     if ~isKey(operatorAvailability, operatorName)
                         continue;
@@ -340,6 +353,43 @@ classdef OptimizationModelBuilder
                 end
                 if verbose, fprintf(' done\n'); end
             end
+
+            % --- Constraint 8: locked case time fixing ----------------------------
+            if verbose
+                fprintf('Constraint 8: locked case time fixing...');
+            end
+            fprintf('[DEBUG ModelBuilder] numCases=%d, lockedStartTimes size=%d\n', numCases, numel(lockedStartTimes));
+            for caseIdx = 1:numCases
+                fprintf('[DEBUG ModelBuilder] Checking case %d/%d\n', caseIdx, numCases);
+                if caseIdx > numel(lockedStartTimes)
+                    fprintf('[DEBUG ModelBuilder] ERROR: caseIdx %d exceeds lockedStartTimes array size %d\n', caseIdx, numel(lockedStartTimes));
+                    error('Index exceeds lockedStartTimes bounds: caseIdx=%d, array size=%d', caseIdx, numel(lockedStartTimes));
+                end
+                if isnan(lockedStartTimes(caseIdx))
+                    continue;  % Not a locked case
+                end
+
+                lockedStart = lockedStartTimes(caseIdx);
+                fprintf('[DEBUG ModelBuilder] Case %d is LOCKED at time %.1f\n', caseIdx, lockedStart);
+
+                % Find the time slot that matches the locked start time
+                [~, lockedTimeIdx] = min(abs(timeSlots - lockedStart));
+
+                % This case must be scheduled at exactly this time (but can be in any lab)
+                eqRowIdx = eqRowIdx + 1;
+                for labIdx = 1:numLabs
+                    if labPreferences(caseIdx, labIdx) ~= 1
+                        continue;
+                    end
+                    % Check if this time slot is valid for this lab
+                    validSlots = validTimeSlots{labIdx};
+                    if ismember(lockedTimeIdx, validSlots)
+                        Aeq(eqRowIdx, getVarIndex(caseIdx, labIdx, lockedTimeIdx)) = 1;
+                    end
+                end
+                beq(eqRowIdx) = 1;  % Exactly one lab at this time
+            end
+            if verbose, fprintf(' done\n'); end
 
             % Trim matrices to used rows
             Aeq = Aeq(1:eqRowIdx, :);

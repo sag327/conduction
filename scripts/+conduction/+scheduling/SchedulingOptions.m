@@ -13,6 +13,7 @@ classdef SchedulingOptions
         EnforceMidnight (1,1) logical = true
         PrioritizeOutpatient (1,1) logical = true
         OperatorAvailability containers.Map = containers.Map('KeyType','char','ValueType','double')
+        LockedCaseConstraints struct = struct([])  % Locked case time windows and assignments
         Verbose (1,1) logical = true
         TimeStep (1,1) double {mustBePositive, mustBeFinite} = 10
     end
@@ -60,6 +61,7 @@ classdef SchedulingOptions
             addParameter(parser, 'PrioritizeOutpatient', conduction.scheduling.SchedulingOptions.DEFAULT_PRIORITIZE_OUTPATIENT, @islogical);
             addParameter(parser, 'OperatorAvailability', containers.Map('KeyType','char','ValueType','double'), ...
                 @(x) isa(x, 'containers.Map'));
+            addParameter(parser, 'LockedCaseConstraints', struct([]), @isstruct);
             addParameter(parser, 'Verbose', conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE, @islogical);
             addParameter(parser, 'TimeStep', conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP, ...
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
@@ -77,6 +79,7 @@ classdef SchedulingOptions
                 results.EnforceMidnight, ...
                 results.PrioritizeOutpatient, ...
                 results.OperatorAvailability, ...
+                results.LockedCaseConstraints, ...
                 results.Verbose, ...
                 results.TimeStep);
         end
@@ -84,7 +87,8 @@ classdef SchedulingOptions
 
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
-                maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, verbose, timeStep)
+                maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
+                lockedCaseConstraints, verbose, timeStep)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -96,6 +100,7 @@ classdef SchedulingOptions
                 enforceMidnight = conduction.scheduling.SchedulingOptions.DEFAULT_ENFORCE_MIDNIGHT;
                 prioritizeOutpatient = conduction.scheduling.SchedulingOptions.DEFAULT_PRIORITIZE_OUTPATIENT;
                 operatorAvailability = containers.Map('KeyType','char','ValueType','double');
+                lockedCaseConstraints = struct([]);
                 verbose = conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE;
                 timeStep = conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP;
             end
@@ -121,6 +126,7 @@ classdef SchedulingOptions
             obj.EnforceMidnight = enforceMidnight;
             obj.PrioritizeOutpatient = prioritizeOutpatient;
             obj.OperatorAvailability = operatorAvailability;
+            obj.LockedCaseConstraints = lockedCaseConstraints;
             obj.Verbose = verbose;
             obj.TimeStep = timeStep;
         end
@@ -144,6 +150,7 @@ classdef SchedulingOptions
                 'EnforceMidnight', obj.EnforceMidnight, ...
                 'PrioritizeOutpatient', obj.PrioritizeOutpatient, ...
                 'OperatorAvailability', obj.OperatorAvailability, ...
+                'LockedCaseConstraints', obj.LockedCaseConstraints, ...
                 'Verbose', obj.Verbose, ...
                 'TimeStep', obj.TimeStep);
         end

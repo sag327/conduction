@@ -39,7 +39,12 @@ classdef DailySchedule
                 cases = [];
                 return;
             end
-            cases = [nonEmpty{:}];
+            % Ensure each lab's cases are column vectors, then vertically concatenate
+            labCases = cell(size(nonEmpty));
+            for i = 1:numel(nonEmpty)
+                labCases{i} = nonEmpty{i}(:);  % Force column vector
+            end
+            cases = vertcat(labCases{:});
         end
 
         function metrics = metrics(obj)
