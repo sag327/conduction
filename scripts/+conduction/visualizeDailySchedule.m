@@ -37,11 +37,32 @@ function visualizeDailySchedule(scheduleInput, varargin)
     operatorNames = string({caseTimelines.operatorName});
     uniqueOperators = unique(operatorNames, 'stable');
 
-    if isempty(uniqueOperators)
-        operatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    % Use provided operator colors if available, otherwise create new map
+    if ~isempty(opts.OperatorColors)
+        operatorColors = opts.OperatorColors;
     else
-        colorCells = num2cell(lines(numel(uniqueOperators)), 2);
-        operatorColors = containers.Map(cellstr(uniqueOperators), colorCells);
+        operatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    end
+
+    % Assign colors to any new operators not already in the map
+    if ~isempty(uniqueOperators)
+        newOperators = {};
+        for i = 1:numel(uniqueOperators)
+            if ~isKey(operatorColors, char(uniqueOperators(i)))
+                newOperators{end+1} = char(uniqueOperators(i)); %#ok<AGROW>
+            end
+        end
+
+        % Generate colors for new operators only
+        if ~isempty(newOperators)
+            % Get existing color count to continue color sequence
+            existingCount = operatorColors.Count;
+            allColors = lines(existingCount + numel(newOperators));
+            newColorCells = num2cell(allColors(existingCount+1:end, :), 2);
+            for i = 1:numel(newOperators)
+                operatorColors(newOperators{i}) = newColorCells{i};
+            end
+        end
     end
 
     metrics = dailySchedule.metrics();
@@ -119,6 +140,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
     addParameter(p, 'LockedCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % CASE-LOCKING: Array of locked case IDs
+    addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     parse(p, varargin{:});
     opts = p.Results;
 end

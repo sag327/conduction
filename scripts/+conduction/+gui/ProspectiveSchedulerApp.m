@@ -148,6 +148,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
+        OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
     end
 
     % Component initialization
@@ -2948,7 +2949,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.visualizeDailySchedule(app.OptimizedSchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
-                'LockedCaseIds', app.LockedCaseIds);  % CASE-LOCKING: Pass locked case IDs
+                'LockedCaseIds', app.LockedCaseIds, ...  % CASE-LOCKING: Pass locked case IDs
+                'OperatorColors', app.OperatorColors);  % Pass persistent operator colors
         end
 
         function updateOptimizationOptionsSummary(app)
@@ -3102,7 +3104,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'ScheduleAxes', app.ScheduleAxes, ...
                 'ShowLabels', true, ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
-                'LockedCaseIds', app.LockedCaseIds);  % CASE-LOCKING: Pass locked case IDs
+                'LockedCaseIds', app.LockedCaseIds, ...  % CASE-LOCKING: Pass locked case IDs
+                'OperatorColors', app.OperatorColors);  % Pass persistent operator colors
 
             if app.DrawerWidth > 1 && strlength(app.DrawerCurrentCaseId) > 0
                 app.populateDrawer(app.DrawerCurrentCaseId);
