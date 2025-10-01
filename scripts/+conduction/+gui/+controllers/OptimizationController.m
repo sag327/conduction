@@ -95,10 +95,19 @@ classdef OptimizationController < handle
 
         function markOptimizationDirty(obj, app)
             app.IsOptimizationDirty = true;
-            app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.OptimizationOutcome = struct();
-            app.OptimizationLastRun = NaT;
-            obj.showOptimizationPendingPlaceholder(app);
+
+            % Don't clear the schedule - keep it visible with fade effect
+            % app.OptimizedSchedule is preserved
+            % app.OptimizationOutcome is preserved
+
+            % Only show placeholder if there's no schedule to display
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                obj.showOptimizationPendingPlaceholder(app);
+            else
+                % Re-render existing schedule with fade to indicate it's stale
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            end
+
             obj.updateOptimizationStatus(app);
             obj.updateOptimizationActionAvailability(app);
         end

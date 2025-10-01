@@ -141,6 +141,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
     addParameter(p, 'LockedCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % CASE-LOCKING: Array of locked case IDs
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
+    addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -310,6 +311,12 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         lockedCaseIds = string(opts.LockedCaseIds);
     end
 
+    % Extract fade alpha for stale schedule indication
+    fadeAlpha = 1.0;
+    if isstruct(opts) && isfield(opts, 'FadeAlpha')
+        fadeAlpha = opts.FadeAlpha;
+    end
+
     set(ax, 'YDir', 'reverse');
     ylim(ax, [startHour, endHour]);
     xlim(ax, [0.5, numLabs + 0.5]);
@@ -340,7 +347,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
                 setupRect = rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(setupRect, entry, caseClickedCallback);
             end
         end
@@ -357,7 +364,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 opColor = [0.5, 0.5, 0.5];
             end
             procRect = rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
-                'FaceColor', opColor, 'EdgeColor', edgeColor, 'LineWidth', 1);
+                'FaceColor', opColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 1);
             attachCaseClick(procRect, entry, caseClickedCallback);
         end
 
@@ -365,7 +372,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
                 postRect = rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(postRect, entry, caseClickedCallback);
             end
         end
@@ -374,7 +381,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
                 turnoverRect = rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
-                    'FaceColor', turnoverColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
+                    'FaceColor', turnoverColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(turnoverRect, entry, caseClickedCallback);
             end
         end
