@@ -325,7 +325,7 @@ classdef DurationSelector < handle
                 bgColor = [0.94 0.94 0.94];
             end
 
-            primaryTextColor = [0 0 0];
+            primaryTextColor = [0.95 0.95 0.95];  % White text to match other labels
         end
 
         function updateDurationHeader(obj, app, summary)
