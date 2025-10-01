@@ -490,7 +490,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % CASE-LOCKING: Lock toggle button
             app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
             app.DrawerLockToggle.Text = '🔒 Lock Case in Place';
-            app.DrawerLockToggle.FontColor = [1 0.84 0];  % Gold color
+            app.DrawerLockToggle.FontColor = [1 0 0];  % Red color to match outline
             app.DrawerLockToggle.Layout.Row = 4;
             app.DrawerLockToggle.Layout.Column = 1;
             app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);

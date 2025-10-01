@@ -297,7 +297,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     grayColor = [0.7, 0.7, 0.7];
     turnoverColor = [0.6, 0.6, 0.2];
     edgeColor = [0.2, 0.2, 0.2];
-    lockedEdgeColor = [1, 0.84, 0];  % CASE-LOCKING: Gold color for locked cases
+    lockedOutlineColor = [1, 0, 0];  % CASE-LOCKING: Red color for locked case outline
 
     for idx = 1:numel(caseTimelines)
         entry = caseTimelines(idx);
@@ -306,13 +306,6 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
         % CASE-LOCKING: Check if this case is locked
         isLocked = ismember(string(entry.caseId), lockedCaseIds);
-        if isLocked
-            currentEdgeColor = lockedEdgeColor;
-            currentLineWidth = 3;
-        else
-            currentEdgeColor = edgeColor;
-            currentLineWidth = 1;
-        end
 
         setupStartHour = entry.setupStart / 60;
         procStartHour = entry.procStart / 60;
@@ -320,11 +313,12 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         postEndHour = entry.postEnd / 60;
         turnoverEndHour = entry.turnoverEnd / 60;
 
+        % Draw all segments with normal borders
         if ~isnan(setupStartHour) && ~isnan(procStartHour)
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
                 setupRect = rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
+                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(setupRect, entry, caseClickedCallback);
             end
         end
@@ -341,7 +335,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 opColor = [0.5, 0.5, 0.5];
             end
             procRect = rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
-                'FaceColor', opColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
+                'FaceColor', opColor, 'EdgeColor', edgeColor, 'LineWidth', 1);
             attachCaseClick(procRect, entry, caseClickedCallback);
         end
 
@@ -349,7 +343,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
                 postRect = rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
-                    'FaceColor', grayColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
+                    'FaceColor', grayColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(postRect, entry, caseClickedCallback);
             end
         end
@@ -358,9 +352,23 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
                 turnoverRect = rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
-                    'FaceColor', turnoverColor, 'EdgeColor', currentEdgeColor, 'LineWidth', currentLineWidth);
+                    'FaceColor', turnoverColor, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
                 attachCaseClick(turnoverRect, entry, caseClickedCallback);
             end
+        end
+
+        % CASE-LOCKING: Draw single red outline around entire case if locked
+        if isLocked && ~isnan(setupStartHour) && ~isnan(postEndHour)
+            % Calculate the full case span from setup start to post end
+            caseStartHour = setupStartHour;
+            caseEndHour = postEndHour;
+            caseTotalDuration = caseEndHour - caseStartHour;
+
+            % Draw outline rectangle (no fill, just red border)
+            outlineRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
+            % Make outline non-interactive so clicks pass through to case segments
+            outlineRect.PickableParts = 'none';
         end
 
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
