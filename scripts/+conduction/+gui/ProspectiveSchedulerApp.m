@@ -470,8 +470,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerInspectorTitle.Layout.Row = 2;
             app.DrawerInspectorTitle.Layout.Column = 1;
 
+            % CASE-LOCKING: Lock toggle button (at top of inspector section)
+            app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
+            app.DrawerLockToggle.Text = 'Lock case time';
+            app.DrawerLockToggle.FontColor = [1 0 0];  % Red color to match outline
+            app.DrawerLockToggle.Layout.Row = 3;
+            app.DrawerLockToggle.Layout.Column = 1;
+            app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
+
             app.DrawerInspectorGrid = uigridlayout(app.DrawerLayout);
-            app.DrawerInspectorGrid.Layout.Row = 3;
+            app.DrawerInspectorGrid.Layout.Row = 4;  % CASE-LOCKING: Moved from row 3
             app.DrawerInspectorGrid.Layout.Column = 1;
             app.DrawerInspectorGrid.RowHeight = repmat({'fit'}, 1, 6);
             app.DrawerInspectorGrid.ColumnWidth = {90, '1x'};
@@ -486,14 +494,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(4, 'Lab', 'DrawerLabValueLabel');
             app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
-
-            % CASE-LOCKING: Lock toggle button
-            app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
-            app.DrawerLockToggle.Text = '🔒 Lock Case in Place';
-            app.DrawerLockToggle.FontColor = [1 0 0];  % Red color to match outline
-            app.DrawerLockToggle.Layout.Row = 4;
-            app.DrawerLockToggle.Layout.Column = 1;
-            app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
 
             % Optimization Parameters Section
             app.DrawerOptimizationTitle = uilabel(app.DrawerLayout);
