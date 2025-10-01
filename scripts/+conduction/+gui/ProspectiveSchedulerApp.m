@@ -689,7 +689,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CustomDurationSpinner.Enable = 'off';
             app.CustomDurationSpinner.Position = [labelX startY - 3 * rowSpacing 70 22];
 
-            app.applyDurationThemeColors();
+            app.DurationSelector.applyDurationThemeColors(app);
         end
 
 
@@ -965,18 +965,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 historicalCollection = []
             end
 
-            % Initialize app state
-            app.TargetDate = targetDate;
-            app.TestingAvailableDates = app.TestingModeController.createEmptyTestingSummary();
-            app.CurrentTestingSummary = struct();
-
-            % Initialize controllers
+            % Initialize controllers first
             app.ScheduleRenderer = conduction.gui.controllers.ScheduleRenderer();
             app.DrawerController = conduction.gui.controllers.DrawerController();
             app.OptimizationController = conduction.gui.controllers.OptimizationController();
             app.AnalyticsRenderer = conduction.gui.controllers.AnalyticsRenderer();
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
+
+            % Initialize app state
+            app.TargetDate = targetDate;
+            app.TestingAvailableDates = app.TestingModeController.createEmptyTestingSummary();
+            app.CurrentTestingSummary = struct();
 
             % Create UIFigure and components
             app.setupUI();
@@ -1165,7 +1165,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DurationSelector.refreshDurationOptions(app); % Refresh duration options with new data
             end
 
-            app.refreshTestingAvailability();
+            app.TestingModeController.refreshTestingAvailability(app);
 
             app.LoadDataButton.Enable = 'on';
         end
