@@ -188,30 +188,14 @@ classdef SchedulingPreprocessor
         end
 
         function availability = addLockedCasesToAvailability(availability, constraints)
-            % Add locked case busy windows to operator availability
-            %   Operators become unavailable during their locked case procedure times
+            % Locked cases do NOT modify operator availability
+            %   Locked cases are already included in the optimization and constrained to exact times.
+            %   Constraint 3 (operator availability) already prevents operator overlap by checking
+            %   if the locked case is running at each time slot.
+            %   Setting operatorAvailability would incorrectly block the operator before the locked case.
 
-            if isempty(constraints)
-                return;
-            end
-
-            % For each locked case, block the operator during procedure time
-            for i = 1:numel(constraints)
-                constraint = constraints(i);
-                operatorName = char(string(constraint.operator));
-
-                % Use procedure end time as operator availability
-                % The operator can't start another case until after the procedure ends
-                procEndTime = constraint.procEndTime;
-
-                % Update operator availability (use max if operator has multiple locked cases)
-                if isKey(availability, operatorName)
-                    currentAvail = availability(operatorName);
-                    availability(operatorName) = max(currentAvail, procEndTime);
-                else
-                    availability(operatorName) = procEndTime;
-                end
-            end
+            % Return availability unchanged - locked cases handled by existing constraints
+            % (This function is kept for backward compatibility but performs no operation)
         end
     end
 end
