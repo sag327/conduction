@@ -225,6 +225,7 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
     caseTimeline.labIndex = labIdx;
     caseTimeline.caseId = resolveCaseId(caseItem, sequenceId);
     caseTimeline.operatorName = resolveOperatorName(caseItem);
+    caseTimeline.admissionStatus = resolveAdmissionStatus(caseItem);
     caseTimeline.setupStart = getNumericField(caseItem, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
     caseTimeline.procStart = getNumericField(caseItem, {'procStartTime', 'procedureStartTime', 'procedureStart'});
     caseTimeline.procEnd = getNumericField(caseItem, {'procEndTime', 'procedureEndTime', 'procedureEnd'});
@@ -434,10 +435,34 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             selectionRect.PickableParts = 'none';
         end
 
+        % Draw left edge colored bar for admission status
+        if ~isnan(setupStartHour) && ~isnan(postEndHour)
+            % Determine admission status color
+            isInpatient = strcmpi(entry.admissionStatus, 'inpatient') || strcmpi(entry.admissionStatus, 'ip');
+            if isInpatient
+                admissionColor = [0, 0.75, 0.82];  % Teal/cyan for inpatient (#00BCD4)
+            else
+                admissionColor = [1, 0.65, 0.15];  % Amber/orange for outpatient (#FFA726)
+            end
+
+            % Calculate the full case span from setup start to post end
+            caseStartHour = setupStartHour;
+            caseEndHour = postEndHour;
+            caseTotalDuration = caseEndHour - caseStartHour;
+
+            % Draw left edge bar (5px wide)
+            edgeBarWidth = 0.05;  % Slightly narrower than full bar
+            edgeBarX = xPos - barWidth/2;
+            admissionBar = rectangle(ax, 'Position', [edgeBarX, caseStartHour, edgeBarWidth, caseTotalDuration], ...
+                'FaceColor', admissionColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', 'none');
+            % Make bar non-interactive so clicks pass through to case segments
+            admissionBar.PickableParts = 'none';
+        end
+
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
-            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName), ...
+            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName, entry.admissionStatus), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
@@ -773,13 +798,25 @@ function label = hourLabel(hourValue)
     end
 end
 
-function label = composeCaseLabel(caseId, operatorName)
+function label = composeCaseLabel(caseId, operatorName, admissionStatus)
     info = parseOperatorName(operatorName);
     lastName = char(info.lastName);
     if isempty(lastName)
         lastName = 'Unknown';
     end
-    label = sprintf('%s\n%s', char(caseId), lastName);
+
+    % Add admission status suffix
+    if nargin >= 3 && ~isempty(admissionStatus)
+        isInpatient = strcmpi(admissionStatus, 'inpatient') || strcmpi(admissionStatus, 'ip');
+        if isInpatient
+            suffix = ' (IP)';
+        else
+            suffix = ' (OP)';
+        end
+        label = sprintf('%s%s\n%s', char(caseId), suffix, lastName);
+    else
+        label = sprintf('%s\n%s', char(caseId), lastName);
+    end
 end
 
 function labels = formatOperatorLabels(operatorData)
@@ -1102,6 +1139,31 @@ function operatorName = resolveOperatorName(caseItem)
         end
     end
     operatorName = string('Unknown Operator');
+end
+
+function admissionStatus = resolveAdmissionStatus(caseItem)
+    if isstruct(caseItem)
+        fields = {'admissionStatus', 'admission_status', 'AdmissionStatus'};
+        for idx = 1:numel(fields)
+            name = fields{idx};
+            if isfield(caseItem, name)
+                candidate = asString(caseItem.(name));
+                if strlength(candidate) > 0
+                    admissionStatus = lower(candidate);
+                    return;
+                end
+            end
+        end
+    elseif isobject(caseItem)
+        if isprop(caseItem, 'AdmissionStatus')
+            candidate = asString(caseItem.AdmissionStatus);
+            if strlength(candidate) > 0
+                admissionStatus = lower(candidate);
+                return;
+            end
+        end
+    end
+    admissionStatus = string('outpatient');  % Default to outpatient
 end
 
 function dt = resolveCaseDate(caseItem)
