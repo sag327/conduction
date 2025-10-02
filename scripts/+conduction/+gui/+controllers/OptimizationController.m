@@ -496,7 +496,14 @@ classdef OptimizationController < handle
                 newCase = template;
                 newCase.caseID = caseId;
                 newCase.operator = char(string(obj.getFieldOr(locked, 'operator', 'Unknown')));
-                newCase.procedure = char(string(obj.getFieldOr(locked, 'procedureName', '')));
+
+                % Try 'procedure' first (from schedule), then 'procedureName' (from other sources)
+                procedureName = obj.getFieldOr(locked, 'procedure', '');
+                if isempty(procedureName) || strlength(string(procedureName)) == 0
+                    procedureName = obj.getFieldOr(locked, 'procedureName', '');
+                end
+                newCase.procedure = char(string(procedureName));
+
                 newCase.setupTime = double(obj.getFieldOr(locked, 'setupTime', defaults.SetupMinutes));
                 newCase.postTime = double(obj.getFieldOr(locked, 'postTime', defaults.PostMinutes));
                 newCase.turnoverTime = double(obj.getFieldOr(locked, 'turnoverTime', defaults.TurnoverMinutes));
