@@ -358,11 +358,8 @@ classdef OptimizationModelBuilder
             if verbose
                 fprintf('Constraint 8: locked case time fixing...');
             end
-            fprintf('[DEBUG ModelBuilder] numCases=%d, lockedStartTimes size=%d\n', numCases, numel(lockedStartTimes));
             for caseIdx = 1:numCases
-                fprintf('[DEBUG ModelBuilder] Checking case %d/%d\n', caseIdx, numCases);
                 if caseIdx > numel(lockedStartTimes)
-                    fprintf('[DEBUG ModelBuilder] ERROR: caseIdx %d exceeds lockedStartTimes array size %d\n', caseIdx, numel(lockedStartTimes));
                     error('Index exceeds lockedStartTimes bounds: caseIdx=%d, array size=%d', caseIdx, numel(lockedStartTimes));
                 end
                 if isnan(lockedStartTimes(caseIdx))
@@ -370,7 +367,6 @@ classdef OptimizationModelBuilder
                 end
 
                 lockedStart = lockedStartTimes(caseIdx);
-                fprintf('[DEBUG ModelBuilder] Case %d is LOCKED at time %.1f\n', caseIdx, lockedStart);
 
                 % Find the time slot that matches the locked start time
                 [~, lockedTimeIdx] = min(abs(timeSlots - lockedStart));

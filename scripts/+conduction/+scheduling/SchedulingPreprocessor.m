@@ -36,14 +36,8 @@ classdef SchedulingPreprocessor
 
             % Process locked case constraints
             lockedConstraints = options.LockedCaseConstraints;
-            fprintf('[DEBUG PREPROCESSOR] Processing locked constraints...\n');
-            fprintf('[DEBUG PREPROCESSOR] Number of cases: %d\n', numel(cases));
-            fprintf('[DEBUG PREPROCESSOR] Number of locked constraints: %d\n', numel(lockedConstraints));
 
             [lockedCaseMap, lockedStartTimes] = conduction.scheduling.SchedulingPreprocessor.processLockedConstraints(lockedConstraints, cases);
-
-            fprintf('[DEBUG PREPROCESSOR] lockedStartTimes array size: %d\n', numel(lockedStartTimes));
-            fprintf('[DEBUG PREPROCESSOR] Number of non-NaN locked times: %d\n', sum(~isnan(lockedStartTimes)));
 
             % Enhance operator availability with locked case busy windows
             operatorAvailability = conduction.scheduling.SchedulingPreprocessor.addLockedCasesToAvailability(...
@@ -176,25 +170,19 @@ classdef SchedulingPreprocessor
             end
 
             % Build map from constraints
-            fprintf('[DEBUG processLockedConstraints] Building constraint map...\n');
             for i = 1:numel(constraints)
                 constraint = constraints(i);
                 caseId = char(string(constraint.caseID));
                 lockedCaseMap(caseId) = constraint;
-                fprintf('[DEBUG processLockedConstraints] Added constraint for case: %s\n', caseId);
             end
 
             % Build parallel array of start times for each case
-            fprintf('[DEBUG processLockedConstraints] Matching constraints to cases...\n');
-            fprintf('[DEBUG processLockedConstraints] Cases array size: %d\n', numel(cases));
             for cIdx = 1:numel(cases)
                 caseId = char(string(cases(cIdx).caseID));
-                fprintf('[DEBUG processLockedConstraints] Checking case %d: %s\n', cIdx, caseId);
                 if isKey(lockedCaseMap, caseId)
                     constraint = lockedCaseMap(caseId);
                     % Use startTime (includes setup) for the optimizer constraint
                     lockedStartTimes(cIdx) = constraint.startTime;
-                    fprintf('[DEBUG processLockedConstraints] MATCHED! Set locked time: %.1f\n', constraint.startTime);
                 end
             end
         end

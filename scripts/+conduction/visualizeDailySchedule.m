@@ -140,7 +140,9 @@ function opts = parseOptions(varargin)
     addParameter(p, 'ScheduleAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'OperatorAxes', [], @(h) isempty(h) || isa(h, 'matlab.graphics.axis.Axes'));
     addParameter(p, 'CaseClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
+    addParameter(p, 'BackgroundClickedFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));  % Callback for clicking empty schedule area
     addParameter(p, 'LockedCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % CASE-LOCKING: Array of locked case IDs
+    addParameter(p, 'SelectedCaseId', "", @(x) isstring(x) || ischar(x));  % Currently selected case ID for highlighting
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     parse(p, varargin{:});
@@ -312,6 +314,12 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         lockedCaseIds = string(opts.LockedCaseIds);
     end
 
+    % Extract selected case ID for highlighting
+    selectedCaseId = "";
+    if isstruct(opts) && isfield(opts, 'SelectedCaseId')
+        selectedCaseId = string(opts.SelectedCaseId);
+    end
+
     % Extract fade alpha for stale schedule indication
     fadeAlpha = 1.0;
     if isstruct(opts) && isfield(opts, 'FadeAlpha')
@@ -321,6 +329,15 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     set(ax, 'YDir', 'reverse');
     ylim(ax, [startHour, endHour]);
     xlim(ax, [0.5, numLabs + 0.5]);
+
+    % Set up background click handler to clear selection
+    backgroundClickedCallback = [];
+    if isstruct(opts) && isfield(opts, 'BackgroundClickedFcn')
+        backgroundClickedCallback = opts.BackgroundClickedFcn;
+    end
+    if ~isempty(backgroundClickedCallback)
+        ax.ButtonDownFcn = @(~, ~) backgroundClickedCallback();
+    end
 
     addHourGrid(ax, startHour, endHour);
 
@@ -399,6 +416,22 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
             % Make outline non-interactive so clicks pass through to case segments
             outlineRect.PickableParts = 'none';
+        end
+
+        % Draw white outline for selected case (if not locked - locked takes precedence)
+        isSelected = (strlength(selectedCaseId) > 0) && (string(entry.caseId) == selectedCaseId);
+        if isSelected && ~isLocked && ~isnan(setupStartHour) && ~isnan(postEndHour)
+            % Calculate the full case span from setup start to post end
+            caseStartHour = setupStartHour;
+            caseEndHour = postEndHour;
+            caseTotalDuration = caseEndHour - caseStartHour;
+
+            % Draw white outline rectangle (no fill, just white border)
+            selectionOutlineColor = [1, 1, 1];  % White color for selection outline
+            selectionRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                'FaceColor', 'none', 'EdgeColor', selectionOutlineColor, 'LineWidth', 3);
+            % Make outline non-interactive so clicks pass through to case segments
+            selectionRect.PickableParts = 'none';
         end
 
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)

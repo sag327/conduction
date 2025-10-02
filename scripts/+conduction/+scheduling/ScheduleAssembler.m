@@ -21,12 +21,6 @@ classdef ScheduleAssembler
             labStartMinutes = model.labStartMinutes;
             uniqueOperators = model.uniqueOperators;
 
-            % DEBUG: Check array sizes
-            fprintf('[DEBUG ScheduleAssembler] model.numCases=%d\n', numCases);
-            fprintf('[DEBUG ScheduleAssembler] prepared.cases array size=%d\n', numel(prepared.cases));
-            fprintf('[DEBUG ScheduleAssembler] solution vector size=%d\n', numel(solution));
-            fprintf('[DEBUG ScheduleAssembler] model.numVars=%d\n', model.numVars);
-
             if numel(prepared.cases) ~= numCases
                 error('ScheduleAssembler:SizeMismatch', ...
                     'prepared.cases size (%d) does not match model.numCases (%d)', ...

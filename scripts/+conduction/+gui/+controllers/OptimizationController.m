@@ -43,30 +43,11 @@ classdef OptimizationController < handle
             % The optimizer will enforce these as hard constraints during optimization
             lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
 
-            % DEBUG: Log state before merge
-            fprintf('[DEBUG] Before merge: %d cases in casesStruct\n', numel(casesStruct));
-            fprintf('[DEBUG] Number of locked constraints: %d\n', numel(lockedConstraints));
-            if ~isempty(casesStruct)
-                caseIds = arrayfun(@(x) string(x.caseID), casesStruct);
-                fprintf('[DEBUG] Case IDs in casesStruct: %s\n', strjoin(caseIds, ', '));
-            end
-            if ~isempty(lockedConstraints)
-                lockedIds = arrayfun(@(x) string(x.caseID), lockedConstraints);
-                fprintf('[DEBUG] Locked case IDs: %s\n', strjoin(lockedIds, ', '));
-            end
-
             % CASE-LOCKING: Merge locked cases into optimization input
             % Locked cases from the schedule need to be part of casesStruct
             if ~isempty(lockedAssignments)
                 casesStruct = app.OptimizationController.mergeLockedCasesIntoInput(...
                     casesStruct, lockedAssignments, defaults);
-            end
-
-            % DEBUG: Log state after merge
-            fprintf('[DEBUG] After merge: %d cases in casesStruct\n', numel(casesStruct));
-            if ~isempty(casesStruct)
-                caseIdsAfter = arrayfun(@(x) string(x.caseID), casesStruct);
-                fprintf('[DEBUG] Case IDs after merge: %s\n', strjoin(caseIdsAfter, ', '));
             end
 
             app.IsOptimizationRunning = true;
@@ -507,7 +488,6 @@ classdef OptimizationController < handle
                     if strcmp(existingId, caseId)
                         isDuplicate = true;
                         duplicateIdx = j;
-                        fprintf('[DEBUG mergeLockedCases] Found duplicate case ID: %s at index %d\n', caseId, j);
                         break;
                     end
                 end
@@ -540,11 +520,9 @@ classdef OptimizationController < handle
                 % Add or replace in casesStruct
                 if isDuplicate
                     % Replace the queued version with the locked version
-                    fprintf('[DEBUG mergeLockedCases] REPLACING case at index %d with locked version\n', duplicateIdx);
                     casesStruct(duplicateIdx) = newCase;
                 else
                     % Add new locked case
-                    fprintf('[DEBUG mergeLockedCases] ADDING new locked case: %s\n', caseId);
                     if isempty(casesStruct)
                         casesStruct = newCase;
                     else

@@ -157,6 +157,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
+        SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
     end
 
@@ -792,6 +793,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesTable.Layout.Row = 2;
             app.CasesTable.Layout.Column = [1 2];
             app.CasesTable.SelectionType = 'row';
+            app.CasesTable.SelectionChangedFcn = createCallbackFcn(app, @CasesTableSelectionChanged, true);
 
             app.RemoveSelectedButton = uibutton(casesGrid, 'push');
             app.RemoveSelectedButton.Text = 'Remove Selected';
@@ -1017,7 +1019,37 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if nargin < 2
                 return;
             end
+
+            % Set selected case and re-render to show highlight
+            app.SelectedCaseId = string(caseId);
+
+            % Highlight corresponding row in cases table
+            caseIndex = str2double(caseId);
+            if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
+                app.CasesTable.Selection = caseIndex;
+            end
+
+            % Re-render schedule to show selection
+            if ~isempty(app.OptimizedSchedule)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+            end
+
             app.DrawerController.openDrawer(app, caseId);
+        end
+
+        function onScheduleBackgroundClicked(app)
+            % Clear selection when clicking on empty schedule area
+            if strlength(app.SelectedCaseId) > 0
+                app.SelectedCaseId = "";
+
+                % Clear table selection
+                app.CasesTable.Selection = [];
+
+                % Re-render schedule to clear selection highlight
+                if ~isempty(app.OptimizedSchedule)
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+                end
+            end
         end
 
         function delete(app)
@@ -1028,6 +1060,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     % Callbacks that handle component events
     methods (Access = private)
+
+        function CasesTableSelectionChanged(app, event)
+            % Highlight selected case on schedule when table row is clicked
+            selection = app.CasesTable.Selection;
+
+            if isempty(selection)
+                % Clear selection
+                app.SelectedCaseId = "";
+            else
+                % Select the case
+                app.SelectedCaseId = string(selection(1));
+            end
+
+            % Re-render schedule to show/clear selection highlight
+            if ~isempty(app.OptimizedSchedule)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+            end
+        end
 
         function OperatorDropDownValueChanged(app, event)
             value = app.OperatorDropDown.Value;
