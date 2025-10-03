@@ -217,7 +217,7 @@ classdef ScheduleRenderer < handle
             obj.updateCaseStatusesByTime(app, finalTimeMinutes);
 
             % Re-render schedule to show updated statuses
-            app.OptimizationController.renderCurrentSchedule(app);
+            app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
         end
 
         function updateCaseStatusesByTime(~, app, currentTimeMinutes)

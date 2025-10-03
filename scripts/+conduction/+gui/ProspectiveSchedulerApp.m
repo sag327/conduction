@@ -1249,7 +1249,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CaseManager.CurrentTimeMinutes = NaN;
                 % Re-render to show system time
                 if ~isempty(app.OptimizedSchedule)
-                    app.OptimizationController.renderCurrentSchedule(app);
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
                 end
             end
         end

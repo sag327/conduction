@@ -30,8 +30,8 @@ classdef CaseStatusController < handle
                 app.CaseManager.setCaseStatus(caseIndex, "in_progress");
 
                 % Refresh visualization
-                if ~isempty(app.CurrentSchedule)
-                    app.OptimizationController.renderCurrentSchedule(app);
+                if ~isempty(app.OptimizedSchedule)
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
                 end
 
                 % Update drawer if showing this case
@@ -155,8 +155,8 @@ classdef CaseStatusController < handle
             close(dlg);
 
             % Refresh visualization
-            if ~isempty(app.CurrentSchedule)
-                app.OptimizationController.renderCurrentSchedule(app);
+            if ~isempty(app.OptimizedSchedule)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
             end
 
             % Close drawer if it's showing this case
