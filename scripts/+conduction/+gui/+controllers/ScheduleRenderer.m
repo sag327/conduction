@@ -151,6 +151,17 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % Validate line handle is still valid
+            lineHandle = app.UIFigure.UserData.dragLineHandle;
+            if ~isvalid(lineHandle)
+                % Line was deleted, abort drag
+                app.UIFigure.UserData.isDraggingNowLine = false;
+                app.UIFigure.WindowButtonMotionFcn = [];
+                app.UIFigure.WindowButtonUpFcn = [];
+                app.UIFigure.Pointer = 'arrow';
+                return;
+            end
+
             % Get mouse position in axes coordinates
             pt = app.ScheduleAxes.CurrentPoint;
             newTimeHour = pt(1, 2); % Y-coordinate in axes
@@ -160,7 +171,6 @@ classdef ScheduleRenderer < handle
             newTimeHour = max(yLimits(1), min(yLimits(2), newTimeHour));
 
             % Update line position
-            lineHandle = app.UIFigure.UserData.dragLineHandle;
             lineHandle.YData = [newTimeHour, newTimeHour];
 
             % Update text label
@@ -184,8 +194,20 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            % Get final time
+            % Clear drag state first
+            app.UIFigure.UserData.isDraggingNowLine = false;
+            app.UIFigure.WindowButtonMotionFcn = [];
+            app.UIFigure.WindowButtonUpFcn = [];
+            app.UIFigure.Pointer = 'arrow';
+
+            % Validate line handle is still valid
             lineHandle = app.UIFigure.UserData.dragLineHandle;
+            if ~isvalid(lineHandle)
+                % Line was deleted during drag, can't get final time
+                return;
+            end
+
+            % Get final time
             finalTimeMinutes = lineHandle.UserData.timeMinutes;
 
             % Update CaseManager with new time
@@ -193,12 +215,6 @@ classdef ScheduleRenderer < handle
 
             % Auto-update case statuses based on new time
             obj.updateCaseStatusesByTime(app, finalTimeMinutes);
-
-            % Clear drag state
-            app.UIFigure.UserData.isDraggingNowLine = false;
-            app.UIFigure.WindowButtonMotionFcn = [];
-            app.UIFigure.WindowButtonUpFcn = [];
-            app.UIFigure.Pointer = 'arrow';
 
             % Re-render schedule to show updated statuses
             app.OptimizationController.renderCurrentSchedule(app);
