@@ -91,7 +91,9 @@ classdef OptimizationController < handle
                 obj.showOptimizationPendingPlaceholder(app);
             else
                 % Re-render existing schedule with fade to indicate it's stale
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+                % Use simulated schedule if time control is active to preserve status indicators
+                scheduleToRender = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
             end
 
             obj.updateOptimizationStatus(app);
