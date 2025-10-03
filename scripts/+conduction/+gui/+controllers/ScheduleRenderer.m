@@ -214,7 +214,7 @@ classdef ScheduleRenderer < handle
             app.CaseManager.setCurrentTime(finalTimeMinutes);
 
             % Auto-update case statuses based on new time
-            updatedSchedule = obj.updateCaseStatusesByTime(app, currentTimeMinutes);
+            updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
 
             % Mark schedule as dirty (stale with new time)
             app.OptimizationController.markOptimizationDirty(app);
