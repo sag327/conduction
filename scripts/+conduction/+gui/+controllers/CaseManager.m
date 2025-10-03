@@ -662,6 +662,7 @@ classdef CaseManager < handle
                 'priority', [], ...
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
+                'caseStatus', '', ...  % REALTIME-SCHEDULING
                 'date', NaT);
             casesStruct = repmat(template, obj.CaseCount, 1);
 
@@ -692,6 +693,7 @@ classdef CaseManager < handle
                     statusValue = defaults.AdmissionStatus;
                 end
                 casesStruct(idx).admissionStatus = char(statusValue);
+                casesStruct(idx).caseStatus = char(caseObj.CaseStatus);  % REALTIME-SCHEDULING
                 casesStruct(idx).date = dateValue;
             end
         end
