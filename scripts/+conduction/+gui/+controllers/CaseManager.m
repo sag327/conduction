@@ -12,6 +12,10 @@ classdef CaseManager < handle
         ProcedureAggregator conduction.analytics.ProcedureMetricsAggregator % Cached aggregator with raw sample data
         ClinicalDataPath string
         DailySummary table
+
+        % REALTIME-SCHEDULING: Status tracking and completed case archive
+        CompletedCases conduction.gui.models.ProspectiveCase  % Archive of completed cases
+        CurrentTimeMinutes double = NaN  % Current time in minutes from midnight
     end
 
     properties (Dependent)
@@ -30,6 +34,7 @@ classdef CaseManager < handle
 
             obj.TargetDate = targetDate;
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
+            obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;  % REALTIME-SCHEDULING
 
             obj.resetClinicalDataState();
             obj.HistoricalCollection = historicalCollection;
@@ -153,7 +158,116 @@ classdef CaseManager < handle
 
         function clearAllCases(obj)
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
+            obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;  % REALTIME-SCHEDULING
             obj.notifyChange();
+        end
+
+        % REALTIME-SCHEDULING: Status management methods
+        function setCaseStatus(obj, caseIndex, newStatus, actualTimes)
+            %SETCASESTATUS Update case status and optionally record actual times
+            %   caseIndex: Index of case in Cases array
+            %   newStatus: "pending", "in_progress", or "completed"
+            %   actualTimes: (optional) struct with ActualStartTime, ActualProcStartTime, etc.
+            arguments
+                obj
+                caseIndex (1,1) double {mustBePositive, mustBeInteger}
+                newStatus (1,1) string
+                actualTimes struct = struct()
+            end
+
+            if caseIndex > numel(obj.Cases)
+                warning('CaseManager:InvalidIndex', 'Case index %d exceeds number of cases (%d)', ...
+                    caseIndex, numel(obj.Cases));
+                return;
+            end
+
+            caseObj = obj.Cases(caseIndex);
+            oldStatus = caseObj.CaseStatus;
+            newStatus = lower(newStatus);
+
+            % Validate status transition
+            if ~obj.isValidStatusTransition(oldStatus, newStatus)
+                warning('CaseManager:InvalidTransition', ...
+                    'Invalid status transition from "%s" to "%s"', oldStatus, newStatus);
+                return;
+            end
+
+            % Update status
+            caseObj.CaseStatus = newStatus;
+
+            % Record actual times if provided
+            if ~isempty(fieldnames(actualTimes))
+                if isfield(actualTimes, 'ActualStartTime')
+                    caseObj.ActualStartTime = actualTimes.ActualStartTime;
+                end
+                if isfield(actualTimes, 'ActualProcStartTime')
+                    caseObj.ActualProcStartTime = actualTimes.ActualProcStartTime;
+                end
+                if isfield(actualTimes, 'ActualProcEndTime')
+                    caseObj.ActualProcEndTime = actualTimes.ActualProcEndTime;
+                end
+                if isfield(actualTimes, 'ActualEndTime')
+                    caseObj.ActualEndTime = actualTimes.ActualEndTime;
+                end
+            end
+
+            % If marking as completed, move to completed archive
+            if newStatus == "completed"
+                obj.CompletedCases(end+1) = caseObj;
+                obj.Cases(caseIndex) = [];
+            end
+
+            obj.notifyChange();
+        end
+
+        function pending = getPendingCases(obj)
+            %GETPENDINGCASES Return all cases with "pending" status
+            if isempty(obj.Cases)
+                pending = conduction.gui.models.ProspectiveCase.empty;
+                return;
+            end
+            mask = arrayfun(@(c) c.isPending(), obj.Cases);
+            pending = obj.Cases(mask);
+        end
+
+        function inProgress = getInProgressCases(obj)
+            %GETINPROGRESSCASES Return all cases with "in_progress" status
+            if isempty(obj.Cases)
+                inProgress = conduction.gui.models.ProspectiveCase.empty;
+                return;
+            end
+            mask = arrayfun(@(c) c.isInProgress(), obj.Cases);
+            inProgress = obj.Cases(mask);
+        end
+
+        function completed = getCompletedCases(obj)
+            %GETCOMPLETEDCASES Return all completed cases from archive
+            completed = obj.CompletedCases;
+        end
+
+        function setCurrentTime(obj, timeMinutes)
+            %SETCURRENTTIME Set the current time in minutes from midnight
+            %   Can be set manually or from system clock
+            arguments
+                obj
+                timeMinutes (1,1) double {mustBeNonnegative}
+            end
+            obj.CurrentTimeMinutes = timeMinutes;
+        end
+
+        function timeMinutes = getCurrentTime(obj)
+            %GETCURRENTTIME Get current time, auto-updating from system clock if not manually set
+            if isnan(obj.CurrentTimeMinutes)
+                % Auto-update from system clock
+                now = datetime('now');
+                obj.CurrentTimeMinutes = hour(now) * 60 + minute(now);
+            end
+            timeMinutes = obj.CurrentTimeMinutes;
+        end
+
+        function allCases = getAllCases(obj)
+            %GETALLCASES Return all cases including pending, in-progress, and completed
+            allCases = [obj.Cases, obj.CompletedCases];
         end
 
         function success = loadClinicalData(obj, filePath)
@@ -747,6 +861,47 @@ classdef CaseManager < handle
             if ~isempty(matches)
                 labIndex = matches;
             end
+        end
+
+        function isValid = isValidStatusTransition(~, oldStatus, newStatus)
+            %ISVALIDSTATUSTRANSITION Validate case status transitions
+            %   Valid transitions:
+            %     pending -> in_progress
+            %     pending -> completed (via in_progress implicitly)
+            %     in_progress -> completed
+            %   Invalid transitions:
+            %     completed -> anything (completed is immutable)
+            %     in_progress -> pending (can't go backwards)
+
+            oldStatus = lower(oldStatus);
+            newStatus = lower(newStatus);
+
+            % Allow staying in same status (no-op)
+            if oldStatus == newStatus
+                isValid = true;
+                return;
+            end
+
+            % Completed is terminal - can't transition out
+            if oldStatus == "completed"
+                isValid = false;
+                return;
+            end
+
+            % From pending: can go to in_progress or completed
+            if oldStatus == "pending"
+                isValid = (newStatus == "in_progress" || newStatus == "completed");
+                return;
+            end
+
+            % From in_progress: can only go to completed
+            if oldStatus == "in_progress"
+                isValid = (newStatus == "completed");
+                return;
+            end
+
+            % Unknown status
+            isValid = false;
         end
 
     end
