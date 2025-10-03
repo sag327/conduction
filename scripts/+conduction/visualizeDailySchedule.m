@@ -513,17 +513,29 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
         if currentTimeHour >= startHour && currentTimeHour <= endHour
             xLimits = xlim(ax);
-            % Draw red horizontal line at current time
-            line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
-                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 3, 'Parent', ax);
+            % Draw red horizontal line at current time with stored handle
+            nowLineHandle = line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
+                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 3, 'Parent', ax, ...
+                'Tag', 'NowLine', ...  % Tag for easy finding
+                'UserData', struct('timeMinutes', currentTimeMinutes));  % Store time data
 
-            % Add "NOW" label
+            % Add "NOW" label with tag for updating
             timeStr = minutesToTimeString(currentTimeMinutes);
-            text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
+            nowLabelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
                 sprintf('NOW (%s)', timeStr), ...
                 'Color', [1, 0, 0], 'FontWeight', 'bold', 'FontSize', 10, ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'BackgroundColor', [0, 0, 0]);
+                'BackgroundColor', [0, 0, 0], ...
+                'Tag', 'NowLabel');  % Tag for easy finding
+
+            % Store handles in axes UserData for drag functionality
+            if ~isfield(ax.UserData, 'nowLineHandle')
+                ax.UserData.nowLineHandle = nowLineHandle;
+                ax.UserData.nowLabelHandle = nowLabelHandle;
+            else
+                ax.UserData(1).nowLineHandle = nowLineHandle;
+                ax.UserData(1).nowLabelHandle = nowLabelHandle;
+            end
         end
     end
 

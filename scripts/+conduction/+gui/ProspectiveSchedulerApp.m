@@ -13,6 +13,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
         TestToggle                  matlab.ui.control.Switch
+        TimeControlSwitch           matlab.ui.control.Switch  % REALTIME-SCHEDULING: Toggle time control mode
 
         TabGroup                    matlab.ui.container.TabGroup
         TabAdd                      matlab.ui.container.Tab
@@ -154,6 +155,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
+        IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
@@ -187,7 +189,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit'};
+            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit','fit'};  % REALTIME-SCHEDULING: Added column for TimeControlSwitch
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -202,8 +204,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
 
+            % REALTIME-SCHEDULING: Time Control Switch
+            app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
+            app.TimeControlSwitch.Layout.Column = 4;
+            app.TimeControlSwitch.Items = {'Time Control', ''};
+            app.TimeControlSwitch.ItemsData = {'On', 'Off'};
+            app.TimeControlSwitch.Value = 'Off';
+            app.TimeControlSwitch.Orientation = 'horizontal';
+            app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
+
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 4;
+            app.TestToggle.Layout.Column = 5;  % REALTIME-SCHEDULING: Moved to column 5
             app.TestToggle.Items = {'Test Mode',''};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -1220,6 +1231,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingModeController.refreshTestingAvailability(app);
 
             app.LoadDataButton.Enable = 'on';
+        end
+
+        function TimeControlSwitchValueChanged(app, ~)
+            % REALTIME-SCHEDULING: Toggle time control mode
+            if strcmp(app.TimeControlSwitch.Value, 'On')
+                app.IsTimeControlActive = true;
+                % Enable NOW line dragging if schedule exists
+                if ~isempty(app.OptimizedSchedule)
+                    app.ScheduleRenderer.enableNowLineDrag(app);
+                end
+            else
+                app.IsTimeControlActive = false;
+                % Disable NOW line dragging
+                app.ScheduleRenderer.disableNowLineDrag(app);
+                % Reset to system time
+                app.CaseManager.CurrentTimeMinutes = NaN;
+                % Re-render to show system time
+                if ~isempty(app.OptimizedSchedule)
+                    app.OptimizationController.renderCurrentSchedule(app);
+                end
+            end
         end
 
         function TestToggleValueChanged(app, ~)
