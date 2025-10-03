@@ -33,7 +33,12 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
         return;
     end
 
-    [scheduleStartHour, scheduleEndHour] = determineTimeWindow(caseTimelines, opts.TimeRange);
+    % REALTIME-SCHEDULING: Pass current time to expand range if needed
+    currentTimeForRange = NaN;
+    if isfield(opts, 'CurrentTimeMinutes') && ~isnan(opts.CurrentTimeMinutes)
+        currentTimeForRange = opts.CurrentTimeMinutes;
+    end
+    [scheduleStartHour, scheduleEndHour] = determineTimeWindow(caseTimelines, opts.TimeRange, currentTimeForRange);
 
     operatorNames = string({caseTimelines.operatorName});
     uniqueOperators = unique(operatorNames, 'stable');
@@ -274,29 +279,39 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
     caseTimeline.scheduleEnd = caseTimeline.turnoverEnd;
 end
 
-function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange)
+function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange, currentTimeMinutes)
+    % REALTIME-SCHEDULING: Accept current time to expand window if needed
+    if nargin < 3
+        currentTimeMinutes = NaN;
+    end
+
     if ~isempty(overrideRange)
         startHour = overrideRange(1) / 60;
         endHour = overrideRange(2) / 60;
-        return;
+    else
+        starts = [caseTimelines.setupStart];
+        starts = starts(~isnan(starts));
+        ends = [caseTimelines.scheduleEnd];
+        ends = ends(~isnan(ends));
+
+        if isempty(starts) || isempty(ends)
+            startHour = 6;
+            endHour = 18;
+        else
+            scheduleStart = min(starts);
+            scheduleEnd = max(ends);
+
+            startHour = (scheduleStart - 60) / 60;
+            endHour = (scheduleEnd + 60) / 60;
+        end
     end
 
-    starts = [caseTimelines.setupStart];
-    starts = starts(~isnan(starts));
-    ends = [caseTimelines.scheduleEnd];
-    ends = ends(~isnan(ends));
-
-    if isempty(starts) || isempty(ends)
-        startHour = 6;
-        endHour = 18;
-        return;
+    % REALTIME-SCHEDULING: Expand window to include current time if provided
+    if ~isnan(currentTimeMinutes)
+        currentTimeHour = currentTimeMinutes / 60;
+        startHour = min(startHour, currentTimeHour - 1);  % 1 hour padding before current time
+        endHour = max(endHour, currentTimeHour + 1);  % 1 hour padding after current time
     end
-
-    scheduleStart = min(starts);
-    scheduleEnd = max(ends);
-
-    startHour = (scheduleStart - 60) / 60;
-    endHour = (scheduleEnd + 60) / 60;
 end
 
 function labLabels = resolveLabLabels(~, expectedLabs)
