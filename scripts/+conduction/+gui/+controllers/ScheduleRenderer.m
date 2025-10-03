@@ -254,11 +254,12 @@ classdef ScheduleRenderer < handle
                 for caseIdx = 1:numel(labCases)
                     scheduledCase = labCases(caseIdx);
 
-                    % Extract timing
+                    % Extract timing and case ID
                     procStartTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procStartTime', NaN);
                     procEndTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procEndTime', NaN);
+                    caseId = app.ScheduleRenderer.getFieldValue(scheduledCase, 'caseID', NaN);
 
-                    if isnan(procStartTime) || isnan(procEndTime)
+                    if isnan(procStartTime) || isnan(procEndTime) || isnan(caseId)
                         continue;
                     end
 
@@ -267,6 +268,12 @@ classdef ScheduleRenderer < handle
                     if procEndTime <= currentTimeMinutes
                         % Case would be completed at this time
                         newStatus = "completed";
+
+                        % Lock completed cases to preserve time and lab assignment
+                        caseIdStr = string(caseId);
+                        if ~ismember(caseIdStr, app.LockedCaseIds)
+                            app.LockedCaseIds(end+1) = caseIdStr;
+                        end
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case would be in progress at this time
                         newStatus = "in_progress";
