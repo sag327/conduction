@@ -1251,8 +1251,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % REALTIME-SCHEDULING: Toggle time control mode
             if strcmp(app.TimeControlSwitch.Value, 'On')
                 app.IsTimeControlActive = true;
-                % Enable NOW line dragging if schedule exists
+                % Re-render to show NOW line and enable dragging
                 if ~isempty(app.OptimizedSchedule)
+                    scheduleToRender = app.getScheduleForRendering();
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
                     app.ScheduleRenderer.enableNowLineDrag(app);
                 end
             else
