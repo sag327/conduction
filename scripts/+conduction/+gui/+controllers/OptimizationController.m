@@ -435,6 +435,13 @@ classdef OptimizationController < handle
                     constraint.endTime = constraint.endTime + double(locked.turnoverTime);
                 end
 
+                % Extract assigned lab (critical for preserving lab assignment)
+                if isfield(locked, 'assignedLab') && ~isempty(locked.assignedLab)
+                    constraint.assignedLab = double(locked.assignedLab);
+                else
+                    continue;  % Skip if no lab assignment - can't lock without knowing lab
+                end
+
                 % Add to constraints array
                 if isempty(constraints)
                     constraints = constraint;

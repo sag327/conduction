@@ -33,6 +33,7 @@ classdef OptimizationModelBuilder
 
             % Locked case information
             lockedStartTimes = prepared.lockedStartTimes;
+            lockedLabs = prepared.lockedLabs;
 
             optimizationMetric = options.normalizedMetric();
 
@@ -354,9 +355,9 @@ classdef OptimizationModelBuilder
                 if verbose, fprintf(' done\n'); end
             end
 
-            % --- Constraint 8: locked case time fixing ----------------------------
+            % --- Constraint 8: locked case time and lab fixing ----------------------------
             if verbose
-                fprintf('Constraint 8: locked case time fixing...');
+                fprintf('Constraint 8: locked case time and lab fixing...');
             end
             for caseIdx = 1:numCases
                 if caseIdx > numel(lockedStartTimes)
@@ -367,23 +368,36 @@ classdef OptimizationModelBuilder
                 end
 
                 lockedStart = lockedStartTimes(caseIdx);
+                lockedLab = lockedLabs(caseIdx);
 
                 % Find the time slot that matches the locked start time
                 [~, lockedTimeIdx] = min(abs(timeSlots - lockedStart));
 
-                % This case must be scheduled at exactly this time (but can be in any lab)
+                % This case must be scheduled at exactly this time AND this specific lab
                 eqRowIdx = eqRowIdx + 1;
-                for labIdx = 1:numLabs
-                    if labPreferences(caseIdx, labIdx) ~= 1
-                        continue;
+                if ~isnan(lockedLab)
+                    % Lock to specific lab
+                    if labPreferences(caseIdx, lockedLab) == 1
+                        % Check if this time slot is valid for this lab
+                        validSlots = validTimeSlots{lockedLab};
+                        if ismember(lockedTimeIdx, validSlots)
+                            Aeq(eqRowIdx, getVarIndex(caseIdx, lockedLab, lockedTimeIdx)) = 1;
+                        end
                     end
-                    % Check if this time slot is valid for this lab
-                    validSlots = validTimeSlots{labIdx};
-                    if ismember(lockedTimeIdx, validSlots)
-                        Aeq(eqRowIdx, getVarIndex(caseIdx, labIdx, lockedTimeIdx)) = 1;
+                else
+                    % No specific lab locked - allow any lab (legacy behavior)
+                    for labIdx = 1:numLabs
+                        if labPreferences(caseIdx, labIdx) ~= 1
+                            continue;
+                        end
+                        % Check if this time slot is valid for this lab
+                        validSlots = validTimeSlots{labIdx};
+                        if ismember(lockedTimeIdx, validSlots)
+                            Aeq(eqRowIdx, getVarIndex(caseIdx, labIdx, lockedTimeIdx)) = 1;
+                        end
                     end
                 end
-                beq(eqRowIdx) = 1;  % Exactly one lab at this time
+                beq(eqRowIdx) = 1;  % Exactly one assignment (specific lab if locked, else any lab)
             end
             if verbose, fprintf(' done\n'); end
 

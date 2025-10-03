@@ -277,6 +277,12 @@ classdef ScheduleRenderer < handle
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case would be in progress at this time
                         newStatus = "in_progress";
+
+                        % Lock in-progress cases to preserve time and lab assignment
+                        caseIdStr = string(caseId);
+                        if ~ismember(caseIdStr, app.LockedCaseIds)
+                            app.LockedCaseIds(end+1) = caseIdStr;
+                        end
                     else
                         % Case would be pending at this time
                         newStatus = "pending";

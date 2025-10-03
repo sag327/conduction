@@ -37,7 +37,7 @@ classdef SchedulingPreprocessor
             % Process locked case constraints
             lockedConstraints = options.LockedCaseConstraints;
 
-            [lockedCaseMap, lockedStartTimes] = conduction.scheduling.SchedulingPreprocessor.processLockedConstraints(lockedConstraints, cases);
+            [lockedCaseMap, lockedStartTimes, lockedLabs] = conduction.scheduling.SchedulingPreprocessor.processLockedConstraints(lockedConstraints, cases);
 
             % Enhance operator availability with locked case busy windows
             operatorAvailability = conduction.scheduling.SchedulingPreprocessor.addLockedCasesToAvailability(...
@@ -69,6 +69,7 @@ classdef SchedulingPreprocessor
             % Add locked case information
             prepared.lockedCaseMap = lockedCaseMap;
             prepared.lockedStartTimes = lockedStartTimes;
+            prepared.lockedLabs = lockedLabs;
         end
     end
 
@@ -157,13 +158,15 @@ classdef SchedulingPreprocessor
             end
         end
 
-        function [lockedCaseMap, lockedStartTimes] = processLockedConstraints(constraints, cases)
+        function [lockedCaseMap, lockedStartTimes, lockedLabs] = processLockedConstraints(constraints, cases)
             % Process locked case constraints into case-indexed structures
             %   lockedCaseMap: containers.Map from caseID to constraint struct
             %   lockedStartTimes: array parallel to cases with locked start times (NaN if not locked)
+            %   lockedLabs: array parallel to cases with locked lab assignments (NaN if not locked)
 
             lockedCaseMap = containers.Map('KeyType','char','ValueType','any');
             lockedStartTimes = nan(numel(cases), 1);
+            lockedLabs = nan(numel(cases), 1);
 
             if isempty(constraints)
                 return;
@@ -176,13 +179,17 @@ classdef SchedulingPreprocessor
                 lockedCaseMap(caseId) = constraint;
             end
 
-            % Build parallel array of start times for each case
+            % Build parallel arrays of start times and labs for each case
             for cIdx = 1:numel(cases)
                 caseId = char(string(cases(cIdx).caseID));
                 if isKey(lockedCaseMap, caseId)
                     constraint = lockedCaseMap(caseId);
                     % Use startTime (includes setup) for the optimizer constraint
                     lockedStartTimes(cIdx) = constraint.startTime;
+                    % Extract assigned lab
+                    if isfield(constraint, 'assignedLab') && ~isnan(constraint.assignedLab)
+                        lockedLabs(cIdx) = constraint.assignedLab;
+                    end
                 end
             end
         end
