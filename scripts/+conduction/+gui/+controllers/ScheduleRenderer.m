@@ -231,9 +231,10 @@ classdef ScheduleRenderer < handle
         function updatedSchedule = updateCaseStatusesByTime(~, app, currentTimeMinutes)
             %UPDATECASESTATUSESBYTIME Auto-update case statuses based on current time
             %   Returns a new DailySchedule with updated case statuses
-            cases = app.CaseManager.getAllCases();
+            %   NOTE: This only updates visualization, not actual ProspectiveCase objects
+            %         to avoid shifting case IDs during time control simulation
 
-            if isempty(cases) || isempty(app.OptimizedSchedule)
+            if isempty(app.OptimizedSchedule)
                 updatedSchedule = app.OptimizedSchedule;
                 return;
             end
@@ -253,50 +254,26 @@ classdef ScheduleRenderer < handle
                     % Extract timing
                     procStartTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procStartTime', NaN);
                     procEndTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procEndTime', NaN);
-                    caseId = app.ScheduleRenderer.getFieldValue(scheduledCase, 'caseID', NaN);
 
-                    if isnan(procStartTime) || isnan(procEndTime) || isnan(caseId)
+                    if isnan(procStartTime) || isnan(procEndTime)
                         continue;
                     end
 
-                    % Find corresponding ProspectiveCase
-                    prospectiveCaseIdx = double(caseId);
-                    if prospectiveCaseIdx > numel(cases)
-                        continue;
-                    end
-
-                    prospectiveCase = cases(prospectiveCaseIdx);
-
-                    % Determine new status based on time
+                    % Determine simulated status based on time (visualization only)
                     newStatus = "";
                     if procEndTime <= currentTimeMinutes
-                        % Case is completed
+                        % Case would be completed at this time
                         newStatus = "completed";
-                        if prospectiveCase.CaseStatus ~= "completed"
-                            actualTimes = struct();
-                            actualTimes.ActualProcStartTime = procStartTime;
-                            actualTimes.ActualProcEndTime = procEndTime;
-                            actualTimes.ActualStartTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'startTime', procStartTime);
-                            actualTimes.ActualEndTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'endTime', procEndTime);
-
-                            app.CaseManager.setCaseStatus(prospectiveCaseIdx, "completed", actualTimes);
-                        end
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
-                        % Case is in progress
+                        % Case would be in progress at this time
                         newStatus = "in_progress";
-                        if prospectiveCase.CaseStatus ~= "in_progress"
-                            app.CaseManager.setCaseStatus(prospectiveCaseIdx, "in_progress");
-                        end
                     else
-                        % Case is pending (procStartTime > currentTimeMinutes)
+                        % Case would be pending at this time
                         newStatus = "pending";
-                        if prospectiveCase.CaseStatus ~= "pending"
-                            % Reset to pending (only if not completed)
-                            prospectiveCase.CaseStatus = "pending";
-                        end
                     end
 
-                    % Update caseStatus in the schedule struct for visualization
+                    % Update caseStatus in the schedule struct for visualization only
+                    % Do NOT modify ProspectiveCase objects to keep case IDs stable
                     labAssignments{labIdx}(caseIdx).caseStatus = char(newStatus);
                 end
             end
