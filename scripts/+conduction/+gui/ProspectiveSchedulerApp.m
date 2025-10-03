@@ -207,8 +207,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % REALTIME-SCHEDULING: Time Control Switch
             app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
             app.TimeControlSwitch.Layout.Column = 4;
-            app.TimeControlSwitch.Items = {'', 'Time Control'};  % Left=off, Right=on
-            app.TimeControlSwitch.ItemsData = {'Off', 'On'};
+            app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
+            app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
             app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
             app.TimeControlSwitch.Orientation = 'horizontal';
             app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
@@ -1246,7 +1246,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Disable NOW line dragging
                 app.ScheduleRenderer.disableNowLineDrag(app);
                 % Reset to system time
-                app.CaseManager.CurrentTimeMinutes = NaN;
+                app.CaseManager.setCurrentTime(NaN);
                 % Re-render to show system time
                 if ~isempty(app.OptimizedSchedule)
                     app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
