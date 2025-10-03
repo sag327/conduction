@@ -145,6 +145,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'SelectedCaseId', "", @(x) isstring(x) || ischar(x));  % Currently selected case ID for highlighting
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
+    addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -226,6 +227,7 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
     caseTimeline.caseId = resolveCaseId(caseItem, sequenceId);
     caseTimeline.operatorName = resolveOperatorName(caseItem);
     caseTimeline.admissionStatus = resolveAdmissionStatus(caseItem);
+    caseTimeline.caseStatus = resolveCaseStatus(caseItem);  % REALTIME-SCHEDULING
     caseTimeline.setupStart = getNumericField(caseItem, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
     caseTimeline.procStart = getNumericField(caseItem, {'procStartTime', 'procedureStartTime', 'procedureStart'});
     caseTimeline.procEnd = getNumericField(caseItem, {'procEndTime', 'procedureEndTime', 'procedureEnd'});
@@ -459,6 +461,35 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             admissionBar.PickableParts = 'none';
         end
 
+        % REALTIME-SCHEDULING: Draw status indicator overlay
+        if ~isnan(setupStartHour) && ~isnan(postEndHour) && isfield(entry, 'caseStatus')
+            caseStartHour = setupStartHour;
+            caseEndHour = postEndHour;
+            caseTotalDuration = caseEndHour - caseStartHour;
+
+            switch lower(entry.caseStatus)
+                case 'in_progress'
+                    % Yellow dashed border for in-progress cases
+                    statusColor = [1, 0.8, 0];  % Yellow
+                    statusRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                        'FaceColor', 'none', 'EdgeColor', statusColor, 'LineWidth', 2, 'LineStyle', '--');
+                    statusRect.PickableParts = 'none';
+
+                case 'completed'
+                    % Green checkmark overlay for completed cases
+                    checkX = xPos;
+                    checkY = (caseStartHour + caseEndHour) / 2;
+                    checkText = text(ax, checkX, checkY, '✓', ...
+                        'FontSize', 24, 'Color', [0, 0.9, 0], 'FontWeight', 'bold', ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
+                    checkText.HitTest = 'off';
+                    checkText.PickableParts = 'none';
+
+                    % Optionally fade completed cases slightly
+                    % (This would require modifying the rectangle alpha, which we'll skip for now)
+            end
+        end
+
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
@@ -472,6 +503,27 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             if isprop(labelHandle, 'PickableParts')
                 labelHandle.PickableParts = 'none';
             end
+        end
+    end
+
+    % REALTIME-SCHEDULING: Draw current time indicator line
+    if isfield(opts, 'CurrentTimeMinutes') && ~isnan(opts.CurrentTimeMinutes)
+        currentTimeMinutes = opts.CurrentTimeMinutes;
+        currentTimeHour = currentTimeMinutes / 60;
+
+        if currentTimeHour >= startHour && currentTimeHour <= endHour
+            xLimits = xlim(ax);
+            % Draw red horizontal line at current time
+            line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
+                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 3, 'Parent', ax);
+
+            % Add "NOW" label
+            timeStr = minutesToTimeString(currentTimeMinutes);
+            text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
+                sprintf('NOW (%s)', timeStr), ...
+                'Color', [1, 0, 0], 'FontWeight', 'bold', 'FontSize', 10, ...
+                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+                'BackgroundColor', [0, 0, 0]);
         end
     end
 
@@ -1166,6 +1218,32 @@ function admissionStatus = resolveAdmissionStatus(caseItem)
     admissionStatus = string('outpatient');  % Default to outpatient
 end
 
+function caseStatus = resolveCaseStatus(caseItem)
+    % REALTIME-SCHEDULING: Extract case status (pending/in_progress/completed)
+    if isstruct(caseItem)
+        fields = {'caseStatus', 'CaseStatus', 'status', 'Status'};
+        for idx = 1:numel(fields)
+            name = fields{idx};
+            if isfield(caseItem, name)
+                candidate = asString(caseItem.(name));
+                if strlength(candidate) > 0
+                    caseStatus = lower(candidate);
+                    return;
+                end
+            end
+        end
+    elseif isobject(caseItem)
+        if isprop(caseItem, 'CaseStatus')
+            candidate = asString(caseItem.CaseStatus);
+            if strlength(candidate) > 0
+                caseStatus = lower(candidate);
+                return;
+            end
+        end
+    end
+    caseStatus = string('pending');  % Default to pending
+end
+
 function dt = resolveCaseDate(caseItem)
     if isstruct(caseItem)
         if isfield(caseItem, 'date')
@@ -1191,6 +1269,28 @@ function str = asString(value)
     else
         str = string.empty;
     end
+end
+
+function timeStr = minutesToTimeString(minutes)
+    % REALTIME-SCHEDULING: Convert minutes from midnight to HH:MM AM/PM format
+    hours = floor(minutes / 60);
+    mins = mod(minutes, 60);
+
+    if hours >= 12
+        period = 'PM';
+        displayHour = hours;
+        if hours > 12
+            displayHour = hours - 12;
+        end
+    else
+        period = 'AM';
+        displayHour = hours;
+        if hours == 0
+            displayHour = 12;
+        end
+    end
+
+    timeStr = sprintf('%d:%02d %s', displayHour, mins, period);
 end
 
 function dt = parseMaybeDate(value)
