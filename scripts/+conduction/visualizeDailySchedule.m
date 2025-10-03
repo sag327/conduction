@@ -476,12 +476,12 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                     statusRect.PickableParts = 'none';
 
                 case 'completed'
-                    % Green checkmark overlay for completed cases
-                    checkX = xPos;
-                    checkY = (caseStartHour + caseEndHour) / 2;
+                    % Green checkmark overlay for completed cases (top right corner)
+                    checkX = xPos + barWidth/2 - 0.1;  % Right edge, slightly inset
+                    checkY = caseStartHour + 0.05;  % Top edge, slightly inset
                     checkText = text(ax, checkX, checkY, '✓', ...
-                        'FontSize', 24, 'Color', [0, 0.9, 0], 'FontWeight', 'bold', ...
-                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
+                        'FontSize', 36, 'Color', [0, 1, 0], 'FontWeight', 'bold', ...
+                        'HorizontalAlignment', 'right', 'VerticalAlignment', 'top');
                     checkText.HitTest = 'off';
                     checkText.PickableParts = 'none';
 
