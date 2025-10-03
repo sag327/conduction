@@ -207,9 +207,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % REALTIME-SCHEDULING: Time Control Switch
             app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
             app.TimeControlSwitch.Layout.Column = 4;
-            app.TimeControlSwitch.Items = {'Time Control', ''};
-            app.TimeControlSwitch.ItemsData = {'On', 'Off'};
-            app.TimeControlSwitch.Value = 'Off';
+            app.TimeControlSwitch.Items = {'', 'Time Control'};  % Left=off, Right=on
+            app.TimeControlSwitch.ItemsData = {'Off', 'On'};
+            app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
             app.TimeControlSwitch.Orientation = 'horizontal';
             app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
