@@ -465,6 +465,7 @@ classdef OptimizationController < handle
                 'priority', [], ...
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
+                'caseStatus', '', ...  % REALTIME-SCHEDULING
                 'date', NaT);
 
             % Extract existing case IDs for duplicate detection
@@ -522,6 +523,7 @@ classdef OptimizationController < handle
                 newCase.priority = obj.getFieldOr(locked, 'priority', []);
                 newCase.preferredLab = obj.getFieldOr(locked, 'preferredLab', []);
                 newCase.admissionStatus = char(string(obj.getFieldOr(locked, 'admissionStatus', defaults.AdmissionStatus)));
+                newCase.caseStatus = char(string(obj.getFieldOr(locked, 'caseStatus', '')));  % REALTIME-SCHEDULING
                 newCase.date = obj.getFieldOr(locked, 'date', NaT);
 
                 % Add or replace in casesStruct
