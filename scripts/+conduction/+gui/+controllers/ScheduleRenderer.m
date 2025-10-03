@@ -214,21 +214,31 @@ classdef ScheduleRenderer < handle
             app.CaseManager.setCurrentTime(finalTimeMinutes);
 
             % Auto-update case statuses based on new time
-            obj.updateCaseStatusesByTime(app, finalTimeMinutes);
+            updatedSchedule = obj.updateCaseStatusesByTime(app, currentTimeMinutes);
 
-            % Re-render schedule to show updated statuses
-            app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            % Mark schedule as dirty (stale with new time)
+            app.OptimizationController.markOptimizationDirty(app);
+
+            % Re-render schedule to show updated statuses with fade effect
+            app.ScheduleRenderer.renderOptimizedSchedule(app, updatedSchedule, app.OptimizationOutcome);
+
+            % Keep NOW line draggable if time control is still active
+            if app.IsTimeControlActive
+                obj.enableNowLineDrag(app);
+            end
         end
 
-        function updateCaseStatusesByTime(~, app, currentTimeMinutes)
+        function updatedSchedule = updateCaseStatusesByTime(~, app, currentTimeMinutes)
             %UPDATECASESTATUSESBYTIME Auto-update case statuses based on current time
+            %   Returns a new DailySchedule with updated case statuses
             cases = app.CaseManager.getAllCases();
 
             if isempty(cases) || isempty(app.OptimizedSchedule)
+                updatedSchedule = app.OptimizedSchedule;
                 return;
             end
 
-            % Get case timing from schedule
+            % Get case timing from schedule (copy for modification)
             labAssignments = app.OptimizedSchedule.labAssignments();
 
             for labIdx = 1:numel(labAssignments)
@@ -258,8 +268,10 @@ classdef ScheduleRenderer < handle
                     prospectiveCase = cases(prospectiveCaseIdx);
 
                     % Determine new status based on time
+                    newStatus = "";
                     if procEndTime <= currentTimeMinutes
                         % Case is completed
+                        newStatus = "completed";
                         if prospectiveCase.CaseStatus ~= "completed"
                             actualTimes = struct();
                             actualTimes.ActualProcStartTime = procStartTime;
@@ -271,18 +283,30 @@ classdef ScheduleRenderer < handle
                         end
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case is in progress
+                        newStatus = "in_progress";
                         if prospectiveCase.CaseStatus ~= "in_progress"
                             app.CaseManager.setCaseStatus(prospectiveCaseIdx, "in_progress");
                         end
                     else
                         % Case is pending (procStartTime > currentTimeMinutes)
+                        newStatus = "pending";
                         if prospectiveCase.CaseStatus ~= "pending"
                             % Reset to pending (only if not completed)
                             prospectiveCase.CaseStatus = "pending";
                         end
                     end
+
+                    % Update caseStatus in the schedule struct for visualization
+                    labAssignments{labIdx}(caseIdx).caseStatus = char(newStatus);
                 end
             end
+
+            % Create new DailySchedule with updated case statuses
+            updatedSchedule = conduction.DailySchedule( ...
+                app.OptimizedSchedule.Date, ...
+                app.OptimizedSchedule.Labs, ...
+                labAssignments, ...
+                app.OptimizedSchedule.scheduleMetrics());
         end
 
     end
