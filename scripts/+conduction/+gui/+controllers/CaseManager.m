@@ -248,10 +248,17 @@ classdef CaseManager < handle
         function setCurrentTime(obj, timeMinutes)
             %SETCURRENTTIME Set the current time in minutes from midnight
             %   Can be set manually or from system clock
+            %   Pass NaN to reset to system time auto-update mode
             arguments
                 obj
-                timeMinutes (1,1) double {mustBeNonnegative}
+                timeMinutes (1,1) double
             end
+
+            % Allow NaN to reset to system time mode
+            if ~isnan(timeMinutes) && timeMinutes < 0
+                error('Time must be nonnegative or NaN');
+            end
+
             obj.CurrentTimeMinutes = timeMinutes;
         end
 
