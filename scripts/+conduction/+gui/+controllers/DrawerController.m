@@ -248,7 +248,8 @@ classdef DrawerController < handle
 
             % Re-render schedule to show lock state change
             if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+                scheduleToRender = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
             end
         end
 

@@ -1284,25 +1284,15 @@ function str = asString(value)
 end
 
 function timeStr = minutesToTimeString(minutes)
-    % REALTIME-SCHEDULING: Convert minutes from midnight to HH:MM AM/PM format
+    % REALTIME-SCHEDULING: Convert minutes from midnight to HH:MM (24-hour format)
+    % Round to nearest minute
+    minutes = round(minutes);
+
     hours = floor(minutes / 60);
     mins = mod(minutes, 60);
 
-    if hours >= 12
-        period = 'PM';
-        displayHour = hours;
-        if hours > 12
-            displayHour = hours - 12;
-        end
-    else
-        period = 'AM';
-        displayHour = hours;
-        if hours == 0
-            displayHour = 12;
-        end
-    end
-
-    timeStr = sprintf('%d:%02d %s', displayHour, mins, period);
+    % 24-hour format
+    timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
 end
 
 function dt = parseMaybeDate(value)

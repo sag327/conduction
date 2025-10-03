@@ -156,6 +156,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
+        SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
@@ -1044,7 +1045,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show selection
             if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+                scheduleToRender = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
             end
 
             app.DrawerController.openDrawer(app, caseId);
@@ -1060,8 +1062,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                 % Re-render schedule to clear selection highlight
                 if ~isempty(app.OptimizedSchedule)
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+                    scheduleToRender = app.getScheduleForRendering();
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
                 end
+            end
+        end
+
+        function schedule = getScheduleForRendering(app)
+            % REALTIME-SCHEDULING: Get the appropriate schedule for rendering
+            % Returns SimulatedSchedule if time control is active, otherwise OptimizedSchedule
+            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule)
+                schedule = app.SimulatedSchedule;
+            else
+                schedule = app.OptimizedSchedule;
             end
         end
 
@@ -1088,7 +1101,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show/clear selection highlight
             if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
+                scheduleToRender = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
             end
         end
 
@@ -1247,7 +1261,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ScheduleRenderer.disableNowLineDrag(app);
                 % Reset to system time
                 app.CaseManager.setCurrentTime(NaN);
-                % Re-render to show system time
+                % Clear simulated schedule
+                app.SimulatedSchedule = conduction.DailySchedule.empty;
+                % Re-render to show system time with original statuses
                 if ~isempty(app.OptimizedSchedule)
                     app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
                 end

@@ -216,6 +216,9 @@ classdef ScheduleRenderer < handle
             % Auto-update case statuses based on new time
             updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
 
+            % Store simulated schedule for re-rendering (e.g., when drawer opens)
+            app.SimulatedSchedule = updatedSchedule;
+
             % Mark schedule as dirty (stale with new time)
             app.OptimizationController.markOptimizationDirty(app);
 
