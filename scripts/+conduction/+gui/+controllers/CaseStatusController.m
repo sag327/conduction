@@ -173,7 +173,7 @@ classdef CaseStatusController < handle
             %   Returns NaN if not found
 
             caseId = string(caseId);
-            cases = app.CaseManager.Cases;
+            cases = app.CaseManager.getAllCases();
 
             for idx = 1:numel(cases)
                 % Generate the same ID format used in buildOptimizationCases

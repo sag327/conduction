@@ -206,7 +206,7 @@ classdef ScheduleRenderer < handle
 
         function updateCaseStatusesByTime(~, app, currentTimeMinutes)
             %UPDATECASESTATUSESBYTIME Auto-update case statuses based on current time
-            cases = app.CaseManager.Cases;
+            cases = app.CaseManager.getAllCases();
 
             if isempty(cases) || isempty(app.OptimizedSchedule)
                 return;
