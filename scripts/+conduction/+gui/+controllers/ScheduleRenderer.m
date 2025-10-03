@@ -292,7 +292,7 @@ classdef ScheduleRenderer < handle
             set(ax, 'YTick', hourTicks, 'YTickLabel', hourLabels);
         end
 
-        function timeStr = minutesToTimeString(~, minutes)
+        function timeStr = minutesToTimeString(minutes)
             %MINUTESTOTIMESTRING Convert minutes from midnight to HH:MM AM/PM
             if isnan(minutes)
                 timeStr = 'N/A';
@@ -319,7 +319,7 @@ classdef ScheduleRenderer < handle
             timeStr = sprintf('%d:%02d %s', displayHour, mins, period);
         end
 
-        function value = getFieldValue(~, structOrObj, fieldName, defaultValue)
+        function value = getFieldValue(structOrObj, fieldName, defaultValue)
             %GETFIELDVALUE Safely extract field value from struct or object
             if isstruct(structOrObj) && isfield(structOrObj, fieldName)
                 value = structOrObj.(fieldName);
