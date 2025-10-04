@@ -3,7 +3,7 @@ classdef DrawerController < handle
 
     methods (Access = public)
 
-        function openDrawer(~, app, caseId)
+        function openDrawer(obj, app, caseId)
             if nargin < 3
                 caseId = string.empty;
             end
@@ -11,13 +11,13 @@ classdef DrawerController < handle
             % Store the caseId
             app.DrawerCurrentCaseId = caseId;
 
-            % Instantly open drawer to 440px
-            app.DrawerController.setDrawerToWidth(app, 440);
+            % Expand drawer to 428px total (28px handle + 400px content)
+            obj.setDrawerToWidth(app, 428);
         end
 
-        function closeDrawer(~, app)
-            % Instantly close drawer to 0px
-            app.DrawerController.setDrawerToWidth(app, 0);
+        function closeDrawer(obj, app)
+            % Collapse drawer to 28px (handle only)
+            obj.setDrawerToWidth(app, 28);
         end
 
         function setDrawerToWidth(obj, app, targetWidth)
@@ -25,27 +25,22 @@ classdef DrawerController < handle
                 return;
             end
 
-            targetWidth = max(0, double(targetWidth));
+            targetWidth = max(28, double(targetWidth));  % Minimum 28px for handle
 
-            % Clear any existing timers for safety
+            % Clear any delayed callbacks from previous resize attempts
             obj.clearDrawerTimer(app);
 
-            % Suspend graphics updates to prevent visible bouncing
-            drawnow;  % Process pending updates first
-
-            % Instantly set drawer to target width
+            % Set drawer to target width
             obj.setDrawerWidth(app, targetWidth);
 
-            % Force single clean layout update at final size
-            drawnow;
-
-            % Only populate drawer content after axes have reached proper size
-            if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
-                % Ensure drawer axes are ready before populating to avoid cramped first draw
-                conditionFcn = @() app.DrawerWidth > 0;
-                callbackFcn = @() obj.populateDrawer(app, app.DrawerCurrentCaseId);
-                obj.executeWhenAxesReady(app, app.DrawerHistogramAxes, 220, 100, ...
-                    'DrawerTimer', callbackFcn, conditionFcn);
+            % Populate drawer content when expanded (axes remain fixed width)
+            if targetWidth > 28 && ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
+                try
+                    obj.populateDrawer(app, app.DrawerCurrentCaseId);
+                catch ME
+                    warning('DrawerController:PopulateError', 'Error populating drawer: %s', ME.message);
+                    fprintf('Full error:\n%s\n', getReport(ME));
+                end
             end
         end
 
@@ -54,9 +49,10 @@ classdef DrawerController < handle
                 return;
             end
 
-            widthValue = max(0, double(widthValue));
+            widthValue = max(28, double(widthValue));  % Minimum 28px for handle
             app.DrawerWidth = widthValue;
 
+            % Update MiddleLayout column width (drawer total width)
             widths = app.MiddleLayout.ColumnWidth;
             if numel(widths) < 3
                 widths = {370, '1x', widthValue};
@@ -64,6 +60,22 @@ classdef DrawerController < handle
                 widths{3} = widthValue;
             end
             app.MiddleLayout.ColumnWidth = widths;
+
+            % DrawerLayout column 2 stays fixed at 400px always; clipping hides content when collapsed
+
+            % Force layout update to keep handle aligned
+            drawnow;
+
+            % Update handle button appearance
+            if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
+                if widthValue > 28
+                    app.DrawerHandleButton.Text = '▶';
+                    app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
+                else
+                    app.DrawerHandleButton.Text = '◀';
+                    app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+                end
+            end
         end
 
         function populateDrawer(obj, app, caseId)
@@ -166,7 +178,7 @@ classdef DrawerController < handle
                 'FontSize', 10);
             app.DrawerHistogramAxes.XLim = [0 1];
             app.DrawerHistogramAxes.YLim = [0 1];
-            app.DrawerHistogramAxes.Color = [0 0 0];
+            app.DrawerHistogramAxes.Color = app.UIFigure.Color;
             app.DrawerHistogramAxes.XTick = [];
             app.DrawerHistogramAxes.YTick = [];
             app.DrawerHistogramAxes.Box = 'off';

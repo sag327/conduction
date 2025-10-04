@@ -31,9 +31,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CanvasAnalyzeLayout         matlab.ui.container.GridLayout
         
         Drawer                      matlab.ui.container.Panel
+        DrawerHandleButton          matlab.ui.control.Button
         DrawerLayout                matlab.ui.container.GridLayout
         DrawerHeaderLabel           matlab.ui.control.Label
-        DrawerCloseBtn              matlab.ui.control.Button
         DrawerInspectorTitle        matlab.ui.control.Label
         DrawerInspectorGrid         matlab.ui.container.GridLayout
         DrawerCaseValueLabel        matlab.ui.control.Label
@@ -164,7 +164,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Timer to refresh actual time indicator
         DrawerTimer timer = timer.empty
-        DrawerWidth double = 0
+        DrawerWidth double = 28  % Starts collapsed (28px = handle only)
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
@@ -474,52 +474,65 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};  % CASE-LOCKING: Added row for lock toggle
-            app.DrawerLayout.ColumnWidth = {'1x'};
-            app.DrawerLayout.Padding = [16 18 16 18];
-            app.DrawerLayout.RowSpacing = 12;
+            app.DrawerLayout.RowHeight = {'1x', 60, '1x'};  % Three rows: top spacer, button, bottom spacer
+            app.DrawerLayout.ColumnWidth = {28, 400};  % Column 1: handle (28px), Column 2: content (fixed 400px)
+            app.DrawerLayout.Padding = [0 0 0 0];
+            app.DrawerLayout.RowSpacing = 0;
             app.DrawerLayout.ColumnSpacing = 0;
             app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
 
-            headerLayout = uigridlayout(app.DrawerLayout);
-            headerLayout.Layout.Row = 1;
-            headerLayout.Layout.Column = 1;
-            headerLayout.RowHeight = {'fit'};
-            headerLayout.ColumnWidth = {'1x', 'fit'};
-            headerLayout.ColumnSpacing = 12;
-            headerLayout.Padding = [0 0 0 0];
-            headerLayout.BackgroundColor = app.Drawer.BackgroundColor;
+            % Create handle button in column 1, centered vertically
+            app.DrawerHandleButton = uibutton(app.DrawerLayout, 'push');
+            app.DrawerHandleButton.Layout.Row = 2;  % Middle row (centered)
+            app.DrawerHandleButton.Layout.Column = 1;
+            app.DrawerHandleButton.Text = '◀';
+            app.DrawerHandleButton.FontSize = 14;
+            app.DrawerHandleButton.FontWeight = 'normal';
+            app.DrawerHandleButton.BackgroundColor = [0.2 0.2 0.2];
+            app.DrawerHandleButton.FontColor = [0.6 0.6 0.6];
+            app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
+            app.DrawerHandleButton.Tooltip = {'Show Inspector'};
 
-            app.DrawerHeaderLabel = uilabel(headerLayout);
-            app.DrawerHeaderLabel.Text = 'Case Inspector';
+            % Create content panel in column 2 with border
+            contentPanel = uipanel(app.DrawerLayout);
+            contentPanel.Layout.Row = [1 3];  % Span all rows
+            contentPanel.Layout.Column = 2;
+            contentPanel.BackgroundColor = app.Drawer.BackgroundColor;
+            contentPanel.BorderType = 'line';
+
+            % Create content grid inside the panel
+            contentGrid = uigridlayout(contentPanel);
+            contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+            contentGrid.ColumnWidth = {'1x'};
+            contentGrid.Padding = [16 18 16 18];
+            contentGrid.RowSpacing = 12;
+            contentGrid.ColumnSpacing = 0;
+            contentGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+            app.DrawerHeaderLabel = uilabel(contentGrid);
+            app.DrawerHeaderLabel.Text = 'Inspector';
             app.DrawerHeaderLabel.FontSize = 16;
             app.DrawerHeaderLabel.FontWeight = 'bold';
             app.DrawerHeaderLabel.FontColor = [1 1 1];
             app.DrawerHeaderLabel.Layout.Row = 1;
             app.DrawerHeaderLabel.Layout.Column = 1;
 
-            app.DrawerCloseBtn = uibutton(headerLayout, 'push');
-            app.DrawerCloseBtn.Text = 'Close';
-            app.DrawerCloseBtn.Layout.Row = 1;
-            app.DrawerCloseBtn.Layout.Column = 2;
-            app.DrawerCloseBtn.ButtonPushedFcn = createCallbackFcn(app, @DrawerCloseButtonPushed, true);
-
-            app.DrawerInspectorTitle = uilabel(app.DrawerLayout);
-            app.DrawerInspectorTitle.Text = 'Inspector';
+            app.DrawerInspectorTitle = uilabel(contentGrid);
+            app.DrawerInspectorTitle.Text = 'Case Details';
             app.DrawerInspectorTitle.FontWeight = 'bold';
             app.DrawerInspectorTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerInspectorTitle.Layout.Row = 2;
             app.DrawerInspectorTitle.Layout.Column = 1;
 
             % CASE-LOCKING: Lock toggle button (at top of inspector section)
-            app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
+            app.DrawerLockToggle = uicheckbox(contentGrid);
             app.DrawerLockToggle.Text = 'Lock case time';
             app.DrawerLockToggle.FontColor = [1 0 0];  % Red color to match outline
             app.DrawerLockToggle.Layout.Row = 3;
             app.DrawerLockToggle.Layout.Column = 1;
             app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
 
-            app.DrawerInspectorGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerInspectorGrid = uigridlayout(contentGrid);
             app.DrawerInspectorGrid.Layout.Row = 4;  % CASE-LOCKING: Moved from row 3
             app.DrawerInspectorGrid.Layout.Column = 1;
             app.DrawerInspectorGrid.RowHeight = repmat({'fit'}, 1, 6);
@@ -536,15 +549,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
 
-            % Optimization Parameters Section
-            app.DrawerOptimizationTitle = uilabel(app.DrawerLayout);
-            app.DrawerOptimizationTitle.Text = 'Optimization Parameters';
+            % Optimization Details Section
+            app.DrawerOptimizationTitle = uilabel(contentGrid);
+            app.DrawerOptimizationTitle.Text = 'Optimization Details';
             app.DrawerOptimizationTitle.FontWeight = 'bold';
             app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerOptimizationTitle.Layout.Row = 5;  % CASE-LOCKING: Updated from row 4
             app.DrawerOptimizationTitle.Layout.Column = 1;
 
-            app.DrawerOptimizationGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerOptimizationGrid = uigridlayout(contentGrid);
             app.DrawerOptimizationGrid.Layout.Row = 6;  % CASE-LOCKING: Updated from row 5
             app.DrawerOptimizationGrid.Layout.Column = 1;
             app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
@@ -558,17 +571,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerOptimizationRow(2, 'Labs', 'DrawerLabsValueLabel');
             app.createDrawerOptimizationRow(3, 'Timings', 'DrawerTimingsValueLabel');
 
-            app.DrawerHistogramTitle = uilabel(app.DrawerLayout);
+            app.DrawerHistogramTitle = uilabel(contentGrid);
             app.DrawerHistogramTitle.Text = 'Historical Durations';
             app.DrawerHistogramTitle.FontWeight = 'bold';
             app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerHistogramTitle.Layout.Row = 7;  % CASE-LOCKING: Updated from row 6
             app.DrawerHistogramTitle.Layout.Column = 1;
 
-            app.DrawerHistogramPanel = uipanel(app.DrawerLayout);
+            app.DrawerHistogramPanel = uipanel(contentGrid);
             app.DrawerHistogramPanel.Layout.Row = 8;  % CASE-LOCKING: Updated from row 7
             app.DrawerHistogramPanel.Layout.Column = 1;
-            app.DrawerHistogramPanel.BackgroundColor = [0.1 0.1 0.1];
+            app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
             app.DrawerHistogramPanel.BorderType = 'none';
 
             % Create axes with fixed height but full width
@@ -579,7 +592,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramAxes.Interactions = [];
             disableDefaultInteractivity(app.DrawerHistogramAxes);
 
-            app.DrawerController.setDrawerWidth(app, 0);
+            % Clear any lingering callbacks from previous attempts
+            app.DrawerHistogramPanel.SizeChangedFcn = [];
+
+            % Start with drawer collapsed (28px showing handle only)
+            app.DrawerController.setDrawerWidth(app, 28);
         end
 
         function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
@@ -1443,8 +1460,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.executeOptimization(app);
         end
 
-        function DrawerCloseButtonPushed(app, ~)
-            app.DrawerController.closeDrawer(app);
+        function DrawerHandleButtonPushed(app, ~)
+            if app.DrawerWidth > 28
+                app.DrawerController.closeDrawer(app);
+            else
+                app.DrawerController.openDrawer(app, app.DrawerCurrentCaseId);
+            end
         end
 
         function DrawerLockToggleChanged(app, event)
