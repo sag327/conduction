@@ -27,13 +27,15 @@ classdef DrawerController < handle
 
             targetWidth = max(28, double(targetWidth));  % Minimum 28px for handle
 
+            % Clear any delayed callbacks from previous resize attempts
+            obj.clearDrawerTimer(app);
+
             % Set drawer to target width
             obj.setDrawerWidth(app, targetWidth);
 
-            % Populate drawer content when expanded (axes is always full size now)
+            % Populate drawer content when expanded (axes remain fixed width)
             if targetWidth > 28 && ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
                 try
-                    % Axes is always 400px, just populate it directly
                     obj.populateDrawer(app, app.DrawerCurrentCaseId);
                 catch ME
                     warning('DrawerController:PopulateError', 'Error populating drawer: %s', ME.message);
@@ -59,12 +61,9 @@ classdef DrawerController < handle
             end
             app.MiddleLayout.ColumnWidth = widths;
 
-            % DrawerLayout column 2 stays fixed at 400px always
-            % When drawer is 28px, content is clipped (not visible)
-            % When drawer is 428px, content is fully visible
-            % This means axes never changes size - always 400px!
+            % DrawerLayout column 2 stays fixed at 400px always; clipping hides content when collapsed
 
-            % Force layout update
+            % Force layout update to keep handle aligned
             drawnow;
 
             % Update handle button appearance
@@ -80,11 +79,6 @@ classdef DrawerController < handle
         end
 
         function populateDrawer(obj, app, caseId)
-            % Safety: don't populate if GUI isn't fully initialized
-            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
-                return;
-            end
-
             if isempty(app.Drawer) || ~isvalid(app.Drawer)
                 return;
             end
@@ -92,7 +86,7 @@ classdef DrawerController < handle
                 return;
             end
 
-            if nargin < 3 || isempty(caseId)
+            if nargin < 3
                 caseId = app.DrawerCurrentCaseId;
             end
 
@@ -266,7 +260,8 @@ classdef DrawerController < handle
 
             % Re-render schedule to show lock state change
             if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+                scheduleToRender = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
             end
         end
 
