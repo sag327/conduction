@@ -458,12 +458,28 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerLayout.ColumnSpacing = 0;
             app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
 
-            % Create handle button in column 1
-            app.DrawerHandleButton = uibutton(app.DrawerLayout, 'push');
-            app.DrawerHandleButton.Layout.Row = 1;
-            app.DrawerHandleButton.Layout.Column = 1;
+            % Create handle panel in column 1
+            handlePanel = uipanel(app.DrawerLayout);
+            handlePanel.Layout.Row = 1;
+            handlePanel.Layout.Column = 1;
+            handlePanel.BackgroundColor = app.Drawer.BackgroundColor;
+            handlePanel.BorderType = 'none';
+
+            % Create handle grid to center button vertically and position left
+            handleGrid = uigridlayout(handlePanel);
+            handleGrid.RowHeight = {'1x', 100, '1x'};  % Center row with fixed 100px height
+            handleGrid.ColumnWidth = {24, '1x'};  % Narrow left column for button, rest empty
+            handleGrid.Padding = [0 0 0 0];
+            handleGrid.RowSpacing = 0;
+            handleGrid.ColumnSpacing = 0;
+            handleGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+            % Create handle button in centered row, left column
+            app.DrawerHandleButton = uibutton(handleGrid, 'push');
+            app.DrawerHandleButton.Layout.Row = 2;  % Middle row
+            app.DrawerHandleButton.Layout.Column = 1;  % Left column
             app.DrawerHandleButton.Text = '◀';
-            app.DrawerHandleButton.FontSize = 18;
+            app.DrawerHandleButton.FontSize = 20;
             app.DrawerHandleButton.FontWeight = 'bold';
             app.DrawerHandleButton.BackgroundColor = [0.15 0.15 0.15];
             app.DrawerHandleButton.FontColor = [0.8 0.8 0.8];
@@ -1059,6 +1075,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Set selected case and re-render to show highlight
             app.SelectedCaseId = string(caseId);
 
+            % Store case ID for drawer (but don't auto-open)
+            app.DrawerCurrentCaseId = string(caseId);
+
             % Highlight corresponding row in cases table
             caseIndex = str2double(caseId);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
@@ -1070,7 +1089,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
             end
 
-            app.DrawerController.openDrawer(app, caseId);
+            % If drawer is already open, populate it with the new case
+            if app.DrawerWidth > 40
+                app.DrawerController.populateDrawer(app, caseId);
+            end
         end
 
         function onScheduleBackgroundClicked(app)
