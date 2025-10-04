@@ -14,6 +14,7 @@ classdef SchedulingOptions
         PrioritizeOutpatient (1,1) logical = true
         OperatorAvailability containers.Map = containers.Map('KeyType','char','ValueType','double')
         LockedCaseConstraints struct = struct([])  % Locked case time windows and assignments
+        AvailableLabs double = double.empty(1, 0)
         Verbose (1,1) logical = true
         TimeStep (1,1) double {mustBePositive, mustBeFinite} = 10
     end
@@ -62,6 +63,7 @@ classdef SchedulingOptions
             addParameter(parser, 'OperatorAvailability', containers.Map('KeyType','char','ValueType','double'), ...
                 @(x) isa(x, 'containers.Map'));
             addParameter(parser, 'LockedCaseConstraints', struct([]), @isstruct);
+            addParameter(parser, 'AvailableLabs', [], @(x) isnumeric(x) && isvector(x));
             addParameter(parser, 'Verbose', conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE, @islogical);
             addParameter(parser, 'TimeStep', conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP, ...
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
@@ -80,6 +82,7 @@ classdef SchedulingOptions
                 results.PrioritizeOutpatient, ...
                 results.OperatorAvailability, ...
                 results.LockedCaseConstraints, ...
+                results.AvailableLabs, ...
                 results.Verbose, ...
                 results.TimeStep);
         end
@@ -88,7 +91,7 @@ classdef SchedulingOptions
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
                 maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
-                lockedCaseConstraints, verbose, timeStep)
+                lockedCaseConstraints, availableLabs, verbose, timeStep)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -101,6 +104,7 @@ classdef SchedulingOptions
                 prioritizeOutpatient = conduction.scheduling.SchedulingOptions.DEFAULT_PRIORITIZE_OUTPATIENT;
                 operatorAvailability = containers.Map('KeyType','char','ValueType','double');
                 lockedCaseConstraints = struct([]);
+                availableLabs = [];
                 verbose = conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE;
                 timeStep = conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP;
             end
@@ -127,6 +131,7 @@ classdef SchedulingOptions
             obj.PrioritizeOutpatient = prioritizeOutpatient;
             obj.OperatorAvailability = operatorAvailability;
             obj.LockedCaseConstraints = lockedCaseConstraints;
+            obj.AvailableLabs = conduction.scheduling.SchedulingOptions.normalizeAvailableLabs(availableLabs, numLabs);
             obj.Verbose = verbose;
             obj.TimeStep = timeStep;
         end
@@ -151,6 +156,7 @@ classdef SchedulingOptions
                 'PrioritizeOutpatient', obj.PrioritizeOutpatient, ...
                 'OperatorAvailability', obj.OperatorAvailability, ...
                 'LockedCaseConstraints', obj.LockedCaseConstraints, ...
+                'AvailableLabs', obj.AvailableLabs, ...
                 'Verbose', obj.Verbose, ...
                 'TimeStep', obj.TimeStep);
         end
@@ -190,6 +196,19 @@ classdef SchedulingOptions
                     'Unsupported case filter: %s', cand);
             end
             filter = conduction.scheduling.SchedulingOptions.VALID_CASE_FILTERS(matches);
+        end
+
+        function labs = normalizeAvailableLabs(candidate, numLabs)
+            if isempty(candidate)
+                labs = 1:numLabs;
+                return;
+            end
+
+            labs = unique(double(candidate(:)'));
+            if any(~isfinite(labs)) || any(labs < 1) || any(labs > numLabs)
+                error('SchedulingOptions:InvalidAvailableLabs', ...
+                    'Available labs must be integers between 1 and %d.', numLabs);
+            end
         end
 
         function pairs = applyOverrides(pairs, varargin)

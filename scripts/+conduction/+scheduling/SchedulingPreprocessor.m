@@ -63,6 +63,34 @@ classdef SchedulingPreprocessor
             prepared.caseProcTimes = procTimes;
             prepared.casePostTimes = postTimes;
             prepared.casePriorities = priorities;
+            availableLabs = options.AvailableLabs;
+            if isempty(availableLabs)
+                availableLabs = 1:numLabs;
+            else
+                availableLabs = intersect(availableLabs(:)', 1:numLabs, 'stable');
+            end
+
+            closedLabsMask = true(1, numLabs);
+            closedLabsMask(availableLabs) = false;
+
+            if any(closedLabsMask)
+                labPreferences(:, closedLabsMask) = 0;
+            end
+
+            lockedIndices = find(~isnan(lockedLabs));
+            for idx = lockedIndices(:)'
+                lockedLab = lockedLabs(idx);
+                if lockedLab >= 1 && lockedLab <= numLabs
+                    labPreferences(idx, :) = 0;
+                    labPreferences(idx, lockedLab) = 1;
+                end
+            end
+
+            zeroPreferenceRows = find(sum(labPreferences, 2) == 0 & isnan(lockedLabs));
+            if ~isempty(zeroPreferenceRows)
+                labPreferences(zeroPreferenceRows, availableLabs) = 1;
+            end
+
             prepared.labPreferences = labPreferences;
             prepared.operatorAvailability = operatorAvailability;
 
@@ -70,6 +98,8 @@ classdef SchedulingPreprocessor
             prepared.lockedCaseMap = lockedCaseMap;
             prepared.lockedStartTimes = lockedStartTimes;
             prepared.lockedLabs = lockedLabs;
+            prepared.availableLabs = availableLabs;
+            prepared.closedLabs = find(closedLabsMask);
         end
     end
 

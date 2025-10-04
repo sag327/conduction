@@ -101,6 +101,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptMetricDropDown           matlab.ui.control.DropDown
         OptLabsLabel                matlab.ui.control.Label
         OptLabsSpinner              matlab.ui.control.Spinner
+        OptAvailableLabsLabel       matlab.ui.control.Label
+        OptAvailableLabsList        matlab.ui.control.ListBox
         OptFilterLabel              matlab.ui.control.Label
         OptFilterDropDown           matlab.ui.control.DropDown
         OptDefaultStatusLabel       matlab.ui.control.Label
@@ -151,6 +153,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsSyncingTestingToggle logical = false
         TestingAdmissionDefault string = "outpatient"
         LabIds double = 1:6
+        AvailableLabIds double = double.empty(1, 0)  % Labs open for re-optimization assignments
         Opts struct = struct()
         OptimizedSchedule conduction.DailySchedule
         OptimizationOutcome struct = struct()
@@ -820,7 +823,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function optimizationGrid = configureOptimizationTabLayout(app)
             optimizationGrid = uigridlayout(app.TabOptimization);
             optimizationGrid.ColumnWidth = {140, '1x'};
-            optimizationGrid.RowHeight = {24, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 'fit', '1x'};
+            optimizationGrid.RowHeight = {24, 32, 90, 32, 32, 32, 32, 32, 32, 32, 32, 32, 'fit', '1x'};
             optimizationGrid.Padding = [10 10 10 10];
             optimizationGrid.RowSpacing = 6;
             optimizationGrid.ColumnSpacing = 8;
@@ -890,85 +893,112 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptLabsSpinner.Layout.Column = 2;
             app.OptLabsSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
+            % Available labs selection
+            app.OptAvailableLabsLabel = uilabel(optimizationGrid);
+            app.OptAvailableLabsLabel.Text = 'Available labs:';
+            app.OptAvailableLabsLabel.Layout.Row = 3;
+            app.OptAvailableLabsLabel.Layout.Column = 1;
+
+            app.OptAvailableLabsList = uilistbox(optimizationGrid);
+            app.OptAvailableLabsList.Multiselect = 'on';
+            app.OptAvailableLabsList.Layout.Row = 3;
+            app.OptAvailableLabsList.Layout.Column = 2;
+            app.OptAvailableLabsList.FontSize = 12;
+            app.OptAvailableLabsList.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+
+            initialLabIds = app.LabIds;
+            if isempty(initialLabIds)
+                initialLabIds = 1:max(1, app.Opts.labs);
+            end
+            if isempty(app.AvailableLabIds)
+                app.AvailableLabIds = initialLabIds;
+            end
+            app.OptAvailableLabsList.Items = arrayfun(@(id) sprintf('Lab %d', id), initialLabIds, 'UniformOutput', false);
+            initialSelection = intersect(app.AvailableLabIds, initialLabIds, 'stable');
+            if isempty(initialSelection)
+                initialSelection = initialLabIds;
+            end
+            app.OptAvailableLabsList.Value = arrayfun(@(id) sprintf('Lab %d', id), initialSelection, 'UniformOutput', false);
+
             % Case filter
             app.OptFilterLabel = uilabel(optimizationGrid);
             app.OptFilterLabel.Text = 'Case filter:';
-            app.OptFilterLabel.Layout.Row = 3;
+            app.OptFilterLabel.Layout.Row = 4;
             app.OptFilterLabel.Layout.Column = 1;
             
             app.OptFilterDropDown = uidropdown(optimizationGrid);
             app.OptFilterDropDown.Items = {'all', 'outpatient', 'inpatient'};
             app.OptFilterDropDown.Value = char(app.Opts.caseFilter);
-            app.OptFilterDropDown.Layout.Row = 3;
+            app.OptFilterDropDown.Layout.Row = 4;
             app.OptFilterDropDown.Layout.Column = 2;
             app.OptFilterDropDown.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Default admission status
             app.OptDefaultStatusLabel = uilabel(optimizationGrid);
             app.OptDefaultStatusLabel.Text = 'Default status:';
-            app.OptDefaultStatusLabel.Layout.Row = 4;
+            app.OptDefaultStatusLabel.Layout.Row = 5;
             app.OptDefaultStatusLabel.Layout.Column = 1;
             
             app.OptDefaultStatusDropDown = uidropdown(optimizationGrid);
             app.OptDefaultStatusDropDown.Items = {'outpatient', 'inpatient'};
             app.OptDefaultStatusDropDown.Value = char(app.TestingAdmissionDefault);
-            app.OptDefaultStatusDropDown.Layout.Row = 4;
+            app.OptDefaultStatusDropDown.Layout.Row = 5;
             app.OptDefaultStatusDropDown.Layout.Column = 2;
             app.OptDefaultStatusDropDown.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Turnover time
             app.OptTurnoverLabel = uilabel(optimizationGrid);
             app.OptTurnoverLabel.Text = 'Turnover (minutes):';
-            app.OptTurnoverLabel.Layout.Row = 5;
+            app.OptTurnoverLabel.Layout.Row = 6;
             app.OptTurnoverLabel.Layout.Column = 1;
             
             app.OptTurnoverSpinner = uispinner(optimizationGrid);
             app.OptTurnoverSpinner.Limits = [0 240];
             app.OptTurnoverSpinner.Step = 5;
             app.OptTurnoverSpinner.Value = app.Opts.turnover;
-            app.OptTurnoverSpinner.Layout.Row = 5;
+            app.OptTurnoverSpinner.Layout.Row = 6;
             app.OptTurnoverSpinner.Layout.Column = 2;
             app.OptTurnoverSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Setup time
             app.OptSetupLabel = uilabel(optimizationGrid);
             app.OptSetupLabel.Text = 'Setup (minutes):';
-            app.OptSetupLabel.Layout.Row = 6;
+            app.OptSetupLabel.Layout.Row = 7;
             app.OptSetupLabel.Layout.Column = 1;
             
             app.OptSetupSpinner = uispinner(optimizationGrid);
             app.OptSetupSpinner.Limits = [0 120];
             app.OptSetupSpinner.Step = 5;
             app.OptSetupSpinner.Value = app.Opts.setup;
-            app.OptSetupSpinner.Layout.Row = 6;
+            app.OptSetupSpinner.Layout.Row = 7;
             app.OptSetupSpinner.Layout.Column = 2;
             app.OptSetupSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Post-procedure time
             app.OptPostLabel = uilabel(optimizationGrid);
             app.OptPostLabel.Text = 'Post-procedure (min):';
-            app.OptPostLabel.Layout.Row = 7;
+            app.OptPostLabel.Layout.Row = 8;
             app.OptPostLabel.Layout.Column = 1;
             
             app.OptPostSpinner = uispinner(optimizationGrid);
             app.OptPostSpinner.Limits = [0 120];
             app.OptPostSpinner.Step = 5;
             app.OptPostSpinner.Value = app.Opts.post;
-            app.OptPostSpinner.Layout.Row = 7;
+            app.OptPostSpinner.Layout.Row = 8;
             app.OptPostSpinner.Layout.Column = 2;
             app.OptPostSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Max operator time
             app.OptMaxOperatorLabel = uilabel(optimizationGrid);
             app.OptMaxOperatorLabel.Text = 'Max operator (min):';
-            app.OptMaxOperatorLabel.Layout.Row = 8;
+            app.OptMaxOperatorLabel.Layout.Row = 9;
             app.OptMaxOperatorLabel.Layout.Column = 1;
             
             app.OptMaxOperatorSpinner = uispinner(optimizationGrid);
             app.OptMaxOperatorSpinner.Limits = [60 1440];
             app.OptMaxOperatorSpinner.Step = 15;
             app.OptMaxOperatorSpinner.Value = app.Opts.maxOpMin;
-            app.OptMaxOperatorSpinner.Layout.Row = 8;
+            app.OptMaxOperatorSpinner.Layout.Row = 9;
             app.OptMaxOperatorSpinner.Layout.Column = 2;
             app.OptMaxOperatorSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
@@ -976,7 +1006,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptEnforceMidnightCheckBox = uicheckbox(optimizationGrid);
             app.OptEnforceMidnightCheckBox.Text = 'Enforce midnight cutoff';
             app.OptEnforceMidnightCheckBox.Value = logical(app.Opts.enforceMidnight);
-            app.OptEnforceMidnightCheckBox.Layout.Row = 9;
+            app.OptEnforceMidnightCheckBox.Layout.Row = 10;
             app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
             app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
@@ -984,7 +1014,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptPrioritizeOutpatientCheckBox = uicheckbox(optimizationGrid);
             app.OptPrioritizeOutpatientCheckBox.Text = 'Prioritize outpatient';
             app.OptPrioritizeOutpatientCheckBox.Value = logical(app.Opts.prioritizeOutpt);
-            app.OptPrioritizeOutpatientCheckBox.Layout.Row = 10;
+            app.OptPrioritizeOutpatientCheckBox.Layout.Row = 11;
             app.OptPrioritizeOutpatientCheckBox.Layout.Column = [1 2];
             app.OptPrioritizeOutpatientCheckBox.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
         end
@@ -1584,6 +1614,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.LabIds = 1:max(1, app.Opts.labs);
+
+            % Ensure available lab list aligns with configured labs
+            if isempty(app.AvailableLabIds)
+                app.AvailableLabIds = app.LabIds;
+            else
+                sharedLabs = intersect(app.AvailableLabIds, app.LabIds, 'stable');
+                if isempty(sharedLabs)
+                    app.AvailableLabIds = app.LabIds;
+                else
+                    app.AvailableLabIds = sharedLabs;
+                end
+            end
 
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.OptimizationOutcome = struct();

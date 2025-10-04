@@ -13,6 +13,11 @@ classdef OptimizationController < handle
                 return;
             end
 
+            if isempty(app.AvailableLabIds)
+                uialert(app.UIFigure, 'Select at least one available lab before re-optimizing.', 'Optimization');
+                return;
+            end
+
             defaults = struct( ...
                 'SetupMinutes', app.Opts.setup, ...
                 'PostMinutes', app.Opts.post, ...
@@ -221,6 +226,7 @@ classdef OptimizationController < handle
                 'TurnoverTime', app.Opts.turnover, ...
                 'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
                 'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt), ...
+                'AvailableLabs', app.AvailableLabIds, ...
                 'LockedCaseConstraints', lockedConstraints);
         end
 
@@ -235,7 +241,7 @@ classdef OptimizationController < handle
                 'WindowStyle', 'modal');
 
             grid = uigridlayout(dlg);
-            grid.RowHeight = {24, 32, 32, 32, 32, 32, 32, 32, 32, 40};
+            grid.RowHeight = {24, 32, 90, 32, 32, 32, 32, 32, 32, 32, 40};
             grid.ColumnWidth = {160, '1x'};
             grid.Padding = [10 10 10 10];
             grid.RowSpacing = 6;
@@ -255,48 +261,54 @@ classdef OptimizationController < handle
                 'Value', app.Opts.labs);
             labSpinner.Layout.Row = 2; labSpinner.Layout.Column = 2;
 
+            availableLabsLabel = uilabel(grid, 'Text', 'Available labs:', 'HorizontalAlignment', 'left');
+            availableLabsLabel.Layout.Row = 3; availableLabsLabel.Layout.Column = 1;
+            availableLabsList = uilistbox(grid, 'Multiselect', 'on');
+            availableLabsList.Layout.Row = 3; availableLabsList.Layout.Column = 2;
+            availableLabsList.FontSize = 12;
+
             filterLabel = uilabel(grid, 'Text', 'Case filter:', 'HorizontalAlignment', 'left');
-            filterLabel.Layout.Row = 3; filterLabel.Layout.Column = 1;
+            filterLabel.Layout.Row = 4; filterLabel.Layout.Column = 1;
             filterDropDown = uidropdown(grid, ...
                 'Items', {'all', 'outpatient', 'inpatient'}, ...
                 'Value', char(app.Opts.caseFilter));
-            filterDropDown.Layout.Row = 3; filterDropDown.Layout.Column = 2;
+            filterDropDown.Layout.Row = 4; filterDropDown.Layout.Column = 2;
 
             defaultStatusLabel = uilabel(grid, ...
                 'Text', 'Default status (if unlisted):', ...
                 'HorizontalAlignment', 'left');
-            defaultStatusLabel.Layout.Row = 4; defaultStatusLabel.Layout.Column = 1;
+            defaultStatusLabel.Layout.Row = 5; defaultStatusLabel.Layout.Column = 1;
             defaultStatusDropDown = uidropdown(grid, ...
                 'Items', {'outpatient', 'inpatient'}, ...
                 'Value', char(app.TestingAdmissionDefault));
-            defaultStatusDropDown.Layout.Row = 4; defaultStatusDropDown.Layout.Column = 2;
+            defaultStatusDropDown.Layout.Row = 5; defaultStatusDropDown.Layout.Column = 2;
 
             turnoverLabel = uilabel(grid, 'Text', 'Turnover (minutes):', 'HorizontalAlignment', 'left');
-            turnoverLabel.Layout.Row = 5; turnoverLabel.Layout.Column = 1;
+            turnoverLabel.Layout.Row = 6; turnoverLabel.Layout.Column = 1;
             turnoverSpinner = uispinner(grid, 'Limits', [0 240], ...
                 'Step', 5, 'Value', app.Opts.turnover);
-            turnoverSpinner.Layout.Row = 5; turnoverSpinner.Layout.Column = 2;
+            turnoverSpinner.Layout.Row = 6; turnoverSpinner.Layout.Column = 2;
 
             setupLabel = uilabel(grid, 'Text', 'Setup (minutes):', 'HorizontalAlignment', 'left');
-            setupLabel.Layout.Row = 6; setupLabel.Layout.Column = 1;
+            setupLabel.Layout.Row = 7; setupLabel.Layout.Column = 1;
             setupSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.Opts.setup);
-            setupSpinner.Layout.Row = 6; setupSpinner.Layout.Column = 2;
+            setupSpinner.Layout.Row = 7; setupSpinner.Layout.Column = 2;
 
             postLabel = uilabel(grid, 'Text', 'Post-procedure (minutes):', 'HorizontalAlignment', 'left');
-            postLabel.Layout.Row = 7; postLabel.Layout.Column = 1;
+            postLabel.Layout.Row = 8; postLabel.Layout.Column = 1;
             postSpinner = uispinner(grid, 'Limits', [0 120], 'Step', 5, ...
                 'Value', app.Opts.post);
-            postSpinner.Layout.Row = 7; postSpinner.Layout.Column = 2;
+            postSpinner.Layout.Row = 8; postSpinner.Layout.Column = 2;
 
             maxOperatorLabel = uilabel(grid, 'Text', 'Max operator time (minutes):', 'HorizontalAlignment', 'left');
-            maxOperatorLabel.Layout.Row = 8; maxOperatorLabel.Layout.Column = 1;
+            maxOperatorLabel.Layout.Row = 9; maxOperatorLabel.Layout.Column = 1;
             maxOperatorSpinner = uispinner(grid, 'Limits', [60 1440], 'Step', 15, ...
                 'Value', app.Opts.maxOpMin);
-            maxOperatorSpinner.Layout.Row = 8; maxOperatorSpinner.Layout.Column = 2;
+            maxOperatorSpinner.Layout.Row = 9; maxOperatorSpinner.Layout.Column = 2;
 
             toggleGrid = uigridlayout(grid, [1 2]);
-            toggleGrid.Layout.Row = 9;
+            toggleGrid.Layout.Row = 10;
             toggleGrid.Layout.Column = [1 2];
             toggleGrid.ColumnWidth = {'1x', '1x'};
             toggleGrid.RowHeight = {32};
@@ -309,7 +321,7 @@ classdef OptimizationController < handle
                 'Value', logical(app.Opts.prioritizeOutpt));
 
             buttonGrid = uigridlayout(grid, [1 2]);
-            buttonGrid.Layout.Row = 10;
+            buttonGrid.Layout.Row = 11;
             buttonGrid.Layout.Column = [1 2];
             buttonGrid.ColumnWidth = {'1x', '1x'};
             buttonGrid.RowHeight = {30};
@@ -322,11 +334,19 @@ classdef OptimizationController < handle
             cancelButton.ButtonPushedFcn = @(~,~) close(dlg);
             saveButton.ButtonPushedFcn = @saveAndClose;
 
+            applyLabSelection(round(labSpinner.Value));
+            labSpinner.ValueChangedFcn = @(~,~) handleLabSpinnerChange();
+
             uiwait(dlg);
 
             function saveAndClose(~, ~)
                 try
                     numLabsValue = round(labSpinner.Value);
+                    selectedLabs = sort(unique(getSelectedLabs()));
+                    if isempty(selectedLabs)
+                        uialert(dlg, 'Select at least one available lab before saving.', 'Available Labs');
+                        return;
+                    end
                     newOpts = struct( ...
                         'turnover', turnoverSpinner.Value, ...
                         'setup', setupSpinner.Value, ...
@@ -342,6 +362,7 @@ classdef OptimizationController < handle
                     app.TestingAdmissionDefault = string(defaultStatusDropDown.Value);
 
                     app.LabIds = 1:max(1, numLabsValue);
+                    app.AvailableLabIds = selectedLabs;
                     app.refreshSpecificLabDropdown();
 
                     app.OptimizationController.updateOptimizationOptionsSummary(app);
@@ -350,6 +371,47 @@ classdef OptimizationController < handle
                     uialert(app.UIFigure, sprintf('Failed to apply options: %s', ME.message), 'Optimization Options');
                 end
                 close(dlg);
+            end
+
+            function handleLabSpinnerChange()
+                labSpinner.Value = round(labSpinner.Value);
+                applyLabSelection(labSpinner.Value);
+            end
+
+            function applyLabSelection(labCount)
+                labCount = max(1, round(labCount));
+                labIds = 1:labCount;
+                labLabels = arrayfun(@(id) sprintf('Lab %d', id), labIds, 'UniformOutput', false);
+                availableLabsList.Items = labLabels;
+
+                currentSelection = getSelectedLabs();
+                if isempty(currentSelection)
+                    currentSelection = app.AvailableLabIds;
+                end
+
+                selectedLabs = intersect(currentSelection, labIds, 'stable');
+                if isempty(selectedLabs)
+                    selectedLabs = labIds;
+                end
+
+                availableLabsList.Value = arrayfun(@(id) sprintf('Lab %d', id), selectedLabs, 'UniformOutput', false);
+            end
+
+            function selectedLabs = getSelectedLabs()
+                values = availableLabsList.Value;
+                if isempty(values)
+                    selectedLabs = [];
+                    return;
+                end
+
+                if iscell(values)
+                    tokens = regexp(values, '\\d+', 'match');
+                    numericVals = cellfun(@(t) str2double(t{1}), tokens);
+                    selectedLabs = numericVals(:)';
+                else
+                    token = regexp(values, '\\d+', 'match');
+                    selectedLabs = str2double(token{1});
+                end
             end
         end
 
@@ -379,9 +441,9 @@ classdef OptimizationController < handle
             obj.updateOptimizationStatus(app);
         end
 
-        function summary = getOptimizationOptionsSummary(~, app)
+        function summary = getOptimizationOptionsSummary(obj, app)
             if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
-                summary = 'Metric: operatorIdle | Labs: 6 | Turnover: 30 | Setup/Post: 15/15';
+                summary = 'Metric: operatorIdle | Labs: 6 (Active: all) | Turnover: 30 | Setup/Post: 15/15';
                 return;
             end
 
@@ -390,8 +452,9 @@ classdef OptimizationController < handle
             turnoverText = app.Opts.turnover;
             setupText = app.Opts.setup;
             postText = app.Opts.post;
-            summary = sprintf('Metric: %s | Labs: %d | Turnover: %d | Setup/Post: %d/%d', ...
-                metricText, round(labsCount), round(turnoverText), round(setupText), round(postText));
+            activeText = obj.formatAvailableLabs(app);
+            summary = sprintf('Metric: %s | Labs: %d (Active: %s) | Turnover: %d | Setup/Post: %d/%d', ...
+                metricText, round(labsCount), activeText, round(turnoverText), round(setupText), round(postText));
         end
 
         function updateOptimizationOptionsFromTab(obj, app)
@@ -402,6 +465,10 @@ classdef OptimizationController < handle
 
             try
                 numLabsValue = round(app.OptLabsSpinner.Value);
+                labIds = 1:max(1, numLabsValue);
+
+                selectedLabs = obj.parseAvailableLabsFromList(app, labIds);
+
                 newOpts = struct( ...
                     'turnover', app.OptTurnoverSpinner.Value, ...
                     'setup', app.OptSetupSpinner.Value, ...
@@ -416,7 +483,14 @@ classdef OptimizationController < handle
                 app.Opts = newOpts;
                 app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
 
-                app.LabIds = 1:max(1, numLabsValue);
+                app.LabIds = labIds;
+                app.AvailableLabIds = selectedLabs;
+
+                if ~isempty(app.OptAvailableLabsList) && isvalid(app.OptAvailableLabsList)
+                    app.OptAvailableLabsList.Items = arrayfun(@(id) sprintf('Lab %d', id), labIds, 'UniformOutput', false);
+                    app.OptAvailableLabsList.Value = arrayfun(@(id) sprintf('Lab %d', id), selectedLabs, 'UniformOutput', false);
+                end
+
                 app.refreshSpecificLabDropdown();
 
                 obj.updateOptimizationOptionsSummary(app);
@@ -426,7 +500,7 @@ classdef OptimizationController < handle
             end
         end
 
-        function updateDrawerOptimizationSection(~, app)
+        function updateDrawerOptimizationSection(obj, app)
             % Check if drawer optimization labels exist
             if isempty(app.DrawerMetricValueLabel) || ~isvalid(app.DrawerMetricValueLabel)
                 return;
@@ -435,7 +509,7 @@ classdef OptimizationController < handle
             % Get optimization parameters
             if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
                 app.DrawerController.setLabelText(app.DrawerMetricValueLabel, 'operatorIdle');
-                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, '6');
+                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, '6 (Active: all)');
                 app.DrawerController.setLabelText(app.DrawerTimingsValueLabel, 'Turn: 30 | Setup/Post: 15/15');
             else
                 metricText = char(string(app.Opts.metric));
@@ -443,12 +517,57 @@ classdef OptimizationController < handle
                 turnoverText = round(app.Opts.turnover);
                 setupText = round(app.Opts.setup);
                 postText = round(app.Opts.post);
+                activeText = obj.formatAvailableLabs(app);
 
                 app.DrawerController.setLabelText(app.DrawerMetricValueLabel, metricText);
-                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, sprintf('%d', labsCount));
+                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, sprintf('%d (Active: %s)', labsCount, activeText));
                 app.DrawerController.setLabelText(app.DrawerTimingsValueLabel, sprintf('Turn: %d | Setup/Post: %d/%d', ...
                     turnoverText, setupText, postText));
             end
+        end
+
+        function selectedLabs = parseAvailableLabsFromList(~, app, labIds)
+            if isempty(app.OptAvailableLabsList) || ~isvalid(app.OptAvailableLabsList)
+                selectedLabs = labIds;
+                return;
+            end
+
+            values = app.OptAvailableLabsList.Value;
+            if isempty(values)
+                selectedLabs = labIds;
+                return;
+            end
+
+            if iscell(values)
+                tokens = regexp(values, '\d+', 'match');
+                numericVals = cellfun(@(t) str2double(t{1}), tokens);
+                selectedLabsRaw = numericVals(:)';
+            else
+                token = regexp(values, '\d+', 'match');
+                selectedLabsRaw = str2double(token{1});
+            end
+
+            selectedLabs = intersect(selectedLabsRaw, labIds, 'stable');
+            if isempty(selectedLabs)
+                selectedLabs = labIds;
+            else
+                selectedLabs = sort(unique(selectedLabs));
+            end
+        end
+
+        function text = formatAvailableLabs(~, app)
+            if isempty(app.AvailableLabIds)
+                text = 'none';
+                return;
+            end
+
+            labIds = app.AvailableLabIds;
+            if numel(labIds) == numel(app.LabIds)
+                text = 'all';
+                return;
+            end
+
+            text = strjoin(arrayfun(@(id) sprintf('%d', id), labIds, 'UniformOutput', false), ',');
         end
 
         function showOptimizationPendingPlaceholder(~, app)

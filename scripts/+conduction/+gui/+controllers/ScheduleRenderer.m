@@ -3,7 +3,7 @@ classdef ScheduleRenderer < handle
 
     methods (Access = public)
 
-        function renderEmptySchedule(~, app, labNumbers)
+        function renderEmptySchedule(obj, app, labNumbers)
             % Display empty schedule with time grid and lab rows
             app.DrawerController.closeDrawer(app);
             app.DrawerCurrentCaseId = "";
@@ -49,6 +49,8 @@ classdef ScheduleRenderer < handle
 
             hold(ax, 'off');
 
+            obj.drawClosedLabOverlays(app);
+
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
@@ -57,7 +59,7 @@ classdef ScheduleRenderer < handle
             end
         end
 
-        function renderOptimizedSchedule(~, app, dailySchedule, metadata)
+        function renderOptimizedSchedule(obj, app, dailySchedule, metadata)
             if nargin < 4
                 metadata = struct();
             end
@@ -92,6 +94,8 @@ classdef ScheduleRenderer < handle
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime);  % REALTIME-SCHEDULING
+
+            obj.drawClosedLabOverlays(app);
 
             if app.DrawerWidth > 1 && strlength(app.DrawerCurrentCaseId) > 0
                 app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
@@ -495,6 +499,52 @@ classdef ScheduleRenderer < handle
 
             delete(findobj(ax, 'Tag', 'ActualTimeLine'));
             delete(findobj(ax, 'Tag', 'ActualTimeLabel'));
+        end
+
+        function drawClosedLabOverlays(~, app)
+            % Highlight labs that are marked as unavailable for new assignments
+            ax = app.ScheduleAxes;
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            delete(findobj(ax, 'Tag', 'ClosedLabOverlay'));
+
+            if isempty(app.LabIds) || isempty(app.AvailableLabIds)
+                return;
+            end
+
+            closedLabs = setdiff(app.LabIds, app.AvailableLabIds);
+            if isempty(closedLabs)
+                return;
+            end
+
+            yLimits = ylim(ax);
+            if numel(yLimits) ~= 2
+                return;
+            end
+
+            restoreHold = ~ishold(ax);
+            hold(ax, 'on');
+
+            topY = yLimits(1) + 0.5;
+            for labIdx = closedLabs(:)'
+                xLeft = labIdx - 0.5;
+                xRight = labIdx + 0.5;
+
+                patch(ax, [xLeft xRight xRight xLeft], [yLimits(1) yLimits(1) yLimits(2) yLimits(2)], ...
+                    [0.8 0.2 0.2], 'FaceAlpha', 0.08, 'EdgeColor', 'none', ...
+                    'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
+
+                text(ax, labIdx, topY, 'Closed', ...
+                    'Color', [0.85 0.4 0.4], 'FontWeight', 'bold', 'FontSize', 9, ...
+                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                    'Clipping', 'on', 'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
+            end
+
+            if restoreHold
+                hold(ax, 'off');
+            end
         end
 
     end
