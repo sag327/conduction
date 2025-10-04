@@ -383,6 +383,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
+            drawnow;
+            app.positionDrawerHandle();
         end
 
         function addGrid = configureAddTabLayout(app)
@@ -580,6 +582,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             disableDefaultInteractivity(app.DrawerHistogramAxes);
 
             app.DrawerController.setDrawerWidth(app, 0);
+
+            % Create overlay handle once drawer layout exists
+            if isempty(app.DrawerHandleShadow) || ~isvalid(app.DrawerHandleShadow)
+                app.DrawerHandleShadow = uipanel(app.UIFigure);
+                app.DrawerHandleShadow.BackgroundColor = [0.08 0.08 0.08];
+                app.DrawerHandleShadow.BorderType = 'none';
+                app.DrawerHandleShadow.Visible = 'off';
+            end
+
+            if isempty(app.DrawerHandleButton) || ~isvalid(app.DrawerHandleButton)
+                app.DrawerHandleButton = uibutton(app.UIFigure, 'push');
+                app.DrawerHandleButton.FontWeight = 'bold';
+                app.DrawerHandleButton.FontSize = 16;
+                app.DrawerHandleButton.BackgroundColor = [1 1 1];
+                app.DrawerHandleButton.FontColor = [0 0 0];
+                app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
+            end
+
+            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
+            app.Drawer.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
+            app.positionDrawerHandle();
         end
 
         function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
@@ -1365,19 +1388,32 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.IsPositioningDrawerHandle = false;
                 return;
             end
-            btnH = max(18, min(36, drawerHeight - 6));
+            btnH = max(20, min(40, drawerHeight - 12));
             btnW = max(24, app.DrawerHandleWidth);
-            x = drawerLeft - app.DrawerHandleOverlap;
-            y = drawerBottom + (drawerHeight - btnH)/2;
-            app.DrawerHandleButton.Position = [x, y, btnW, btnH];
+            btnX = drawerLeft - app.DrawerHandleOverlap;
+            btnY = drawerBottom + (drawerHeight - btnH)/2;
+
+            app.DrawerHandleButton.Position = [btnX, btnY, btnW, btnH];
             app.DrawerHandleButton.Visible = 'on';
             try, uistack(app.DrawerHandleButton, 'top'); catch, end
 
+            if app.DrawerWidth > 0
+                app.DrawerHandleButton.Text = '⟩';
+                app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
+            else
+                app.DrawerHandleButton.Text = '⟨';
+                app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+            end
+
             if ~isempty(app.DrawerHandleShadow) && isvalid(app.DrawerHandleShadow)
-                shW = 3; shH = max(0, drawerHeight - 10);
-                app.DrawerHandleShadow.Position = [drawerLeft - shW - 2, drawerBottom + 5, shW, shH];
-                app.DrawerHandleShadow.Visible = 'on';
-                try, uistack(app.DrawerHandleShadow, 'top'); catch, end
+                if app.DrawerWidth > 0
+                    shW = 3; shH = max(0, drawerHeight - 12);
+                    app.DrawerHandleShadow.Position = [drawerLeft - shW - 2, drawerBottom + 6, shW, shH];
+                    app.DrawerHandleShadow.Visible = 'on';
+                    try, uistack(app.DrawerHandleShadow, 'top'); catch, end
+                else
+                    app.DrawerHandleShadow.Visible = 'off';
+                end
             end
 
             app.IsPositioningDrawerHandle = false;
