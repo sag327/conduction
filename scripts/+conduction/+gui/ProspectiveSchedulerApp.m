@@ -28,7 +28,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CanvasAnalyzeLayout         matlab.ui.container.GridLayout
         
         Drawer                      matlab.ui.container.Panel
-        DrawerHandleShadow          matlab.ui.container.Panel
         DrawerHandleButton          matlab.ui.control.Button
         DrawerLayout                matlab.ui.container.GridLayout
         DrawerHeaderLabel           matlab.ui.control.Label
@@ -162,14 +161,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Refresh actual time indicator
         DrawerTimer timer = timer.empty
-        DrawerWidth double = 0
+        DrawerWidth double = 40  % Starts collapsed (40px = handle only)
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
-        DrawerHandleWidth double = 28  % Width of drawer handle button
-        DrawerHandleOverlap double = 12  % Overlap pixels into schedule area
-        IsPositioningDrawerHandle logical = false  % Guard to prevent redundant position updates
     end
 
     % Component initialization
@@ -225,7 +221,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
             app.MiddleLayout.RowHeight = {'1x','fit'};
-            app.MiddleLayout.ColumnWidth = {370, '1x', 0};
+            app.MiddleLayout.ColumnWidth = {370, '1x', 40};  % Drawer starts collapsed at 40px
             app.MiddleLayout.ColumnSpacing = 12;
             app.MiddleLayout.RowSpacing = 12;
             app.MiddleLayout.Padding = [0 0 0 0];
@@ -334,25 +330,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer.Visible = 'on';
             app.buildDrawerUI();
 
-            % Overlay drawer handle (sibling of drawer) so it can overlap border
-            app.DrawerHandleShadow = uipanel(app.UIFigure);
-            app.DrawerHandleShadow.BackgroundColor = [0.08 0.08 0.08];
-            app.DrawerHandleShadow.BorderType = 'none';
-            app.DrawerHandleShadow.Visible = 'off';
-
-            app.DrawerHandleButton = uibutton(app.UIFigure, 'push');
-            app.DrawerHandleButton.Text = '⟨';
-            app.DrawerHandleButton.FontWeight = 'bold';
-            app.DrawerHandleButton.FontSize = 16;
-            app.DrawerHandleButton.Tooltip = {'Show case details'};
-            app.DrawerHandleButton.BackgroundColor = [1 1 1];
-            app.DrawerHandleButton.FontColor = [0 0 0];
-            app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
-            try, uistack(app.DrawerHandleButton,'top'); uistack(app.DrawerHandleShadow,'top'); end
-            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
-            app.Drawer.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
-            app.positionDrawerHandle();
-
             % Add optimization options and status as caption below schedule
 
             % Bottom KPI bar
@@ -383,8 +360,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
-            drawnow;
-            app.positionDrawerHandle();
         end
 
         function addGrid = configureAddTabLayout(app)
@@ -476,14 +451,42 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};  % CASE-LOCKING: Added row for lock toggle
-            app.DrawerLayout.ColumnWidth = {'1x'};
-            app.DrawerLayout.Padding = [16 18 16 18];
-            app.DrawerLayout.RowSpacing = 12;
+            app.DrawerLayout.RowHeight = {'1x'};  % Single row spanning full height
+            app.DrawerLayout.ColumnWidth = {40, '1x'};  % Column 1: handle (40px), Column 2: content (flexible)
+            app.DrawerLayout.Padding = [0 0 0 0];
+            app.DrawerLayout.RowSpacing = 0;
             app.DrawerLayout.ColumnSpacing = 0;
             app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
 
-            headerLayout = uigridlayout(app.DrawerLayout);
+            % Create handle button in column 1
+            app.DrawerHandleButton = uibutton(app.DrawerLayout, 'push');
+            app.DrawerHandleButton.Layout.Row = 1;
+            app.DrawerHandleButton.Layout.Column = 1;
+            app.DrawerHandleButton.Text = '◀';
+            app.DrawerHandleButton.FontSize = 18;
+            app.DrawerHandleButton.FontWeight = 'bold';
+            app.DrawerHandleButton.BackgroundColor = [0.15 0.15 0.15];
+            app.DrawerHandleButton.FontColor = [0.8 0.8 0.8];
+            app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
+            app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+
+            % Create content panel in column 2
+            contentPanel = uipanel(app.DrawerLayout);
+            contentPanel.Layout.Row = 1;
+            contentPanel.Layout.Column = 2;
+            contentPanel.BackgroundColor = app.Drawer.BackgroundColor;
+            contentPanel.BorderType = 'none';
+
+            % Create content grid inside the panel
+            contentGrid = uigridlayout(contentPanel);
+            contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+            contentGrid.ColumnWidth = {'1x'};
+            contentGrid.Padding = [16 18 16 18];
+            contentGrid.RowSpacing = 12;
+            contentGrid.ColumnSpacing = 0;
+            contentGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+            headerLayout = uigridlayout(contentGrid);
             headerLayout.Layout.Row = 1;
             headerLayout.Layout.Column = 1;
             headerLayout.RowHeight = {'fit'};
@@ -506,7 +509,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerCloseBtn.Layout.Column = 2;
             app.DrawerCloseBtn.ButtonPushedFcn = createCallbackFcn(app, @DrawerCloseButtonPushed, true);
 
-            app.DrawerInspectorTitle = uilabel(app.DrawerLayout);
+            app.DrawerInspectorTitle = uilabel(contentGrid);
             app.DrawerInspectorTitle.Text = 'Inspector';
             app.DrawerInspectorTitle.FontWeight = 'bold';
             app.DrawerInspectorTitle.FontColor = [0.9 0.9 0.9];
@@ -514,14 +517,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerInspectorTitle.Layout.Column = 1;
 
             % CASE-LOCKING: Lock toggle button (at top of inspector section)
-            app.DrawerLockToggle = uicheckbox(app.DrawerLayout);
+            app.DrawerLockToggle = uicheckbox(contentGrid);
             app.DrawerLockToggle.Text = 'Lock case time';
             app.DrawerLockToggle.FontColor = [1 0 0];  % Red color to match outline
             app.DrawerLockToggle.Layout.Row = 3;
             app.DrawerLockToggle.Layout.Column = 1;
             app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
 
-            app.DrawerInspectorGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerInspectorGrid = uigridlayout(contentGrid);
             app.DrawerInspectorGrid.Layout.Row = 4;  % CASE-LOCKING: Moved from row 3
             app.DrawerInspectorGrid.Layout.Column = 1;
             app.DrawerInspectorGrid.RowHeight = repmat({'fit'}, 1, 6);
@@ -539,14 +542,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
 
             % Optimization Parameters Section
-            app.DrawerOptimizationTitle = uilabel(app.DrawerLayout);
+            app.DrawerOptimizationTitle = uilabel(contentGrid);
             app.DrawerOptimizationTitle.Text = 'Optimization Parameters';
             app.DrawerOptimizationTitle.FontWeight = 'bold';
             app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerOptimizationTitle.Layout.Row = 5;  % CASE-LOCKING: Updated from row 4
             app.DrawerOptimizationTitle.Layout.Column = 1;
 
-            app.DrawerOptimizationGrid = uigridlayout(app.DrawerLayout);
+            app.DrawerOptimizationGrid = uigridlayout(contentGrid);
             app.DrawerOptimizationGrid.Layout.Row = 6;  % CASE-LOCKING: Updated from row 5
             app.DrawerOptimizationGrid.Layout.Column = 1;
             app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
@@ -560,14 +563,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerOptimizationRow(2, 'Labs', 'DrawerLabsValueLabel');
             app.createDrawerOptimizationRow(3, 'Timings', 'DrawerTimingsValueLabel');
 
-            app.DrawerHistogramTitle = uilabel(app.DrawerLayout);
+            app.DrawerHistogramTitle = uilabel(contentGrid);
             app.DrawerHistogramTitle.Text = 'Historical Durations';
             app.DrawerHistogramTitle.FontWeight = 'bold';
             app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerHistogramTitle.Layout.Row = 7;  % CASE-LOCKING: Updated from row 6
             app.DrawerHistogramTitle.Layout.Column = 1;
 
-            app.DrawerHistogramPanel = uipanel(app.DrawerLayout);
+            app.DrawerHistogramPanel = uipanel(contentGrid);
             app.DrawerHistogramPanel.Layout.Row = 8;  % CASE-LOCKING: Updated from row 7
             app.DrawerHistogramPanel.Layout.Column = 1;
             app.DrawerHistogramPanel.BackgroundColor = [0.1 0.1 0.1];
@@ -581,28 +584,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramAxes.Interactions = [];
             disableDefaultInteractivity(app.DrawerHistogramAxes);
 
-            app.DrawerController.setDrawerWidth(app, 0);
-
-            % Create overlay handle once drawer layout exists
-            if isempty(app.DrawerHandleShadow) || ~isvalid(app.DrawerHandleShadow)
-                app.DrawerHandleShadow = uipanel(app.UIFigure);
-                app.DrawerHandleShadow.BackgroundColor = [0.08 0.08 0.08];
-                app.DrawerHandleShadow.BorderType = 'none';
-                app.DrawerHandleShadow.Visible = 'off';
-            end
-
-            if isempty(app.DrawerHandleButton) || ~isvalid(app.DrawerHandleButton)
-                app.DrawerHandleButton = uibutton(app.UIFigure, 'push');
-                app.DrawerHandleButton.FontWeight = 'bold';
-                app.DrawerHandleButton.FontSize = 16;
-                app.DrawerHandleButton.BackgroundColor = [1 1 1];
-                app.DrawerHandleButton.FontColor = [0 0 0];
-                app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
-            end
-
-            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
-            app.Drawer.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
-            app.positionDrawerHandle();
+            % Start with drawer collapsed (40px showing handle only)
+            app.DrawerController.setDrawerWidth(app, 40);
         end
 
         function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
@@ -1322,12 +1305,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function DrawerHandleButtonPushed(app, ~)
-            if app.DrawerWidth > 0
+            if app.DrawerWidth > 40
                 app.DrawerController.closeDrawer(app);
             else
                 app.DrawerController.openDrawer(app, app.DrawerCurrentCaseId);
             end
-            app.positionDrawerHandle();
         end
 
         function DrawerLockToggleChanged(app, event)
@@ -1362,62 +1344,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     % Helper methods
     methods (Access = public)
-
-        function positionDrawerHandle(app)
-            % Guard against redundant calls during same layout cycle
-            if app.IsPositioningDrawerHandle
-                return;
-            end
-
-            if isempty(app.Drawer) || ~isvalid(app.Drawer) || isempty(app.DrawerHandleButton) || ~isvalid(app.DrawerHandleButton)
-                return;
-            end
-
-            app.IsPositioningDrawerHandle = true;
-
-            % Compute pixel position of drawer panel
-            try
-                dpos = getpixelposition(app.Drawer, true);
-            catch
-                old = app.Drawer.Units; app.Drawer.Units = 'pixels'; dpos = app.Drawer.Position; app.Drawer.Units = old;
-            end
-            drawerLeft = dpos(1);
-            drawerBottom = dpos(2);
-            drawerHeight = dpos(4);
-            if drawerHeight <= 0
-                app.IsPositioningDrawerHandle = false;
-                return;
-            end
-            btnH = max(20, min(40, drawerHeight - 12));
-            btnW = max(24, app.DrawerHandleWidth);
-            btnX = drawerLeft - app.DrawerHandleOverlap;
-            btnY = drawerBottom + (drawerHeight - btnH)/2;
-
-            app.DrawerHandleButton.Position = [btnX, btnY, btnW, btnH];
-            app.DrawerHandleButton.Visible = 'on';
-            try, uistack(app.DrawerHandleButton, 'top'); catch, end
-
-            if app.DrawerWidth > 0
-                app.DrawerHandleButton.Text = '⟩';
-                app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
-            else
-                app.DrawerHandleButton.Text = '⟨';
-                app.DrawerHandleButton.Tooltip = {'Show Inspector'};
-            end
-
-            if ~isempty(app.DrawerHandleShadow) && isvalid(app.DrawerHandleShadow)
-                if app.DrawerWidth > 0
-                    shW = 3; shH = max(0, drawerHeight - 12);
-                    app.DrawerHandleShadow.Position = [drawerLeft - shW - 2, drawerBottom + 6, shW, shH];
-                    app.DrawerHandleShadow.Visible = 'on';
-                    try, uistack(app.DrawerHandleShadow, 'top'); catch, end
-                else
-                    app.DrawerHandleShadow.Visible = 'off';
-                end
-            end
-
-            app.IsPositioningDrawerHandle = false;
-        end
 
         function updateDropdowns(app)
             % Update operator dropdown

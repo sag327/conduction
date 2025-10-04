@@ -3,7 +3,7 @@ classdef DrawerController < handle
 
     methods (Access = public)
 
-        function openDrawer(~, app, caseId)
+        function openDrawer(obj, app, caseId)
             if nargin < 3
                 caseId = string.empty;
             end
@@ -11,13 +11,13 @@ classdef DrawerController < handle
             % Store the caseId
             app.DrawerCurrentCaseId = caseId;
 
-            % Instantly open drawer to 440px
-            app.DrawerController.setDrawerToWidth(app, 440);
+            % Expand drawer to 440px total (40px handle + 400px content)
+            obj.setDrawerToWidth(app, 440);
         end
 
-        function closeDrawer(~, app)
-            % Instantly close drawer to 0px
-            app.DrawerController.setDrawerToWidth(app, 0);
+        function closeDrawer(obj, app)
+            % Collapse drawer to 40px (handle only)
+            obj.setDrawerToWidth(app, 40);
         end
 
         function setDrawerToWidth(obj, app, targetWidth)
@@ -25,25 +25,21 @@ classdef DrawerController < handle
                 return;
             end
 
-            targetWidth = max(0, double(targetWidth));
+            targetWidth = max(40, double(targetWidth));  % Minimum 40px for handle
 
             % Clear any existing timers for safety
             obj.clearDrawerTimer(app);
 
-            % Instantly set drawer to target width
+            % Set drawer to target width
             obj.setDrawerWidth(app, targetWidth);
 
-            % Only populate drawer content after axes have reached proper size
-            if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
-                % Ensure drawer axes are ready before populating to avoid cramped first draw
-                conditionFcn = @() app.DrawerWidth > 0;
+            % Only populate drawer content when expanded
+            if targetWidth > 40 && ~isempty(app.DrawerCurrentCaseId)
+                % Ensure drawer axes are ready before populating
+                conditionFcn = @() app.DrawerWidth > 40;
                 callbackFcn = @() obj.populateDrawer(app, app.DrawerCurrentCaseId);
                 obj.executeWhenAxesReady(app, app.DrawerHistogramAxes, 220, 100, ...
                     'DrawerTimer', callbackFcn, conditionFcn);
-            end
-
-            if ismethod(app, 'positionDrawerHandle')
-                app.positionDrawerHandle();
             end
         end
 
@@ -52,9 +48,10 @@ classdef DrawerController < handle
                 return;
             end
 
-            widthValue = max(0, double(widthValue));
+            widthValue = max(40, double(widthValue));  % Minimum 40px for handle
             app.DrawerWidth = widthValue;
 
+            % Update MiddleLayout column width (drawer total width)
             widths = app.MiddleLayout.ColumnWidth;
             if numel(widths) < 3
                 widths = {370, '1x', widthValue};
@@ -63,19 +60,29 @@ classdef DrawerController < handle
             end
             app.MiddleLayout.ColumnWidth = widths;
 
-            % Update handle arrow text
-            if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
-                if widthValue > 0
-                    app.DrawerHandleButton.Text = '⟩';
-                    app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
+            % Update DrawerLayout column width (content visibility)
+            if ~isempty(app.DrawerLayout) && isvalid(app.DrawerLayout)
+                if widthValue > 40
+                    % Expanded: show content (column 2)
+                    app.DrawerLayout.ColumnWidth = {40, '1x'};
                 else
-                    app.DrawerHandleButton.Text = '⟨';
-                    app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+                    % Collapsed: hide content
+                    app.DrawerLayout.ColumnWidth = {40, 0};
                 end
             end
 
-            if ismethod(app, 'positionDrawerHandle')
-                app.positionDrawerHandle();
+            % Force layout update so axes resize before we try to populate them
+            drawnow;
+
+            % Update handle button appearance
+            if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
+                if widthValue > 40
+                    app.DrawerHandleButton.Text = '▶';
+                    app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
+                else
+                    app.DrawerHandleButton.Text = '◀';
+                    app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+                end
             end
         end
 
