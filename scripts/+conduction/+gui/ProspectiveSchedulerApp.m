@@ -31,7 +31,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerHandleButton          matlab.ui.control.Button
         DrawerLayout                matlab.ui.container.GridLayout
         DrawerHeaderLabel           matlab.ui.control.Label
-        DrawerCloseBtn              matlab.ui.control.Button
         DrawerInspectorTitle        matlab.ui.control.Label
         DrawerInspectorGrid         matlab.ui.container.GridLayout
         DrawerCaseValueLabel        matlab.ui.control.Label
@@ -161,7 +160,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Refresh actual time indicator
         DrawerTimer timer = timer.empty
-        DrawerWidth double = 40  % Starts collapsed (40px = handle only)
+        DrawerWidth double = 28  % Starts collapsed (28px = handle only)
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
@@ -221,7 +220,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
             app.MiddleLayout.RowHeight = {'1x','fit'};
-            app.MiddleLayout.ColumnWidth = {370, '1x', 40};  % Drawer starts collapsed at 40px
+            app.MiddleLayout.ColumnWidth = {370, '1x', 28};  % Drawer starts collapsed at 28px
             app.MiddleLayout.ColumnSpacing = 12;
             app.MiddleLayout.RowSpacing = 12;
             app.MiddleLayout.Padding = [0 0 0 0];
@@ -325,7 +324,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer = uipanel(app.MiddleLayout);
             app.Drawer.Layout.Row = [1 2];
             app.Drawer.Layout.Column = 3;
-            app.Drawer.BackgroundColor = [0.1 0.1 0.1];
+            app.Drawer.BackgroundColor = app.UIFigure.Color;
             app.Drawer.BorderType = 'none';
             app.Drawer.Visible = 'on';
             app.buildDrawerUI();
@@ -451,47 +450,31 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.DrawerLayout = uigridlayout(app.Drawer);
-            app.DrawerLayout.RowHeight = {'1x'};  % Single row spanning full height
-            app.DrawerLayout.ColumnWidth = {40, '1x'};  % Column 1: handle (40px), Column 2: content (flexible)
+            app.DrawerLayout.RowHeight = {'1x', 60, '1x'};  % Three rows: top spacer, button, bottom spacer
+            app.DrawerLayout.ColumnWidth = {28, '1x'};  % Column 1: handle (28px), Column 2: content (flexible)
             app.DrawerLayout.Padding = [0 0 0 0];
             app.DrawerLayout.RowSpacing = 0;
             app.DrawerLayout.ColumnSpacing = 0;
             app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
 
-            % Create handle panel in column 1
-            handlePanel = uipanel(app.DrawerLayout);
-            handlePanel.Layout.Row = 1;
-            handlePanel.Layout.Column = 1;
-            handlePanel.BackgroundColor = app.Drawer.BackgroundColor;
-            handlePanel.BorderType = 'none';
-
-            % Create handle grid to center button vertically and position left
-            handleGrid = uigridlayout(handlePanel);
-            handleGrid.RowHeight = {'1x', 100, '1x'};  % Center row with fixed 100px height
-            handleGrid.ColumnWidth = {24, '1x'};  % Narrow left column for button, rest empty
-            handleGrid.Padding = [0 0 0 0];
-            handleGrid.RowSpacing = 0;
-            handleGrid.ColumnSpacing = 0;
-            handleGrid.BackgroundColor = app.Drawer.BackgroundColor;
-
-            % Create handle button in centered row, left column
-            app.DrawerHandleButton = uibutton(handleGrid, 'push');
-            app.DrawerHandleButton.Layout.Row = 2;  % Middle row
-            app.DrawerHandleButton.Layout.Column = 1;  % Left column
+            % Create handle button in column 1, centered vertically
+            app.DrawerHandleButton = uibutton(app.DrawerLayout, 'push');
+            app.DrawerHandleButton.Layout.Row = 2;  % Middle row (centered)
+            app.DrawerHandleButton.Layout.Column = 1;
             app.DrawerHandleButton.Text = '◀';
-            app.DrawerHandleButton.FontSize = 20;
-            app.DrawerHandleButton.FontWeight = 'bold';
-            app.DrawerHandleButton.BackgroundColor = [0.15 0.15 0.15];
-            app.DrawerHandleButton.FontColor = [0.8 0.8 0.8];
+            app.DrawerHandleButton.FontSize = 14;
+            app.DrawerHandleButton.FontWeight = 'normal';
+            app.DrawerHandleButton.BackgroundColor = [0.2 0.2 0.2];
+            app.DrawerHandleButton.FontColor = [0.6 0.6 0.6];
             app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
             app.DrawerHandleButton.Tooltip = {'Show Inspector'};
 
-            % Create content panel in column 2
+            % Create content panel in column 2 with border
             contentPanel = uipanel(app.DrawerLayout);
-            contentPanel.Layout.Row = 1;
+            contentPanel.Layout.Row = [1 3];  % Span all rows
             contentPanel.Layout.Column = 2;
             contentPanel.BackgroundColor = app.Drawer.BackgroundColor;
-            contentPanel.BorderType = 'none';
+            contentPanel.BorderType = 'line';
 
             % Create content grid inside the panel
             contentGrid = uigridlayout(contentPanel);
@@ -502,28 +485,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             contentGrid.ColumnSpacing = 0;
             contentGrid.BackgroundColor = app.Drawer.BackgroundColor;
 
-            headerLayout = uigridlayout(contentGrid);
-            headerLayout.Layout.Row = 1;
-            headerLayout.Layout.Column = 1;
-            headerLayout.RowHeight = {'fit'};
-            headerLayout.ColumnWidth = {'1x', 'fit'};
-            headerLayout.ColumnSpacing = 12;
-            headerLayout.Padding = [0 0 0 0];
-            headerLayout.BackgroundColor = app.Drawer.BackgroundColor;
-
-            app.DrawerHeaderLabel = uilabel(headerLayout);
+            app.DrawerHeaderLabel = uilabel(contentGrid);
             app.DrawerHeaderLabel.Text = 'Case Inspector';
             app.DrawerHeaderLabel.FontSize = 16;
             app.DrawerHeaderLabel.FontWeight = 'bold';
             app.DrawerHeaderLabel.FontColor = [1 1 1];
             app.DrawerHeaderLabel.Layout.Row = 1;
             app.DrawerHeaderLabel.Layout.Column = 1;
-
-            app.DrawerCloseBtn = uibutton(headerLayout, 'push');
-            app.DrawerCloseBtn.Text = 'Close';
-            app.DrawerCloseBtn.Layout.Row = 1;
-            app.DrawerCloseBtn.Layout.Column = 2;
-            app.DrawerCloseBtn.ButtonPushedFcn = createCallbackFcn(app, @DrawerCloseButtonPushed, true);
 
             app.DrawerInspectorTitle = uilabel(contentGrid);
             app.DrawerInspectorTitle.Text = 'Inspector';
@@ -589,7 +557,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramPanel = uipanel(contentGrid);
             app.DrawerHistogramPanel.Layout.Row = 8;  % CASE-LOCKING: Updated from row 7
             app.DrawerHistogramPanel.Layout.Column = 1;
-            app.DrawerHistogramPanel.BackgroundColor = [0.1 0.1 0.1];
+            app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
             app.DrawerHistogramPanel.BorderType = 'none';
 
             % Create axes with fixed height but full width
@@ -600,8 +568,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramAxes.Interactions = [];
             disableDefaultInteractivity(app.DrawerHistogramAxes);
 
-            % Start with drawer collapsed (40px showing handle only)
-            app.DrawerController.setDrawerWidth(app, 40);
+            % Start with drawer collapsed (28px showing handle only)
+            app.DrawerController.setDrawerWidth(app, 28);
         end
 
         function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
@@ -1090,7 +1058,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % If drawer is already open, populate it with the new case
-            if app.DrawerWidth > 40
+            if app.DrawerWidth > 28
                 app.DrawerController.populateDrawer(app, caseId);
             end
         end
@@ -1322,12 +1290,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.executeOptimization(app);
         end
 
-        function DrawerCloseButtonPushed(app, ~)
-            app.DrawerController.closeDrawer(app);
-        end
-
         function DrawerHandleButtonPushed(app, ~)
-            if app.DrawerWidth > 40
+            if app.DrawerWidth > 28
                 app.DrawerController.closeDrawer(app);
             else
                 app.DrawerController.openDrawer(app, app.DrawerCurrentCaseId);

@@ -11,13 +11,13 @@ classdef DrawerController < handle
             % Store the caseId
             app.DrawerCurrentCaseId = caseId;
 
-            % Expand drawer to 440px total (40px handle + 400px content)
-            obj.setDrawerToWidth(app, 440);
+            % Expand drawer to 428px total (28px handle + 400px content)
+            obj.setDrawerToWidth(app, 428);
         end
 
         function closeDrawer(obj, app)
-            % Collapse drawer to 40px (handle only)
-            obj.setDrawerToWidth(app, 40);
+            % Collapse drawer to 28px (handle only)
+            obj.setDrawerToWidth(app, 28);
         end
 
         function setDrawerToWidth(obj, app, targetWidth)
@@ -25,21 +25,26 @@ classdef DrawerController < handle
                 return;
             end
 
-            targetWidth = max(40, double(targetWidth));  % Minimum 40px for handle
+            targetWidth = max(28, double(targetWidth));  % Minimum 28px for handle
 
-            % Clear any existing timers for safety
-            obj.clearDrawerTimer(app);
-
-            % Set drawer to target width
+            % Set drawer to target width (includes drawnow to update layout)
             obj.setDrawerWidth(app, targetWidth);
 
             % Only populate drawer content when expanded
-            if targetWidth > 40 && ~isempty(app.DrawerCurrentCaseId)
-                % Ensure drawer axes are ready before populating
-                conditionFcn = @() app.DrawerWidth > 40;
-                callbackFcn = @() obj.populateDrawer(app, app.DrawerCurrentCaseId);
-                obj.executeWhenAxesReady(app, app.DrawerHistogramAxes, 220, 100, ...
-                    'DrawerTimer', callbackFcn, conditionFcn);
+            if targetWidth > 28 && ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
+                % Set up one-time callback to populate when axes is actually ready
+                if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
+                    % Store case ID for the callback
+                    caseId = app.DrawerCurrentCaseId;
+
+                    % Create one-time callback that fires when axes resizes
+                    app.DrawerHistogramAxes.SizeChangedFcn = @(~,~) obj.onAxesReady(app, caseId);
+                end
+            else
+                % Clear any existing callback when closing
+                if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
+                    app.DrawerHistogramAxes.SizeChangedFcn = [];
+                end
             end
         end
 
@@ -48,7 +53,7 @@ classdef DrawerController < handle
                 return;
             end
 
-            widthValue = max(40, double(widthValue));  % Minimum 40px for handle
+            widthValue = max(28, double(widthValue));  % Minimum 28px for handle
             app.DrawerWidth = widthValue;
 
             % Update MiddleLayout column width (drawer total width)
@@ -62,27 +67,63 @@ classdef DrawerController < handle
 
             % Update DrawerLayout column width (content visibility)
             if ~isempty(app.DrawerLayout) && isvalid(app.DrawerLayout)
-                if widthValue > 40
+                if widthValue > 28
                     % Expanded: show content (column 2)
-                    app.DrawerLayout.ColumnWidth = {40, '1x'};
+                    app.DrawerLayout.ColumnWidth = {28, '1x'};
                 else
                     % Collapsed: hide content
-                    app.DrawerLayout.ColumnWidth = {40, 0};
+                    app.DrawerLayout.ColumnWidth = {28, 0};
                 end
             end
 
-            % Force layout update so axes resize before we try to populate them
+            % Force layout update
             drawnow;
 
             % Update handle button appearance
             if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
-                if widthValue > 40
+                if widthValue > 28
                     app.DrawerHandleButton.Text = '▶';
                     app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
                 else
                     app.DrawerHandleButton.Text = '◀';
                     app.DrawerHandleButton.Tooltip = {'Show Inspector'};
                 end
+            end
+        end
+
+        function onAxesReady(obj, app, caseId)
+            % Callback that fires when histogram axes has actually resized
+            % This ensures we plot only when axes is at correct dimensions
+
+            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
+                return;
+            end
+
+            % Safety: only proceed if we have a valid case ID
+            if nargin < 3 || isempty(caseId) || strlength(caseId) == 0
+                app.DrawerHistogramAxes.SizeChangedFcn = [];
+                return;
+            end
+
+            % Check if axes has actual width (not collapsed)
+            try
+                oldUnits = app.DrawerHistogramAxes.Units;
+                app.DrawerHistogramAxes.Units = 'pixels';
+                axesPos = app.DrawerHistogramAxes.InnerPosition;
+                app.DrawerHistogramAxes.Units = oldUnits;
+
+                % Only populate if axes is wide enough (expanded state)
+                if axesPos(3) > 200
+                    % Remove this callback so it only fires once
+                    app.DrawerHistogramAxes.SizeChangedFcn = [];
+
+                    % Now populate the drawer with proper sized axes
+                    obj.populateDrawer(app, caseId);
+                end
+            catch ME
+                % If something fails, just clear the callback and log warning
+                app.DrawerHistogramAxes.SizeChangedFcn = [];
+                warning('DrawerController:onAxesReady', 'Error in onAxesReady: %s', ME.message);
             end
         end
 
@@ -186,7 +227,7 @@ classdef DrawerController < handle
                 'FontSize', 10);
             app.DrawerHistogramAxes.XLim = [0 1];
             app.DrawerHistogramAxes.YLim = [0 1];
-            app.DrawerHistogramAxes.Color = [0 0 0];
+            app.DrawerHistogramAxes.Color = app.UIFigure.Color;
             app.DrawerHistogramAxes.XTick = [];
             app.DrawerHistogramAxes.YTick = [];
             app.DrawerHistogramAxes.Box = 'off';
