@@ -12,10 +12,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LoadDataButton              matlab.ui.control.Button
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
-        CurrentTimeLabel            matlab.ui.control.Label
-        CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
         TestToggle                  matlab.ui.control.Switch
-        TimeControlSwitch           matlab.ui.control.Switch  % REALTIME-SCHEDULING: Toggle time control mode
 
         TabGroup                    matlab.ui.container.TabGroup
         TabAdd                      matlab.ui.container.Tab
@@ -31,6 +28,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CanvasAnalyzeLayout         matlab.ui.container.GridLayout
         
         Drawer                      matlab.ui.container.Panel
+        DrawerHandleShadow          matlab.ui.container.Panel
+        DrawerHandleButton          matlab.ui.control.Button
         DrawerLayout                matlab.ui.container.GridLayout
         DrawerHeaderLabel           matlab.ui.control.Label
         DrawerCloseBtn              matlab.ui.control.Button
@@ -139,7 +138,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AnalyticsRenderer conduction.gui.controllers.AnalyticsRenderer
         DurationSelector conduction.gui.controllers.DurationSelector
         TestingModeController conduction.gui.controllers.TestingModeController
-        CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
 
         TargetDate datetime
         IsCustomOperatorSelected logical = false
@@ -158,17 +156,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
-        SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
-        TimeControlBaselineLockedIds string = string.empty  % REALTIME-SCHEDULING: Locks in place before time control enabled
-        TimeControlLockedCaseIds string = string.empty  % REALTIME-SCHEDULING: Locks applied by time control mode
+        SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Simulated view when dragging time
+        TimeControlBaselineLockedIds string = string.empty  % REALTIME-SCHEDULING: Locks present before time control
+        TimeControlLockedCaseIds string = string.empty  % REALTIME-SCHEDULING: Locks created by time control
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
-        CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Timer to refresh actual time indicator
+        CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Refresh actual time indicator
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
+        DrawerHandleWidth double = 28  % Width of drawer handle button
+        DrawerHandleOverlap double = 12  % Overlap pixels into schedule area
     end
 
     % Component initialization
@@ -196,7 +196,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit','fit','fit','fit'};  % REALTIME-SCHEDULING: Added columns for time indicators
+            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit'};
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -210,29 +210,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.Layout.Column = 2;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
-            app.CurrentTimeLabel = uilabel(app.TopBarLayout);
-            app.CurrentTimeLabel.Text = 'Current Time';
-            app.CurrentTimeLabel.Layout.Column = 4;
-            app.CurrentTimeLabel.HorizontalAlignment = 'right';
-
-            app.CurrentTimeCheckbox = uicheckbox(app.TopBarLayout);
-            app.CurrentTimeCheckbox.Text = '';
-            app.CurrentTimeCheckbox.Layout.Column = 5;
-            app.CurrentTimeCheckbox.Value = false;
-            app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
-
-
-            % REALTIME-SCHEDULING: Time Control Switch
-            app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
-            app.TimeControlSwitch.Layout.Column = 6;
-            app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
-            app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
-            app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
-            app.TimeControlSwitch.Orientation = 'horizontal';
-            app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 7;  % REALTIME-SCHEDULING: Moved to column 7
+            app.TestToggle.Layout.Column = 4;
             app.TestToggle.Items = {'Test Mode',''};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -353,6 +333,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer.Visible = 'on';
             app.buildDrawerUI();
 
+            % Overlay drawer handle (sibling of drawer) so it can overlap border
+            app.DrawerHandleShadow = uipanel(app.UIFigure);
+            app.DrawerHandleShadow.BackgroundColor = [0.08 0.08 0.08];
+            app.DrawerHandleShadow.BorderType = 'none';
+            app.DrawerHandleShadow.Visible = 'off';
+
+            app.DrawerHandleButton = uibutton(app.UIFigure, 'push');
+            app.DrawerHandleButton.Text = '⟨';
+            app.DrawerHandleButton.FontWeight = 'bold';
+            app.DrawerHandleButton.FontSize = 16;
+            app.DrawerHandleButton.Tooltip = {'Show case details'};
+            app.DrawerHandleButton.BackgroundColor = [1 1 1];
+            app.DrawerHandleButton.FontColor = [0 0 0];
+            app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
+            try, uistack(app.DrawerHandleButton,'top'); uistack(app.DrawerHandleShadow,'top'); end
+            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
+            app.Drawer.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
+            app.positionDrawerHandle();
+
             % Add optimization options and status as caption below schedule
 
             % Bottom KPI bar
@@ -377,6 +376,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
+            % ensure handle stays aligned on theme changes/resizes
+            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
 
             % Ensure testing controls start hidden/off
             app.TestingModeController.setTestToggleValue(app, false);
@@ -1004,7 +1005,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AnalyticsRenderer = conduction.gui.controllers.AnalyticsRenderer();
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
-            app.CaseStatusController = conduction.gui.controllers.CaseStatusController();  % REALTIME-SCHEDULING
 
             % Initialize app state
             app.TargetDate = targetDate;
@@ -1062,8 +1062,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show selection
             if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
             end
 
             app.DrawerController.openDrawer(app, caseId);
@@ -1079,28 +1078,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                 % Re-render schedule to clear selection highlight
                 if ~isempty(app.OptimizedSchedule)
-                    scheduleToRender = app.getScheduleForRendering();
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
                 end
             end
         end
 
-        function schedule = getScheduleForRendering(app)
-            % REALTIME-SCHEDULING: Get the appropriate schedule for rendering
-            % Returns SimulatedSchedule if time control is active, otherwise OptimizedSchedule
-            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule)
-                schedule = app.SimulatedSchedule;
-            else
-                schedule = app.OptimizedSchedule;
-            end
-        end
-
         function delete(app)
-            app.stopCurrentTimeTimer();
-            if ~isempty(app.CurrentTimeTimer) && isvalid(app.CurrentTimeTimer)
-                delete(app.CurrentTimeTimer);
-                app.CurrentTimeTimer = timer.empty;
-            end
             app.DrawerController.clearDrawerTimer(app);
             delete(app.UIFigure);
         end
@@ -1123,8 +1106,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show/clear selection highlight
             if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule);
             end
         end
 
@@ -1269,136 +1251,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.LoadDataButton.Enable = 'on';
         end
 
-        function TimeControlSwitchValueChanged(app, ~)
-            % REALTIME-SCHEDULING: Toggle time control mode
-            isEnabling = strcmp(app.TimeControlSwitch.Value, 'On');
-
-            if isEnabling
-                app.IsTimeControlActive = true;
-
-                % Snapshot locks that existed prior to time control mode
-                app.TimeControlBaselineLockedIds = app.LockedCaseIds;
-                app.TimeControlLockedCaseIds = string.empty;
-
-                % Start timeline at 8:00 AM (minutes from midnight)
-                startTimeMinutes = 8 * 60;
-                app.CaseManager.setCurrentTime(startTimeMinutes);
-
-                if ~isempty(app.OptimizedSchedule)
-                    % Build simulated schedule and render with draggable timeline
-                    updatedSchedule = app.ScheduleRenderer.updateCaseStatusesByTime(app, startTimeMinutes);
-                    app.SimulatedSchedule = updatedSchedule;
-
-                    scheduleToRender = app.getScheduleForRendering();
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
-                    app.ScheduleRenderer.enableNowLineDrag(app);
-                    app.ScheduleRenderer.updateActualTimeIndicator(app);
-                else
-                    app.SimulatedSchedule = conduction.DailySchedule.empty;
-                end
-
-                return;
-            end
-
-            if ~app.IsTimeControlActive
-                app.TimeControlSwitch.Value = 'Off';
-                return;
-            end
-
-            % Prompt whether time-control locks should persist
-            keepLocks = true;
-            if ~isempty(app.TimeControlLockedCaseIds)
-                confirmMsg = sprintf(['Time control locked %d case(s).\n' ...
-                    'Do you want to keep these cases locked after disabling time control?'], ...
-                    numel(app.TimeControlLockedCaseIds));
-                choice = uiconfirm(app.UIFigure, confirmMsg, 'Time Control Locks', ...
-                    'Options', {'Keep Locks', 'Unlock Cases'}, ...
-                    'DefaultOption', 'Keep Locks', ...
-                    'CancelOption', 'Keep Locks', ...
-                    'Icon', 'question');
-
-                keepLocks = strcmp(choice, 'Keep Locks');
-            end
-
-            if ~keepLocks && ~isempty(app.TimeControlLockedCaseIds)
-                remainingLocks = setdiff(app.LockedCaseIds, app.TimeControlLockedCaseIds);
-                app.LockedCaseIds = remainingLocks;
-            end
-
-            % Disable time control mode and restore defaults
-            app.IsTimeControlActive = false;
-            app.ScheduleRenderer.disableNowLineDrag(app);
-            app.CaseManager.setCurrentTime(NaN);
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
-            app.TimeControlLockedCaseIds = string.empty;
-            app.TimeControlBaselineLockedIds = string.empty;
-
-            if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-            end
-
-            app.ScheduleRenderer.updateActualTimeIndicator(app);
-            app.TimeControlSwitch.Value = 'Off';
-        end
-
-        function CurrentTimeCheckboxValueChanged(app, ~)
-            app.IsCurrentTimeVisible = logical(app.CurrentTimeCheckbox.Value);
-
-            if app.IsCurrentTimeVisible
-                app.startCurrentTimeTimer();
-            else
-                app.stopCurrentTimeTimer();
-                app.ScheduleRenderer.clearActualTimeIndicator(app);
-            end
-
-            app.ScheduleRenderer.updateActualTimeIndicator(app);
-        end
-
-        function startCurrentTimeTimer(app)
-            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
-                app.CurrentTimeTimer = timer( ...
-                    'ExecutionMode', 'fixedSpacing', ...
-                    'Period', 30, ...
-                    'StartDelay', 0, ...
-                    'TimerFcn', @(~, ~) app.onCurrentTimeTimerTick(), ...
-                    'Name', 'ConductionActualTimeTimer');
-            end
-
-            if strcmp(app.CurrentTimeTimer.Running, 'off')
-                start(app.CurrentTimeTimer);
-            end
-
-            % Update immediately when toggled on
-            app.onCurrentTimeTimerTick();
-        end
-
-        function stopCurrentTimeTimer(app)
-            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
-                return;
-            end
-
-            if strcmp(app.CurrentTimeTimer.Running, 'on')
-                stop(app.CurrentTimeTimer);
-            end
-        end
-
-        function onCurrentTimeTimerTick(app)
-            if ~app.IsCurrentTimeVisible
-                return;
-            end
-
-            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
-                return;
-            end
-
-            try
-                app.ScheduleRenderer.updateActualTimeIndicator(app);
-            catch ME
-                warning('ProspectiveSchedulerApp:CurrentTimeTimerFailed', ...
-                    'Failed to update current time indicator: %s', ME.message);
-            end
-        end
-
         function TestToggleValueChanged(app, ~)
             if app.IsSyncingTestingToggle
                 return;
@@ -1447,6 +1299,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerController.closeDrawer(app);
         end
 
+        function DrawerHandleButtonPushed(app, ~)
+            if app.DrawerWidth > 0
+                app.DrawerController.closeDrawer(app);
+            else
+                app.DrawerController.openDrawer(app, app.DrawerCurrentCaseId);
+            end
+            app.positionDrawerHandle();
+        end
+
         function DrawerLockToggleChanged(app, event)
             % CASE-LOCKING: Handle lock toggle change in drawer
             if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
@@ -1479,6 +1340,38 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     % Helper methods
     methods (Access = public)
+
+        function positionDrawerHandle(app)
+            if isempty(app.Drawer) || ~isvalid(app.Drawer) || isempty(app.DrawerHandleButton) || ~isvalid(app.DrawerHandleButton)
+                return;
+            end
+            % Compute pixel position of drawer panel
+            try
+                dpos = getpixelposition(app.Drawer, true);
+            catch
+                old = app.Drawer.Units; app.Drawer.Units = 'pixels'; dpos = app.Drawer.Position; app.Drawer.Units = old;
+            end
+            drawerLeft = dpos(1);
+            drawerBottom = dpos(2);
+            drawerHeight = dpos(4);
+            if drawerHeight <= 0
+                return;
+            end
+            btnH = max(18, min(36, drawerHeight - 6));
+            btnW = max(24, app.DrawerHandleWidth);
+            x = drawerLeft - app.DrawerHandleOverlap;
+            y = drawerBottom + (drawerHeight - btnH)/2;
+            app.DrawerHandleButton.Position = [x, y, btnW, btnH];
+            app.DrawerHandleButton.Visible = 'on';
+            try, uistack(app.DrawerHandleButton,'top'); end
+            % shadow line just to the left
+            if ~isempty(app.DrawerHandleShadow) && isvalid(app.DrawerHandleShadow)
+                shW = 3; shH = max(0, drawerHeight - 10);
+                app.DrawerHandleShadow.Position = [drawerLeft - shW - 2, drawerBottom + 5, shW, shH];
+                app.DrawerHandleShadow.Visible = 'on';
+                try, uistack(app.DrawerHandleShadow,'top'); end
+            end
+        end
 
         function updateDropdowns(app)
             % Update operator dropdown

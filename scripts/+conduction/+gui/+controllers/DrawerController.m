@@ -39,6 +39,11 @@ classdef DrawerController < handle
             % Force single clean layout update at final size
             drawnow;
 
+            % Keep overlay handle aligned with the drawer edge
+            if ismethod(app, 'positionDrawerHandle')
+                app.positionDrawerHandle();
+            end
+
             % Only populate drawer content after axes have reached proper size
             if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
                 % Ensure drawer axes are ready before populating to avoid cramped first draw
@@ -64,6 +69,20 @@ classdef DrawerController < handle
                 widths{3} = widthValue;
             end
             app.MiddleLayout.ColumnWidth = widths;
+
+            % Update handle arrow and alignment
+            if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
+                if widthValue > 0
+                    app.DrawerHandleButton.Text = '⟩';
+                    app.DrawerHandleButton.Tooltip = {'Hide Inspector'};
+                else
+                    app.DrawerHandleButton.Text = '⟨';
+                    app.DrawerHandleButton.Tooltip = {'Show Inspector'};
+                end
+                if ismethod(app, 'positionDrawerHandle')
+                    app.positionDrawerHandle();
+                end
+            end
         end
 
         function populateDrawer(obj, app, caseId)
@@ -248,8 +267,7 @@ classdef DrawerController < handle
 
             % Re-render schedule to show lock state change
             if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
             end
         end
 
