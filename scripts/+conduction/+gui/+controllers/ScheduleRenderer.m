@@ -65,6 +65,7 @@ classdef ScheduleRenderer < handle
             if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
                 app.AnalyticsRenderer.resetKPIBar(app);
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
                 return;
             end
 
@@ -74,8 +75,11 @@ classdef ScheduleRenderer < handle
                 fadeAlpha = 0.35;  % Faded when stale (35% opacity)
             end
 
-            % REALTIME-SCHEDULING: Get current time from CaseManager
-            currentTime = app.CaseManager.getCurrentTime();
+            % REALTIME-SCHEDULING: Show draggable time line only when time control active
+            currentTime = NaN;
+            if app.IsTimeControlActive
+                currentTime = app.CaseManager.getCurrentTime();
+            end
 
             app.OperatorColors = conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', 'Optimized Schedule', ...
@@ -97,6 +101,9 @@ classdef ScheduleRenderer < handle
             app.OptimizationController.updateOptimizationActionAvailability(app);
             app.AnalyticsRenderer.updateKPIBar(app, dailySchedule);
 
+            % Update optional actual time indicator after schedule renders
+            app.ScheduleRenderer.updateActualTimeIndicator(app);
+
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
@@ -115,8 +122,15 @@ classdef ScheduleRenderer < handle
 
             % Make line thicker and change to dashed when draggable
             nowLine.LineWidth = 4;
-            nowLine.LineStyle = '--';
+            nowLine.LineStyle = '-';
+            nowLine.Color = [1, 1, 1];
             nowLine.ButtonDownFcn = @(src, event) obj.startDragNowLine(app, src);
+
+            handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
+            if ~isempty(handleMarker)
+                set(handleMarker, 'MarkerSize', 18, ...
+                    'ButtonDownFcn', @(src, event) obj.startDragNowLine(app, src));
+            end
         end
 
         function disableNowLineDrag(~, app)
@@ -129,11 +143,25 @@ classdef ScheduleRenderer < handle
             % Restore normal appearance
             nowLine.LineWidth = 3;
             nowLine.LineStyle = '-';
+            nowLine.Color = [1, 1, 1];
             nowLine.ButtonDownFcn = [];
+
+            handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
+            if ~isempty(handleMarker)
+                set(handleMarker, 'ButtonDownFcn', []);
+            end
         end
 
         function startDragNowLine(obj, app, lineHandle)
             %STARTDRAGNOWLINE Initialize drag state
+            if ~isgraphics(lineHandle) || ~strcmp(get(lineHandle, 'Tag'), 'NowLine')
+                primaryLine = findobj(app.ScheduleAxes, 'Tag', 'NowLine');
+                if isempty(primaryLine)
+                    return;
+                end
+                lineHandle = primaryLine(1);
+            end
+
             app.UIFigure.UserData.isDraggingNowLine = true;
             app.UIFigure.UserData.dragLineHandle = lineHandle;
 
@@ -182,6 +210,20 @@ classdef ScheduleRenderer < handle
             if ~isempty(nowLabel)
                 nowLabel.String = sprintf('NOW (%s)', timeStr);
                 nowLabel.Position(2) = newTimeHour - 0.1;
+            end
+
+            handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
+            if ~isempty(handleMarker)
+                xLimits = xlim(app.ScheduleAxes);
+                set(handleMarker, 'XData', xLimits(1), 'YData', newTimeHour);
+            end
+
+            shadowLine = findobj(app.ScheduleAxes, 'Tag', 'NowLineShadow');
+            if ~isempty(shadowLine)
+                shadowOffsetHours = 0.05;
+                yLimits = ylim(app.ScheduleAxes);
+                shadowY = min(yLimits(2), max(yLimits(1), newTimeHour + shadowOffsetHours));
+                set(shadowLine, 'YData', [shadowY, shadowY]);
             end
 
             % Store current time (don't commit yet)
@@ -242,6 +284,19 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % Reset lock state to baseline before applying time-control locks
+            retainedLocks = app.LockedCaseIds;
+            if ~isempty(app.TimeControlLockedCaseIds)
+                retainedLocks = setdiff(retainedLocks, app.TimeControlLockedCaseIds);
+            end
+
+            if ~isempty(app.TimeControlBaselineLockedIds)
+                retainedLocks = unique([retainedLocks(:); app.TimeControlBaselineLockedIds(:)], 'stable');
+            end
+
+            app.LockedCaseIds = retainedLocks;
+            newTimeControlLocks = string.empty(0, 1);
+
             % Get case timing from schedule (copy for modification)
             labAssignments = app.OptimizedSchedule.labAssignments();
 
@@ -254,12 +309,17 @@ classdef ScheduleRenderer < handle
                 for caseIdx = 1:numel(labCases)
                     scheduledCase = labCases(caseIdx);
 
-                    % Extract timing and case ID
-                    procStartTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procStartTime', NaN);
-                    procEndTime = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procEndTime', NaN);
-                    caseId = app.ScheduleRenderer.getFieldValue(scheduledCase, 'caseID', NaN);
+                    % Extract timing and case ID (coerce to scalar numeric values)
+                    procStartTimeRaw = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procStartTime', NaN);
+                    procEndTimeRaw = app.ScheduleRenderer.getFieldValue(scheduledCase, 'procEndTime', NaN);
+                    caseIdRaw = app.ScheduleRenderer.getFieldValue(scheduledCase, 'caseID', NaN);
 
-                    if isnan(procStartTime) || isnan(procEndTime) || isnan(caseId)
+                    procStartTime = coerceScalarNumeric(procStartTimeRaw);
+                    procEndTime = coerceScalarNumeric(procEndTimeRaw);
+                    caseIdNumeric = coerceScalarNumeric(caseIdRaw);
+                    caseIdStr = coerceStringIdentifier(caseIdRaw);
+
+                    if any(isnan([procStartTime, procEndTime, caseIdNumeric])) || strlength(caseIdStr) == 0
                         continue;
                     end
 
@@ -270,18 +330,24 @@ classdef ScheduleRenderer < handle
                         newStatus = "completed";
 
                         % Lock completed cases to preserve time and lab assignment
-                        caseIdStr = string(caseId);
                         if ~ismember(caseIdStr, app.LockedCaseIds)
-                            app.LockedCaseIds(end+1) = caseIdStr;
+                            app.LockedCaseIds(end+1, 1) = caseIdStr;
+                        end
+                        if ~ismember(caseIdStr, app.TimeControlBaselineLockedIds) && ...
+                                ~ismember(caseIdStr, newTimeControlLocks)
+                            newTimeControlLocks(end+1, 1) = caseIdStr;
                         end
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case would be in progress at this time
                         newStatus = "in_progress";
 
                         % Lock in-progress cases to preserve time and lab assignment
-                        caseIdStr = string(caseId);
                         if ~ismember(caseIdStr, app.LockedCaseIds)
-                            app.LockedCaseIds(end+1) = caseIdStr;
+                            app.LockedCaseIds(end+1, 1) = caseIdStr;
+                        end
+                        if ~ismember(caseIdStr, app.TimeControlBaselineLockedIds) && ...
+                                ~ismember(caseIdStr, newTimeControlLocks)
+                            newTimeControlLocks(end+1, 1) = caseIdStr;
                         end
                     else
                         % Case would be pending at this time
@@ -294,12 +360,141 @@ classdef ScheduleRenderer < handle
                 end
             end
 
+            if ~isempty(app.LockedCaseIds)
+                app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
+            end
+
+            app.TimeControlLockedCaseIds = unique(newTimeControlLocks, 'stable');
+
             % Create new DailySchedule with updated case statuses
             updatedSchedule = conduction.DailySchedule( ...
                 app.OptimizedSchedule.Date, ...
                 app.OptimizedSchedule.Labs, ...
                 labAssignments, ...
                 app.OptimizedSchedule.metrics());
+
+            function value = coerceScalarNumeric(inputValue)
+                %COERCESCALARNUMERIC Convert assorted inputs to scalar double or NaN
+                value = NaN;
+
+                if isempty(inputValue)
+                    return;
+                end
+
+                if isnumeric(inputValue)
+                    value = inputValue(1);
+                    if isempty(value)
+                        value = NaN;
+                    end
+                    return;
+                end
+
+                if iscell(inputValue)
+                    try
+                        flattened = [inputValue{:}];
+                    catch
+                        flattened = [];
+                    end
+                    value = coerceScalarNumeric(flattened);
+                    return;
+                end
+
+                if isstring(inputValue)
+                    num = str2double(inputValue(1));
+                    if ~isnan(num)
+                        value = num;
+                    end
+                    return;
+                end
+
+                if ischar(inputValue)
+                    num = str2double(inputValue);
+                    if ~isnan(num)
+                        value = num;
+                    end
+                    return;
+                end
+            end
+
+            function textId = coerceStringIdentifier(inputValue)
+                %COERCESTRINGIDENTIFIER Produce a string identifier for case locking
+                if isstring(inputValue)
+                    textId = inputValue(1);
+                    return;
+                end
+
+                if ischar(inputValue)
+                    textId = string(inputValue);
+                    return;
+                end
+
+                if isnumeric(inputValue) && ~isempty(inputValue)
+                    textId = string(inputValue(1));
+                    return;
+                end
+
+                if iscell(inputValue) && ~isempty(inputValue)
+                    textId = coerceStringIdentifier(inputValue{1});
+                    return;
+                end
+
+                textId = "";
+            end
+        end
+
+        function updateActualTimeIndicator(obj, app)
+            %UPDATEACTUALTIMEINDICATOR Draw or refresh the actual-time line
+            ax = app.ScheduleAxes;
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            obj.clearActualTimeIndicator(app);
+
+            if ~app.IsCurrentTimeVisible
+                return;
+            end
+
+            actualTimeMinutes = obj.getActualCurrentTimeMinutes();
+            if isnan(actualTimeMinutes)
+                return;
+            end
+
+            currentTimeHour = actualTimeMinutes / 60;
+            yLimits = ylim(ax);
+            if isempty(yLimits) || currentTimeHour < yLimits(1) || currentTimeHour > yLimits(2)
+                return;
+            end
+
+            xLimits = xlim(ax);
+
+            lineHandle = line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
+                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 2, ...
+                'HitTest', 'off', 'Tag', 'ActualTimeLine');
+            if isprop(lineHandle, 'PickableParts')
+                lineHandle.PickableParts = 'none';
+            end
+
+            labelText = sprintf('Current (%s)', obj.minutesToTimeString(actualTimeMinutes));
+            labelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, labelText, ...
+                'Color', [1, 0, 0], 'FontWeight', 'bold', 'FontSize', 10, ...
+                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
+                'BackgroundColor', [0, 0, 0], 'Tag', 'ActualTimeLabel');
+            labelHandle.HitTest = 'off';
+            if isprop(labelHandle, 'PickableParts')
+                labelHandle.PickableParts = 'none';
+            end
+        end
+
+        function clearActualTimeIndicator(~, app)
+            %CLEARACTUALTIMEINDICATOR Remove existing actual-time line & label
+            ax = app.ScheduleAxes;
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+
+            delete(findobj(ax, 'Tag', 'ActualTimeLine'));
+            delete(findobj(ax, 'Tag', 'ActualTimeLabel'));
         end
 
     end
@@ -340,6 +535,12 @@ classdef ScheduleRenderer < handle
 
             % 24-hour format
             timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
+        end
+
+        function minutes = getActualCurrentTimeMinutes()
+            %GETACTUALCURRENTTIMEMINUTES Return current clock time in minutes from midnight
+            nowTime = datetime('now');
+            minutes = hour(nowTime) * 60 + minute(nowTime) + second(nowTime) / 60;
         end
 
         function value = getFieldValue(structOrObj, fieldName, defaultValue)

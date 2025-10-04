@@ -34,6 +34,19 @@ classdef OptimizationController < handle
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
 
+            % CASE-LOCKING: Ensure locked assignments remain valid for current lab count
+            [lockedAssignments, removedLockIds] = app.OptimizationController.sanitizeLockedAssignments(app, lockedAssignments);
+            if ~isempty(removedLockIds)
+                removedLockIds = string(removedLockIds(:));
+                app.LockedCaseIds = setdiff(app.LockedCaseIds, removedLockIds, 'stable');
+                app.TimeControlLockedCaseIds = setdiff(app.TimeControlLockedCaseIds, removedLockIds, 'stable');
+                app.TimeControlBaselineLockedIds = setdiff(app.TimeControlBaselineLockedIds, removedLockIds, 'stable');
+
+                warningMsg = sprintf(['The following locked cases were unlocked because their assigned labs ', ...
+                    'are no longer available: %s'], strjoin(removedLockIds, ', '));
+                uialert(app.UIFigure, warningMsg, 'Lock Removed');
+            end
+
             % CASE-LOCKING: Clear any stale locked IDs if no locked assignments found
             if ~isempty(app.LockedCaseIds) && isempty(lockedAssignments)
                 app.LockedCaseIds = string.empty;
@@ -57,6 +70,21 @@ classdef OptimizationController < handle
 
             try
                 scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
+
+                % DEBUG: Log optimization context for troubleshooting
+                try
+                    debugLog.enabled = true;
+                    debugLog.timestamp = datetime('now');
+                    debugLog.currentTimeMinutes = app.CaseManager.getCurrentTime();
+                    debugLog.isTimeControlActive = app.IsTimeControlActive;
+                    debugLog.lockedCaseIds = app.LockedCaseIds;
+                    debugLog.lockedConstraintsCount = numel(lockedConstraints);
+                    debugLog.optionSnapshot = scheduleOptions.toStruct();
+                    debugLog.caseCount = numel(casesStruct);
+                catch
+                    debugLog.enabled = false;
+                end
+
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
 
                 app.OptimizedSchedule = dailySchedule;
@@ -64,14 +92,50 @@ classdef OptimizationController < handle
                 app.IsOptimizationDirty = false;
                 app.OptimizationLastRun = datetime('now');
 
-                app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                if app.IsTimeControlActive
+                    currentTimeMinutes = app.CaseManager.getCurrentTime();
+                    if isnan(currentTimeMinutes)
+                        app.SimulatedSchedule = dailySchedule;
+                        scheduleForRender = dailySchedule;
+                    else
+                        simulated = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
+                        app.SimulatedSchedule = simulated;
+                        scheduleForRender = simulated;
+                    end
+                else
+                    app.SimulatedSchedule = conduction.DailySchedule.empty;
+                    scheduleForRender = dailySchedule;
+                end
+
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, metadata);
             catch ME
                 app.OptimizedSchedule = conduction.DailySchedule.empty;
                 app.OptimizationOutcome = struct();
                 app.IsOptimizationDirty = true;
                 app.OptimizationLastRun = NaT;
+                app.SimulatedSchedule = conduction.DailySchedule.empty;
                 app.OptimizationController.showOptimizationPendingPlaceholder(app);
-                uialert(app.UIFigure, sprintf('Failed to optimize schedule: %s', ME.message), 'Optimization');
+
+                if exist('debugLog', 'var') && debugLog.enabled
+                    debugLog.errorMessage = ME.message;
+                    debugLog.stack = getReport(ME, 'extended', 'hyperlinks', 'off');
+                    fprintf('\n[OptimizationController] Optimization failure at %s\n', string(debugLog.timestamp));
+                    fprintf('%s\n', debugLog.stack);
+                    fprintf('Locked IDs: %s\n', strjoin(string(debugLog.lockedCaseIds), ', '));
+                    fprintf('Locked constraint count: %d\n', debugLog.lockedConstraintsCount);
+                    if isfield(debugLog, 'optionSnapshot')
+                        disp(debugLog.optionSnapshot);
+                    end
+                    fprintf('Case count: %d\n', debugLog.caseCount);
+                    fprintf('Time control active: %d (currentTimeMinutes=%.2f)\n', debugLog.isTimeControlActive, debugLog.currentTimeMinutes);
+                end
+
+                detailedMsg = ME.message;
+                if exist('debugLog', 'var') && debugLog.enabled && isfield(debugLog, 'stack')
+                    detailedMsg = sprintf('%s\n\nContext:\n%s', ME.message, debugLog.stack);
+                end
+
+                uialert(app.UIFigure, sprintf('Failed to optimize schedule: %s', detailedMsg), 'Optimization');
             end
 
             app.IsOptimizationRunning = false;
@@ -98,6 +162,46 @@ classdef OptimizationController < handle
 
             obj.updateOptimizationStatus(app);
             obj.updateOptimizationActionAvailability(app);
+        end
+
+        function [filteredAssignments, removedCaseIds] = sanitizeLockedAssignments(~, app, assignments)
+            %SANITIZELOCKEDASSIGNMENTS Remove locks that reference unavailable labs
+            filteredAssignments = assignments;
+            removedCaseIds = string.empty;
+
+            if isempty(assignments)
+                return;
+            end
+
+            maxLabIndex = numel(app.LabIds);
+            isValid = true(size(assignments));
+
+            for idx = 1:numel(assignments)
+                entry = assignments(idx);
+                caseIdentifier = "";
+                if isfield(entry, 'caseID') && ~isempty(entry.caseID)
+                    caseIdentifier = string(entry.caseID);
+                end
+
+                if ~isfield(entry, 'assignedLab') || isempty(entry.assignedLab)
+                    isValid(idx) = false;
+                    removedCaseIds(end+1,1) = caseIdentifier; %#ok<AGROW>
+                    continue;
+                end
+
+                labValue = double(entry.assignedLab);
+                if isnan(labValue) || labValue < 1 || labValue > maxLabIndex
+                    isValid(idx) = false;
+                    removedCaseIds(end+1,1) = caseIdentifier; %#ok<AGROW>
+                end
+            end
+
+            if all(isValid)
+                return;
+            end
+
+            filteredAssignments = assignments(isValid);
+            removedCaseIds = unique(removedCaseIds(removedCaseIds ~= ""), 'stable');
         end
 
         function scheduleOptions = buildSchedulingOptions(~, app, lockedConstraints)

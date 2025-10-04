@@ -529,27 +529,53 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if currentTimeHour >= startHour && currentTimeHour <= endHour
             xLimits = xlim(ax);
             % Draw red horizontal line at current time with stored handle
+            delete(findobj(ax, 'Tag', 'NowHandle'));
+            delete(findobj(ax, 'Tag', 'NowLineShadow'));
+
+            shadowOffsetHours = 0.05;
+            shadowY = currentTimeHour + shadowOffsetHours;
+            if shadowY > endHour
+                shadowY = endHour;
+            end
+
+            nowShadowHandle = line(ax, xLimits, [shadowY, shadowY], ...
+                'Color', [0, 0, 0], 'LineStyle', '-', 'LineWidth', 4, 'Parent', ax, ...
+                'Tag', 'NowLineShadow', 'HitTest', 'off');
+            if isprop(nowShadowHandle, 'PickableParts')
+                nowShadowHandle.PickableParts = 'none';
+            end
+
             nowLineHandle = line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
-                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 3, 'Parent', ax, ...
+                'Color', [1, 1, 1], 'LineStyle', '-', 'LineWidth', 3, 'Parent', ax, ...
                 'Tag', 'NowLine', ...  % Tag for easy finding
                 'UserData', struct('timeMinutes', currentTimeMinutes));  % Store time data
+
+            handleMarker = line(ax, xLimits(1), currentTimeHour, ...
+                'Color', [1, 1, 1], 'Marker', 'o', 'MarkerSize', 18, ...
+                'MarkerFaceColor', [1, 1, 1], 'MarkerEdgeColor', [0, 0, 0], 'LineStyle', 'none', ...
+                'Tag', 'NowHandle');
+            handleMarker.ButtonDownFcn = [];
 
             % Add "NOW" label with tag for updating
             timeStr = minutesToTimeString(currentTimeMinutes);
             nowLabelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
                 sprintf('NOW (%s)', timeStr), ...
-                'Color', [1, 0, 0], 'FontWeight', 'bold', 'FontSize', 10, ...
+                'Color', [0, 0, 0], 'FontWeight', 'bold', 'FontSize', 13, ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'BackgroundColor', [0, 0, 0], ...
+                'BackgroundColor', [1, 1, 1], ...
                 'Tag', 'NowLabel');  % Tag for easy finding
 
             % Store handles in axes UserData for drag functionality
             if ~isfield(ax.UserData, 'nowLineHandle')
                 ax.UserData.nowLineHandle = nowLineHandle;
                 ax.UserData.nowLabelHandle = nowLabelHandle;
+                ax.UserData.nowShadowHandle = nowShadowHandle;
+                ax.UserData.nowHandleMarker = handleMarker;
             else
                 ax.UserData(1).nowLineHandle = nowLineHandle;
                 ax.UserData(1).nowLabelHandle = nowLabelHandle;
+                ax.UserData(1).nowShadowHandle = nowShadowHandle;
+                ax.UserData(1).nowHandleMarker = handleMarker;
             end
         end
     end

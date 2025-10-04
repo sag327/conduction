@@ -12,6 +12,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LoadDataButton              matlab.ui.control.Button
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
+        CurrentTimeLabel            matlab.ui.control.Label
+        CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
         TestToggle                  matlab.ui.control.Switch
         TimeControlSwitch           matlab.ui.control.Switch  % REALTIME-SCHEDULING: Toggle time control mode
 
@@ -157,6 +159,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
         SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
+        TimeControlBaselineLockedIds string = string.empty  % REALTIME-SCHEDULING: Locks in place before time control enabled
+        TimeControlLockedCaseIds string = string.empty  % REALTIME-SCHEDULING: Locks applied by time control mode
+        IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
+        CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Timer to refresh actual time indicator
         DrawerTimer timer = timer.empty
         DrawerWidth double = 0
         DrawerCurrentCaseId string = ""
@@ -190,7 +196,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit','fit'};  % REALTIME-SCHEDULING: Added column for TimeControlSwitch
+            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit','fit','fit','fit'};  % REALTIME-SCHEDULING: Added columns for time indicators
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -204,10 +210,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.Layout.Column = 2;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
+            app.CurrentTimeLabel = uilabel(app.TopBarLayout);
+            app.CurrentTimeLabel.Text = 'Current Time';
+            app.CurrentTimeLabel.Layout.Column = 4;
+            app.CurrentTimeLabel.HorizontalAlignment = 'right';
+
+            app.CurrentTimeCheckbox = uicheckbox(app.TopBarLayout);
+            app.CurrentTimeCheckbox.Text = '';
+            app.CurrentTimeCheckbox.Layout.Column = 5;
+            app.CurrentTimeCheckbox.Value = false;
+            app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
+
 
             % REALTIME-SCHEDULING: Time Control Switch
             app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
-            app.TimeControlSwitch.Layout.Column = 4;
+            app.TimeControlSwitch.Layout.Column = 6;
             app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
             app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
             app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
@@ -215,7 +232,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 5;  % REALTIME-SCHEDULING: Moved to column 5
+            app.TestToggle.Layout.Column = 7;  % REALTIME-SCHEDULING: Moved to column 7
             app.TestToggle.Items = {'Test Mode',''};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -1079,6 +1096,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function delete(app)
+            app.stopCurrentTimeTimer();
+            if ~isempty(app.CurrentTimeTimer) && isvalid(app.CurrentTimeTimer)
+                delete(app.CurrentTimeTimer);
+                app.CurrentTimeTimer = timer.empty;
+            end
             app.DrawerController.clearDrawerTimer(app);
             delete(app.UIFigure);
         end
@@ -1249,28 +1271,131 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function TimeControlSwitchValueChanged(app, ~)
             % REALTIME-SCHEDULING: Toggle time control mode
-            if strcmp(app.TimeControlSwitch.Value, 'On')
+            isEnabling = strcmp(app.TimeControlSwitch.Value, 'On');
+
+            if isEnabling
                 app.IsTimeControlActive = true;
-                % Initialize current time from system clock
-                currentTime = app.CaseManager.getCurrentTime();
-                % Re-render to show NOW line and enable dragging
+
+                % Snapshot locks that existed prior to time control mode
+                app.TimeControlBaselineLockedIds = app.LockedCaseIds;
+                app.TimeControlLockedCaseIds = string.empty;
+
+                % Start timeline at 8:00 AM (minutes from midnight)
+                startTimeMinutes = 8 * 60;
+                app.CaseManager.setCurrentTime(startTimeMinutes);
+
                 if ~isempty(app.OptimizedSchedule)
+                    % Build simulated schedule and render with draggable timeline
+                    updatedSchedule = app.ScheduleRenderer.updateCaseStatusesByTime(app, startTimeMinutes);
+                    app.SimulatedSchedule = updatedSchedule;
+
                     scheduleToRender = app.getScheduleForRendering();
                     app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
                     app.ScheduleRenderer.enableNowLineDrag(app);
+                    app.ScheduleRenderer.updateActualTimeIndicator(app);
+                else
+                    app.SimulatedSchedule = conduction.DailySchedule.empty;
                 end
+
+                return;
+            end
+
+            if ~app.IsTimeControlActive
+                app.TimeControlSwitch.Value = 'Off';
+                return;
+            end
+
+            % Prompt whether time-control locks should persist
+            keepLocks = true;
+            if ~isempty(app.TimeControlLockedCaseIds)
+                confirmMsg = sprintf(['Time control locked %d case(s).\n' ...
+                    'Do you want to keep these cases locked after disabling time control?'], ...
+                    numel(app.TimeControlLockedCaseIds));
+                choice = uiconfirm(app.UIFigure, confirmMsg, 'Time Control Locks', ...
+                    'Options', {'Keep Locks', 'Unlock Cases'}, ...
+                    'DefaultOption', 'Keep Locks', ...
+                    'CancelOption', 'Keep Locks', ...
+                    'Icon', 'question');
+
+                keepLocks = strcmp(choice, 'Keep Locks');
+            end
+
+            if ~keepLocks && ~isempty(app.TimeControlLockedCaseIds)
+                remainingLocks = setdiff(app.LockedCaseIds, app.TimeControlLockedCaseIds);
+                app.LockedCaseIds = remainingLocks;
+            end
+
+            % Disable time control mode and restore defaults
+            app.IsTimeControlActive = false;
+            app.ScheduleRenderer.disableNowLineDrag(app);
+            app.CaseManager.setCurrentTime(NaN);
+            app.SimulatedSchedule = conduction.DailySchedule.empty;
+            app.TimeControlLockedCaseIds = string.empty;
+            app.TimeControlBaselineLockedIds = string.empty;
+
+            if ~isempty(app.OptimizedSchedule)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            end
+
+            app.ScheduleRenderer.updateActualTimeIndicator(app);
+            app.TimeControlSwitch.Value = 'Off';
+        end
+
+        function CurrentTimeCheckboxValueChanged(app, ~)
+            app.IsCurrentTimeVisible = logical(app.CurrentTimeCheckbox.Value);
+
+            if app.IsCurrentTimeVisible
+                app.startCurrentTimeTimer();
             else
-                app.IsTimeControlActive = false;
-                % Disable NOW line dragging
-                app.ScheduleRenderer.disableNowLineDrag(app);
-                % Reset to system time
-                app.CaseManager.setCurrentTime(NaN);
-                % Clear simulated schedule
-                app.SimulatedSchedule = conduction.DailySchedule.empty;
-                % Re-render to show system time with original statuses
-                if ~isempty(app.OptimizedSchedule)
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-                end
+                app.stopCurrentTimeTimer();
+                app.ScheduleRenderer.clearActualTimeIndicator(app);
+            end
+
+            app.ScheduleRenderer.updateActualTimeIndicator(app);
+        end
+
+        function startCurrentTimeTimer(app)
+            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
+                app.CurrentTimeTimer = timer( ...
+                    'ExecutionMode', 'fixedSpacing', ...
+                    'Period', 30, ...
+                    'StartDelay', 0, ...
+                    'TimerFcn', @(~, ~) app.onCurrentTimeTimerTick(), ...
+                    'Name', 'ConductionActualTimeTimer');
+            end
+
+            if strcmp(app.CurrentTimeTimer.Running, 'off')
+                start(app.CurrentTimeTimer);
+            end
+
+            % Update immediately when toggled on
+            app.onCurrentTimeTimerTick();
+        end
+
+        function stopCurrentTimeTimer(app)
+            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
+                return;
+            end
+
+            if strcmp(app.CurrentTimeTimer.Running, 'on')
+                stop(app.CurrentTimeTimer);
+            end
+        end
+
+        function onCurrentTimeTimerTick(app)
+            if ~app.IsCurrentTimeVisible
+                return;
+            end
+
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            try
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            catch ME
+                warning('ProspectiveSchedulerApp:CurrentTimeTimerFailed', ...
+                    'Failed to update current time indicator: %s', ME.message);
             end
         end
 
