@@ -169,6 +169,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
         DrawerHandleWidth double = 28  % Width of drawer handle button
         DrawerHandleOverlap double = 12  % Overlap pixels into schedule area
+        IsPositioningDrawerHandle logical = false  % Guard to prevent redundant position updates
     end
 
     % Component initialization
@@ -376,8 +377,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
-            % ensure handle stays aligned on theme changes/resizes
-            app.UIFigure.SizeChangedFcn = @(~,~) app.positionDrawerHandle();
 
             % Ensure testing controls start hidden/off
             app.TestingModeController.setTestToggleValue(app, false);
@@ -1342,9 +1341,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     methods (Access = public)
 
         function positionDrawerHandle(app)
+            % Guard against redundant calls during same layout cycle
+            if app.IsPositioningDrawerHandle
+                return;
+            end
+
             if isempty(app.Drawer) || ~isvalid(app.Drawer) || isempty(app.DrawerHandleButton) || ~isvalid(app.DrawerHandleButton)
                 return;
             end
+
+            app.IsPositioningDrawerHandle = true;
+
             % Compute pixel position of drawer panel
             try
                 dpos = getpixelposition(app.Drawer, true);
@@ -1355,6 +1362,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             drawerBottom = dpos(2);
             drawerHeight = dpos(4);
             if drawerHeight <= 0
+                app.IsPositioningDrawerHandle = false;
                 return;
             end
             btnH = max(18, min(36, drawerHeight - 6));
@@ -1363,14 +1371,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             y = drawerBottom + (drawerHeight - btnH)/2;
             app.DrawerHandleButton.Position = [x, y, btnW, btnH];
             app.DrawerHandleButton.Visible = 'on';
-            try, uistack(app.DrawerHandleButton,'top'); end
-            % shadow line just to the left
+            try, uistack(app.DrawerHandleButton, 'top'); catch, end
+
             if ~isempty(app.DrawerHandleShadow) && isvalid(app.DrawerHandleShadow)
                 shW = 3; shH = max(0, drawerHeight - 10);
                 app.DrawerHandleShadow.Position = [drawerLeft - shW - 2, drawerBottom + 5, shW, shH];
                 app.DrawerHandleShadow.Visible = 'on';
-                try, uistack(app.DrawerHandleShadow,'top'); end
+                try, uistack(app.DrawerHandleShadow, 'top'); catch, end
             end
+
+            app.IsPositioningDrawerHandle = false;
         end
 
         function updateDropdowns(app)

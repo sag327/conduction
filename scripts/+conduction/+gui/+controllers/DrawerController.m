@@ -30,19 +30,8 @@ classdef DrawerController < handle
             % Clear any existing timers for safety
             obj.clearDrawerTimer(app);
 
-            % Suspend graphics updates to prevent visible bouncing
-            drawnow;  % Process pending updates first
-
             % Instantly set drawer to target width
             obj.setDrawerWidth(app, targetWidth);
-
-            % Force single clean layout update at final size
-            drawnow;
-
-            % Keep overlay handle aligned with the drawer edge
-            if ismethod(app, 'positionDrawerHandle')
-                app.positionDrawerHandle();
-            end
 
             % Only populate drawer content after axes have reached proper size
             if targetWidth > 0 && ~isempty(app.DrawerCurrentCaseId)
@@ -51,6 +40,10 @@ classdef DrawerController < handle
                 callbackFcn = @() obj.populateDrawer(app, app.DrawerCurrentCaseId);
                 obj.executeWhenAxesReady(app, app.DrawerHistogramAxes, 220, 100, ...
                     'DrawerTimer', callbackFcn, conditionFcn);
+            end
+
+            if ismethod(app, 'positionDrawerHandle')
+                app.positionDrawerHandle();
             end
         end
 
@@ -70,7 +63,7 @@ classdef DrawerController < handle
             end
             app.MiddleLayout.ColumnWidth = widths;
 
-            % Update handle arrow and alignment
+            % Update handle arrow text
             if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
                 if widthValue > 0
                     app.DrawerHandleButton.Text = '⟩';
@@ -79,9 +72,10 @@ classdef DrawerController < handle
                     app.DrawerHandleButton.Text = '⟨';
                     app.DrawerHandleButton.Tooltip = {'Show Inspector'};
                 end
-                if ismethod(app, 'positionDrawerHandle')
-                    app.positionDrawerHandle();
-                end
+            end
+
+            if ismethod(app, 'positionDrawerHandle')
+                app.positionDrawerHandle();
             end
         end
 
