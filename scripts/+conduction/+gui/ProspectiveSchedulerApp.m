@@ -451,7 +451,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.DrawerLayout = uigridlayout(app.Drawer);
             app.DrawerLayout.RowHeight = {'1x', 60, '1x'};  % Three rows: top spacer, button, bottom spacer
-            app.DrawerLayout.ColumnWidth = {28, '1x'};  % Column 1: handle (28px), Column 2: content (flexible)
+            app.DrawerLayout.ColumnWidth = {28, 400};  % Column 1: handle (28px), Column 2: content (fixed 400px)
             app.DrawerLayout.Padding = [0 0 0 0];
             app.DrawerLayout.RowSpacing = 0;
             app.DrawerLayout.ColumnSpacing = 0;
@@ -486,7 +486,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             contentGrid.BackgroundColor = app.Drawer.BackgroundColor;
 
             app.DrawerHeaderLabel = uilabel(contentGrid);
-            app.DrawerHeaderLabel.Text = 'Case Inspector';
+            app.DrawerHeaderLabel.Text = 'Inspector';
             app.DrawerHeaderLabel.FontSize = 16;
             app.DrawerHeaderLabel.FontWeight = 'bold';
             app.DrawerHeaderLabel.FontColor = [1 1 1];
@@ -494,7 +494,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHeaderLabel.Layout.Column = 1;
 
             app.DrawerInspectorTitle = uilabel(contentGrid);
-            app.DrawerInspectorTitle.Text = 'Inspector';
+            app.DrawerInspectorTitle.Text = 'Case Details';
             app.DrawerInspectorTitle.FontWeight = 'bold';
             app.DrawerInspectorTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerInspectorTitle.Layout.Row = 2;
@@ -525,9 +525,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.createDrawerInspectorRow(5, 'Start', 'DrawerStartValueLabel');
             app.createDrawerInspectorRow(6, 'End', 'DrawerEndValueLabel');
 
-            % Optimization Parameters Section
+            % Optimization Details Section
             app.DrawerOptimizationTitle = uilabel(contentGrid);
-            app.DrawerOptimizationTitle.Text = 'Optimization Parameters';
+            app.DrawerOptimizationTitle.Text = 'Optimization Details';
             app.DrawerOptimizationTitle.FontWeight = 'bold';
             app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
             app.DrawerOptimizationTitle.Layout.Row = 5;  % CASE-LOCKING: Updated from row 4
@@ -567,6 +567,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerHistogramAxes.Toolbar.Visible = 'off';
             app.DrawerHistogramAxes.Interactions = [];
             disableDefaultInteractivity(app.DrawerHistogramAxes);
+
+            % Clear any lingering callbacks from previous attempts
+            app.DrawerHistogramPanel.SizeChangedFcn = [];
 
             % Start with drawer collapsed (28px showing handle only)
             app.DrawerController.setDrawerWidth(app, 28);

@@ -27,23 +27,17 @@ classdef DrawerController < handle
 
             targetWidth = max(28, double(targetWidth));  % Minimum 28px for handle
 
-            % Set drawer to target width (includes drawnow to update layout)
+            % Set drawer to target width
             obj.setDrawerWidth(app, targetWidth);
 
-            % Only populate drawer content when expanded
+            % Populate drawer content when expanded (axes is always full size now)
             if targetWidth > 28 && ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
-                % Set up one-time callback to populate when axes is actually ready
-                if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
-                    % Store case ID for the callback
-                    caseId = app.DrawerCurrentCaseId;
-
-                    % Create one-time callback that fires when axes resizes
-                    app.DrawerHistogramAxes.SizeChangedFcn = @(~,~) obj.onAxesReady(app, caseId);
-                end
-            else
-                % Clear any existing callback when closing
-                if ~isempty(app.DrawerHistogramAxes) && isvalid(app.DrawerHistogramAxes)
-                    app.DrawerHistogramAxes.SizeChangedFcn = [];
+                try
+                    % Axes is always 400px, just populate it directly
+                    obj.populateDrawer(app, app.DrawerCurrentCaseId);
+                catch ME
+                    warning('DrawerController:PopulateError', 'Error populating drawer: %s', ME.message);
+                    fprintf('Full error:\n%s\n', getReport(ME));
                 end
             end
         end
@@ -65,16 +59,10 @@ classdef DrawerController < handle
             end
             app.MiddleLayout.ColumnWidth = widths;
 
-            % Update DrawerLayout column width (content visibility)
-            if ~isempty(app.DrawerLayout) && isvalid(app.DrawerLayout)
-                if widthValue > 28
-                    % Expanded: show content (column 2)
-                    app.DrawerLayout.ColumnWidth = {28, '1x'};
-                else
-                    % Collapsed: hide content
-                    app.DrawerLayout.ColumnWidth = {28, 0};
-                end
-            end
+            % DrawerLayout column 2 stays fixed at 400px always
+            % When drawer is 28px, content is clipped (not visible)
+            % When drawer is 428px, content is fully visible
+            % This means axes never changes size - always 400px!
 
             % Force layout update
             drawnow;
@@ -91,43 +79,12 @@ classdef DrawerController < handle
             end
         end
 
-        function onAxesReady(obj, app, caseId)
-            % Callback that fires when histogram axes has actually resized
-            % This ensures we plot only when axes is at correct dimensions
-
-            if isempty(app.DrawerHistogramAxes) || ~isvalid(app.DrawerHistogramAxes)
-                return;
-            end
-
-            % Safety: only proceed if we have a valid case ID
-            if nargin < 3 || isempty(caseId) || strlength(caseId) == 0
-                app.DrawerHistogramAxes.SizeChangedFcn = [];
-                return;
-            end
-
-            % Check if axes has actual width (not collapsed)
-            try
-                oldUnits = app.DrawerHistogramAxes.Units;
-                app.DrawerHistogramAxes.Units = 'pixels';
-                axesPos = app.DrawerHistogramAxes.InnerPosition;
-                app.DrawerHistogramAxes.Units = oldUnits;
-
-                % Only populate if axes is wide enough (expanded state)
-                if axesPos(3) > 200
-                    % Remove this callback so it only fires once
-                    app.DrawerHistogramAxes.SizeChangedFcn = [];
-
-                    % Now populate the drawer with proper sized axes
-                    obj.populateDrawer(app, caseId);
-                end
-            catch ME
-                % If something fails, just clear the callback and log warning
-                app.DrawerHistogramAxes.SizeChangedFcn = [];
-                warning('DrawerController:onAxesReady', 'Error in onAxesReady: %s', ME.message);
-            end
-        end
-
         function populateDrawer(obj, app, caseId)
+            % Safety: don't populate if GUI isn't fully initialized
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
             if isempty(app.Drawer) || ~isvalid(app.Drawer)
                 return;
             end
@@ -135,7 +92,7 @@ classdef DrawerController < handle
                 return;
             end
 
-            if nargin < 3
+            if nargin < 3 || isempty(caseId)
                 caseId = app.DrawerCurrentCaseId;
             end
 
