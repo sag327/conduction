@@ -949,7 +949,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel.Layout.Column = [1 2];
 
             app.CasesTable = uitable(casesGrid);
-            app.CasesTable.ColumnName = {'', '#', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
+            caseTableStyle = uistyle('HorizontalAlignment','left');
+            addStyle(app.CasesTable,caseTableStyle);
+            app.CasesTable.ColumnName = {'', 'ID', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
             app.CasesTable.ColumnWidth = {45, 50, 100, 140, 80, 100, 90, 80};
             app.CasesTable.RowName = {};
             app.CasesTable.Layout.Row = 2;
