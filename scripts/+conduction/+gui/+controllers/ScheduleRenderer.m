@@ -51,6 +51,10 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, []);
 
+            if app.IsTimeControlActive
+                obj.enableNowLineDrag(app);
+            end
+
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
@@ -107,6 +111,10 @@ classdef ScheduleRenderer < handle
 
             % Update optional actual time indicator after schedule renders
             app.ScheduleRenderer.updateActualTimeIndicator(app);
+
+            if app.IsTimeControlActive
+                obj.enableNowLineDrag(app);
+            end
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
