@@ -557,23 +557,23 @@ classdef ScheduleRenderer < handle
                             caseIdentifier = string(obj.getFieldValue(caseEntry, 'caseID', ""));
                             if ismember(caseIdentifier, lockedIds)
                                 procEnd = obj.getFieldValue(caseEntry, 'procEndTime', NaN);
-                                endTime = obj.getFieldValue(caseEntry, 'endTime', NaN);
-                                postTime = obj.getFieldValue(caseEntry, 'postTime', 0);
+                                postTime = obj.getFieldValue(caseEntry, 'postTime', NaN);
 
-                                if isnan(postTime)
-                                    postTime = 0;
-                                end
-
-                                candidate = endTime;
+                                candidate = NaN;
                                 if ~isnan(procEnd)
-                                    procPlusPost = procEnd + postTime;
-                                    if isnan(candidate) || procPlusPost > candidate
-                                        candidate = procPlusPost;
+                                    if isnan(postTime)
+                                        postTime = 0;
                                     end
+                                    candidate = procEnd + max(0, postTime);
                                 end
 
                                 if isnan(candidate)
-                                    candidate = procEnd;
+                                    endTime = obj.getFieldValue(caseEntry, 'endTime', NaN);
+                                    if ~isnan(endTime)
+                                        candidate = endTime;
+                                    elseif ~isnan(procEnd)
+                                        candidate = procEnd;
+                                    end
                                 end
 
                                 if ~isnan(candidate)
