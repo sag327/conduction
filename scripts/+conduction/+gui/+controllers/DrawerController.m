@@ -248,15 +248,29 @@ classdef DrawerController < handle
             %   Re-renders the schedule to show visual change
 
             caseId = string(caseId);
+            caseIndex = str2double(caseId);
 
             % Toggle in LockedCaseIds array
             if ismember(caseId, app.LockedCaseIds)
                 % Unlock: remove from array
                 app.LockedCaseIds(app.LockedCaseIds == caseId) = [];
+                % Update ProspectiveCase object
+                if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
+                    caseObj = app.CaseManager.getCase(caseIndex);
+                    caseObj.IsLocked = false;
+                end
             else
                 % Lock: add to array
                 app.LockedCaseIds(end+1) = caseId;
+                % Update ProspectiveCase object
+                if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
+                    caseObj = app.CaseManager.getCase(caseIndex);
+                    caseObj.IsLocked = true;
+                end
             end
+
+            % Update cases table to reflect lock status
+            app.updateCasesTable();
 
             % Re-render schedule to show lock state change
             if ~isempty(app.OptimizedSchedule)

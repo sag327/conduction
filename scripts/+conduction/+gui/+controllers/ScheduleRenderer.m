@@ -337,9 +337,11 @@ classdef ScheduleRenderer < handle
 
                     % Determine simulated status based on time (visualization only)
                     newStatus = "";
+                    shouldBeLocked = false;
                     if procEndTime <= currentTimeMinutes
                         % Case would be completed at this time
                         newStatus = "completed";
+                        shouldBeLocked = true;
 
                         % Lock completed cases to preserve time and lab assignment
                         if ~ismember(caseIdStr, app.LockedCaseIds)
@@ -352,6 +354,7 @@ classdef ScheduleRenderer < handle
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case would be in progress at this time
                         newStatus = "in_progress";
+                        shouldBeLocked = true;
 
                         % Lock in-progress cases to preserve time and lab assignment
                         if ~ismember(caseIdStr, app.LockedCaseIds)
@@ -364,11 +367,19 @@ classdef ScheduleRenderer < handle
                     else
                         % Case would be pending at this time
                         newStatus = "pending";
+                        shouldBeLocked = false;
                     end
 
                     % Update caseStatus in the schedule struct for visualization only
                     % Do NOT modify ProspectiveCase objects to keep case IDs stable
                     labAssignments{labIdx}(caseIdx).caseStatus = char(newStatus);
+
+                    % Update ProspectiveCase object status and lock for table display
+                    if ~isnan(caseIdNumeric) && caseIdNumeric > 0 && caseIdNumeric <= app.CaseManager.CaseCount
+                        caseObj = app.CaseManager.getCase(caseIdNumeric);
+                        caseObj.CaseStatus = newStatus;
+                        caseObj.IsLocked = shouldBeLocked;
+                    end
                 end
             end
 
@@ -377,6 +388,9 @@ classdef ScheduleRenderer < handle
             end
 
             app.TimeControlLockedCaseIds = unique(newTimeControlLocks, 'stable');
+
+            % Update cases table to reflect status and lock changes
+            app.updateCasesTable();
 
             % Create new DailySchedule with updated case statuses
             updatedSchedule = conduction.DailySchedule( ...
