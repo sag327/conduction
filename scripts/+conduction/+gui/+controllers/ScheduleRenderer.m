@@ -101,10 +101,6 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
-            if app.DrawerWidth > 1 && strlength(app.DrawerCurrentCaseId) > 0
-                app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
-            end
-
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
             app.AnalyticsRenderer.updateKPIBar(app, dailySchedule);

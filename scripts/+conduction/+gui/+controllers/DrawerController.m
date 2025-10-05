@@ -63,9 +63,6 @@ classdef DrawerController < handle
 
             % DrawerLayout column 2 stays fixed at 400px always; clipping hides content when collapsed
 
-            % Force layout update to keep handle aligned
-            drawnow;
-
             % Update handle button appearance
             if ~isempty(app.DrawerHandleButton) && isvalid(app.DrawerHandleButton)
                 if widthValue > 28

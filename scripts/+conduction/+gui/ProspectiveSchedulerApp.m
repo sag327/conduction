@@ -171,6 +171,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerTimer timer = timer.empty
         DrawerWidth double = 28  % Starts collapsed (28px = handle only)
         DrawerCurrentCaseId string = ""
+        DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
@@ -596,8 +597,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DrawerLayout.ColumnSpacing = 0;
             app.DrawerLayout.BackgroundColor = app.Drawer.BackgroundColor;
 
-            % Create handle button in column 1, centered vertically
-            app.DrawerHandleButton = uibutton(app.DrawerLayout, 'push');
+            % Create left column panel with figure background
+            leftPanel = uipanel(app.DrawerLayout);
+            leftPanel.Layout.Row = [1 3];  % Span all rows
+            leftPanel.Layout.Column = 1;
+            leftPanel.BackgroundColor = app.UIFigure.Color;
+            leftPanel.BorderType = 'none';
+
+            % Create grid for handle button in left panel
+            leftGrid = uigridlayout(leftPanel);
+            leftGrid.RowHeight = {'1x', 60, '1x'};
+            leftGrid.ColumnWidth = {28};
+            leftGrid.Padding = [0 0 0 0];
+            leftGrid.RowSpacing = 0;
+            leftGrid.ColumnSpacing = 0;
+            leftGrid.BackgroundColor = app.UIFigure.Color;
+
+            % Create handle button in left panel, centered vertically
+            app.DrawerHandleButton = uibutton(leftGrid, 'push');
             app.DrawerHandleButton.Layout.Row = 2;  % Middle row (centered)
             app.DrawerHandleButton.Layout.Column = 1;
             app.DrawerHandleButton.Text = '◀';
@@ -1262,7 +1279,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Set selected case and re-render to show highlight
+            % Set selected case
             app.SelectedCaseId = string(caseId);
 
             % Highlight corresponding row in cases table
@@ -1277,7 +1294,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
             end
 
-            app.DrawerController.openDrawer(app, caseId);
+            % Store the case ID and update drawer if it's open
+            app.DrawerCurrentCaseId = caseId;
+            if app.DrawerWidth > 28
+                app.DrawerController.populateDrawer(app, caseId);
+            end
+
+            % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
+            % This behavior was intentionally disabled to prevent unwanted automatic drawer opening
+            % If you need to change this, modify the DrawerAutoOpenOnSelect property (default: false)
+            % See: DrawerHandleButtonPushed callback for manual drawer opening
+            if app.DrawerAutoOpenOnSelect
+                app.DrawerController.openDrawer(app, caseId);
+            end
         end
 
         function onScheduleBackgroundClicked(app)
