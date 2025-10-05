@@ -59,7 +59,7 @@ classdef AnalyticsRenderer < handle
             if isempty(flipRatio) || isnan(flipRatio)
                 app.KPI5.Text = 'Flip ratio: --';
             else
-                app.KPI5.Text = sprintf('Flip ratio: %.0f%%%%', flipRatio * 100);
+                app.KPI5.Text = sprintf('Flip ratio: %.0f%%', flipRatio * 100);
             end
         end
 

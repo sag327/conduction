@@ -193,9 +193,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
 
-            % Root layout: header, content, footer
+            % Root layout: header, content
             app.MainGridLayout = uigridlayout(app.UIFigure);
-            app.MainGridLayout.RowHeight = {'fit', '1x', 'fit'};
+            app.MainGridLayout.RowHeight = {'fit', '1x'};
             app.MainGridLayout.ColumnWidth = {'1x'};
             app.MainGridLayout.RowSpacing = 10;
             app.MainGridLayout.ColumnSpacing = 10;
@@ -253,10 +253,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
             app.MiddleLayout.Layout.Row = 2;
             app.MiddleLayout.Layout.Column = 1;
-            app.MiddleLayout.RowHeight = {'1x','fit'};
+            app.MiddleLayout.RowHeight = {'1x','fit', 22};  % Row 1: canvas, Row 2: test panel, Row 3: KPI bar
             app.MiddleLayout.ColumnWidth = {370, '1x', 0};
             app.MiddleLayout.ColumnSpacing = 12;
-            app.MiddleLayout.RowSpacing = 12;
+            app.MiddleLayout.RowSpacing = 6;
             app.MiddleLayout.Padding = [0 0 0 0];
 
             app.TabGroup = uitabgroup(app.MiddleLayout);
@@ -365,10 +365,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Add optimization options and status as caption below schedule
 
-            % Bottom KPI bar
-            app.BottomBarLayout = uigridlayout(app.MainGridLayout);
+            % KPI bar underneath middle panel (schedule visualization)
+            app.BottomBarLayout = uigridlayout(app.MiddleLayout);
             app.BottomBarLayout.Layout.Row = 3;
-            app.BottomBarLayout.Layout.Column = 1;
+            app.BottomBarLayout.Layout.Column = 2;
             app.BottomBarLayout.RowHeight = {'fit'};
             app.BottomBarLayout.ColumnWidth = {'1x','1x','1x','1x','1x'};
             app.BottomBarLayout.ColumnSpacing = 12;
