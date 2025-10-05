@@ -295,47 +295,63 @@ end
 end
 
 function caseRequests = buildCaseRequests(dataTable, procedures, operators, labs)
-caseCells = cell(height(dataTable), 1);
+numRows = height(dataTable);
 
+if numRows == 0
+    caseRequests = conduction.CaseRequest.empty;
+    return;
+end
+
+% Extract and vectorize string columns once
 procedureNames = string(dataTable.procedure);
 surgeonNames = string(dataTable.surgeon);
 roomNames = string(dataTable.room);
 
-for idx = 1:height(dataTable)
-    row = dataTable(idx, :);
+% Pre-compute all canonical IDs
+procedureIds = arrayfun(@(x) char(conduction.Procedure.canonicalId(x)), procedureNames, 'UniformOutput', false);
+operatorIds = arrayfun(@(x) char(conduction.Operator.canonicalId(x)), surgeonNames, 'UniformOutput', false);
+labIds = cell(numRows, 1);
+hasLab = ~ismissing(roomNames) & strlength(roomNames) > 0;
+labIds(hasLab) = arrayfun(@(x) char(conduction.Lab.canonicalId(x)), roomNames(hasLab), 'UniformOutput', false);
 
-    procedureId = char(conduction.Procedure.canonicalId(procedureNames(idx)));
-    if ~procedures.isKey(procedureId)
+% Build any missing entities upfront
+for idx = 1:numRows
+    if ~procedures.isKey(procedureIds{idx})
+        row = dataTable(idx, :);
         proc = conduction.Procedure.fromRow(row);
-        procedures(procedureId) = proc;
+        procedures(procedureIds{idx}) = proc;
     end
-    procedure = procedures(procedureId);
 
-    operatorId = char(conduction.Operator.canonicalId(surgeonNames(idx)));
-    if ~operators.isKey(operatorId)
-        operators(operatorId) = conduction.Operator(surgeonNames(idx));
+    if ~operators.isKey(operatorIds{idx})
+        operators(operatorIds{idx}) = conduction.Operator(surgeonNames(idx));
     end
-    operator = operators(operatorId);
 
-    lab = conduction.Lab.empty;
-    if ~ismissing(roomNames(idx)) && strlength(roomNames(idx)) > 0
-        labId = char(conduction.Lab.canonicalId(roomNames(idx)));
-        if ~labs.isKey(labId)
-            location = "";
-            if ismember('location', dataTable.Properties.VariableNames)
-                location = string(dataTable.location(idx));
-            end
-            labs(labId) = conduction.Lab(roomNames(idx), location);
+    if hasLab(idx) && ~labs.isKey(labIds{idx})
+        location = "";
+        if ismember('location', dataTable.Properties.VariableNames)
+            location = string(dataTable.location(idx));
         end
-        lab = labs(labId);
+        labs(labIds{idx}) = conduction.Lab(roomNames(idx), location);
+    end
+end
+
+% Pre-allocate CaseRequest array
+caseCells = cell(numRows, 1);
+
+% Build CaseRequests with pre-fetched entities
+for idx = 1:numRows
+    row = dataTable(idx, :);
+    procedure = procedures(procedureIds{idx});
+    operator = operators(operatorIds{idx});
+
+    if hasLab(idx)
+        lab = labs(labIds{idx});
+    else
+        lab = conduction.Lab.empty;
     end
 
-    caseCells{idx, 1} = conduction.CaseRequest(row, procedure, operator, lab);
+    caseCells{idx} = conduction.CaseRequest(row, procedure, operator, lab);
 end
 
-if isempty(caseCells)
-    caseRequests = conduction.CaseRequest.empty;
-else
-    caseRequests = vertcat(caseCells{:});
-end
+caseRequests = vertcat(caseCells{:});
 end
