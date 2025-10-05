@@ -102,7 +102,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptLabsLabel                matlab.ui.control.Label
         OptLabsSpinner              matlab.ui.control.Spinner
         OptAvailableLabsLabel       matlab.ui.control.Label
-        OptAvailableLabsList        matlab.ui.control.ListBox
+        OptAvailableSelectAll       matlab.ui.control.CheckBox
+        OptAvailableLabsPanel       matlab.ui.container.Panel
+        OptAvailableLabCheckboxes   matlab.ui.control.CheckBox = matlab.ui.control.CheckBox.empty(0, 1)
         OptFilterLabel              matlab.ui.control.Label
         OptFilterDropDown           matlab.ui.control.DropDown
         OptDefaultStatusLabel       matlab.ui.control.Label
@@ -172,6 +174,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
+    end
+
+    properties (Access = private)
+        IsSyncingAvailableLabSelection logical = false
     end
 
     % Component initialization
@@ -386,6 +392,112 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
+        end
+
+        function selectedLabs = getSelectedAvailableLabs(app, labIds)
+            if nargin < 2 || isempty(labIds)
+                labIds = app.LabIds;
+            end
+
+            if isempty(app.OptAvailableLabCheckboxes)
+                selectedLabs = intersect(app.AvailableLabIds, labIds, 'stable');
+                return;
+            end
+
+            selectedLabs = [];
+            for idx = 1:numel(app.OptAvailableLabCheckboxes)
+                cb = app.OptAvailableLabCheckboxes(idx);
+                if ~isvalid(cb)
+                    continue;
+                end
+                labId = cb.UserData;
+                if cb.Value
+                    selectedLabs(end+1) = labId; %#ok<AGROW>
+                end
+            end
+            selectedLabs = intersect(unique(selectedLabs, 'stable'), labIds, 'stable');
+        end
+
+        function applyAvailableLabSelection(app, selectedLabs, suppressDirty)
+            if nargin < 2
+                selectedLabs = app.LabIds;
+            end
+            if nargin < 3
+                suppressDirty = false;
+            end
+
+            selectedLabs = unique(selectedLabs(:)', 'stable');
+            selectedLabs = intersect(selectedLabs, app.LabIds, 'stable');
+
+            currentSelection = app.AvailableLabIds;
+            changed = ~isequal(currentSelection(:)', selectedLabs(:)');
+
+            app.AvailableLabIds = selectedLabs;
+
+            if ~isempty(app.OptAvailableLabCheckboxes)
+                app.IsSyncingAvailableLabSelection = true;
+                for idx = 1:numel(app.OptAvailableLabCheckboxes)
+                    cb = app.OptAvailableLabCheckboxes(idx);
+                    if ~isvalid(cb)
+                        continue;
+                    end
+                    cb.Value = ismember(cb.UserData, selectedLabs);
+                end
+                app.IsSyncingAvailableLabSelection = false;
+            end
+
+            app.syncAvailableLabsSelectAll();
+
+            if ~suppressDirty && changed
+                app.OptimizationController.updateOptimizationOptionsSummary(app);
+                app.OptimizationController.markOptimizationDirty(app);
+            elseif ~suppressDirty && ~changed
+                app.OptimizationController.updateOptimizationOptionsSummary(app);
+            end
+        end
+
+        function syncAvailableLabsSelectAll(app)
+            if isempty(app.OptAvailableSelectAll) || ~isvalid(app.OptAvailableSelectAll)
+                return;
+            end
+
+            expectedLabs = app.LabIds;
+            isAllSelected = ~isempty(expectedLabs) && numel(app.AvailableLabIds) == numel(expectedLabs);
+
+            app.IsSyncingAvailableLabSelection = true;
+            app.OptAvailableSelectAll.Value = isAllSelected;
+            app.IsSyncingAvailableLabSelection = false;
+        end
+
+        function onAvailableLabsSelectAllChanged(app, checkbox)
+            if app.IsSyncingAvailableLabSelection || isempty(app.LabIds)
+                return;
+            end
+
+            if checkbox.Value
+                app.IsSyncingAvailableLabSelection = true;
+                for idx = 1:numel(app.OptAvailableLabCheckboxes)
+                    cb = app.OptAvailableLabCheckboxes(idx);
+                    if isvalid(cb)
+                        cb.Value = true;
+                    end
+                end
+                app.IsSyncingAvailableLabSelection = false;
+                app.applyAvailableLabSelection(app.LabIds, false);
+            else
+                % Re-sync to actual selection state (may still be all)
+                app.syncAvailableLabsSelectAll();
+            end
+        end
+
+        function onAvailableLabCheckboxChanged(app, checkbox)
+            if app.IsSyncingAvailableLabSelection
+                return;
+            end
+
+            labIds = app.LabIds;
+            selectedLabs = app.getSelectedAvailableLabs(labIds);
+            app.applyAvailableLabSelection(selectedLabs, false);
         end
 
         function addGrid = configureAddTabLayout(app)
@@ -823,7 +935,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function optimizationGrid = configureOptimizationTabLayout(app)
             optimizationGrid = uigridlayout(app.TabOptimization);
             optimizationGrid.ColumnWidth = {140, '1x'};
-            optimizationGrid.RowHeight = {24, 32, 90, 32, 32, 32, 32, 32, 32, 32, 32, 32, 'fit', '1x'};
+            optimizationGrid.RowHeight = {24, 32, 24, 140, 32, 32, 32, 32, 32, 32, 32, 32, 'fit', '1x'};
             optimizationGrid.Padding = [10 10 10 10];
             optimizationGrid.RowSpacing = 6;
             optimizationGrid.ColumnSpacing = 8;
@@ -899,106 +1011,107 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptAvailableLabsLabel.Layout.Row = 3;
             app.OptAvailableLabsLabel.Layout.Column = 1;
 
-            app.OptAvailableLabsList = uilistbox(optimizationGrid);
-            app.OptAvailableLabsList.Multiselect = 'on';
-            app.OptAvailableLabsList.Layout.Row = 3;
-            app.OptAvailableLabsList.Layout.Column = 2;
-            app.OptAvailableLabsList.FontSize = 12;
-            app.OptAvailableLabsList.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+            availableWrapper = uigridlayout(optimizationGrid);
+            availableWrapper.Layout.Row = 4;
+            availableWrapper.Layout.Column = 2;
+            availableWrapper.RowHeight = {24, '1x'};
+            availableWrapper.ColumnWidth = {'1x'};
+            availableWrapper.RowSpacing = 4;
+            availableWrapper.Padding = [0 0 0 0];
 
-            initialLabIds = app.LabIds;
-            if isempty(initialLabIds)
-                initialLabIds = 1:max(1, app.Opts.labs);
-            end
-            if isempty(app.AvailableLabIds)
-                app.AvailableLabIds = initialLabIds;
-            end
-            app.OptAvailableLabsList.Items = arrayfun(@(id) sprintf('Lab %d', id), initialLabIds, 'UniformOutput', false);
-            initialSelection = intersect(app.AvailableLabIds, initialLabIds, 'stable');
-            if isempty(initialSelection)
-                initialSelection = initialLabIds;
-            end
-            app.OptAvailableLabsList.Value = arrayfun(@(id) sprintf('Lab %d', id), initialSelection, 'UniformOutput', false);
+            app.OptAvailableSelectAll = uicheckbox(availableWrapper);
+            app.OptAvailableSelectAll.Text = 'Select all labs';
+            app.OptAvailableSelectAll.Layout.Row = 1;
+            app.OptAvailableSelectAll.Layout.Column = 1;
+            app.OptAvailableSelectAll.ValueChangedFcn = @(src,~) app.onAvailableLabsSelectAllChanged(src);
+
+            app.OptAvailableLabsPanel = uipanel(availableWrapper);
+            app.OptAvailableLabsPanel.Layout.Row = 2;
+            app.OptAvailableLabsPanel.Layout.Column = 1;
+            app.OptAvailableLabsPanel.Scrollable = 'on';
+            app.OptAvailableLabsPanel.BorderType = 'none';
+
+            app.buildAvailableLabCheckboxes();
 
             % Case filter
             app.OptFilterLabel = uilabel(optimizationGrid);
             app.OptFilterLabel.Text = 'Case filter:';
-            app.OptFilterLabel.Layout.Row = 4;
+            app.OptFilterLabel.Layout.Row = 5;
             app.OptFilterLabel.Layout.Column = 1;
             
             app.OptFilterDropDown = uidropdown(optimizationGrid);
             app.OptFilterDropDown.Items = {'all', 'outpatient', 'inpatient'};
             app.OptFilterDropDown.Value = char(app.Opts.caseFilter);
-            app.OptFilterDropDown.Layout.Row = 4;
+            app.OptFilterDropDown.Layout.Row = 5;
             app.OptFilterDropDown.Layout.Column = 2;
             app.OptFilterDropDown.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Default admission status
             app.OptDefaultStatusLabel = uilabel(optimizationGrid);
             app.OptDefaultStatusLabel.Text = 'Default status:';
-            app.OptDefaultStatusLabel.Layout.Row = 5;
+            app.OptDefaultStatusLabel.Layout.Row = 6;
             app.OptDefaultStatusLabel.Layout.Column = 1;
             
             app.OptDefaultStatusDropDown = uidropdown(optimizationGrid);
             app.OptDefaultStatusDropDown.Items = {'outpatient', 'inpatient'};
             app.OptDefaultStatusDropDown.Value = char(app.TestingAdmissionDefault);
-            app.OptDefaultStatusDropDown.Layout.Row = 5;
+            app.OptDefaultStatusDropDown.Layout.Row = 6;
             app.OptDefaultStatusDropDown.Layout.Column = 2;
             app.OptDefaultStatusDropDown.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Turnover time
             app.OptTurnoverLabel = uilabel(optimizationGrid);
             app.OptTurnoverLabel.Text = 'Turnover (minutes):';
-            app.OptTurnoverLabel.Layout.Row = 6;
+            app.OptTurnoverLabel.Layout.Row = 7;
             app.OptTurnoverLabel.Layout.Column = 1;
             
             app.OptTurnoverSpinner = uispinner(optimizationGrid);
             app.OptTurnoverSpinner.Limits = [0 240];
             app.OptTurnoverSpinner.Step = 5;
             app.OptTurnoverSpinner.Value = app.Opts.turnover;
-            app.OptTurnoverSpinner.Layout.Row = 6;
+            app.OptTurnoverSpinner.Layout.Row = 7;
             app.OptTurnoverSpinner.Layout.Column = 2;
             app.OptTurnoverSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Setup time
             app.OptSetupLabel = uilabel(optimizationGrid);
             app.OptSetupLabel.Text = 'Setup (minutes):';
-            app.OptSetupLabel.Layout.Row = 7;
+            app.OptSetupLabel.Layout.Row = 8;
             app.OptSetupLabel.Layout.Column = 1;
             
             app.OptSetupSpinner = uispinner(optimizationGrid);
             app.OptSetupSpinner.Limits = [0 120];
             app.OptSetupSpinner.Step = 5;
             app.OptSetupSpinner.Value = app.Opts.setup;
-            app.OptSetupSpinner.Layout.Row = 7;
+            app.OptSetupSpinner.Layout.Row = 8;
             app.OptSetupSpinner.Layout.Column = 2;
             app.OptSetupSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Post-procedure time
             app.OptPostLabel = uilabel(optimizationGrid);
             app.OptPostLabel.Text = 'Post-procedure (min):';
-            app.OptPostLabel.Layout.Row = 8;
+            app.OptPostLabel.Layout.Row = 9;
             app.OptPostLabel.Layout.Column = 1;
             
             app.OptPostSpinner = uispinner(optimizationGrid);
             app.OptPostSpinner.Limits = [0 120];
             app.OptPostSpinner.Step = 5;
             app.OptPostSpinner.Value = app.Opts.post;
-            app.OptPostSpinner.Layout.Row = 8;
+            app.OptPostSpinner.Layout.Row = 9;
             app.OptPostSpinner.Layout.Column = 2;
             app.OptPostSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
             % Max operator time
             app.OptMaxOperatorLabel = uilabel(optimizationGrid);
             app.OptMaxOperatorLabel.Text = 'Max operator (min):';
-            app.OptMaxOperatorLabel.Layout.Row = 9;
+            app.OptMaxOperatorLabel.Layout.Row = 10;
             app.OptMaxOperatorLabel.Layout.Column = 1;
             
             app.OptMaxOperatorSpinner = uispinner(optimizationGrid);
             app.OptMaxOperatorSpinner.Limits = [60 1440];
             app.OptMaxOperatorSpinner.Step = 15;
             app.OptMaxOperatorSpinner.Value = app.Opts.maxOpMin;
-            app.OptMaxOperatorSpinner.Layout.Row = 9;
+            app.OptMaxOperatorSpinner.Layout.Row = 10;
             app.OptMaxOperatorSpinner.Layout.Column = 2;
             app.OptMaxOperatorSpinner.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
@@ -1006,7 +1119,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptEnforceMidnightCheckBox = uicheckbox(optimizationGrid);
             app.OptEnforceMidnightCheckBox.Text = 'Enforce midnight cutoff';
             app.OptEnforceMidnightCheckBox.Value = logical(app.Opts.enforceMidnight);
-            app.OptEnforceMidnightCheckBox.Layout.Row = 10;
+            app.OptEnforceMidnightCheckBox.Layout.Row = 11;
             app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
             app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
@@ -1014,9 +1127,58 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptPrioritizeOutpatientCheckBox = uicheckbox(optimizationGrid);
             app.OptPrioritizeOutpatientCheckBox.Text = 'Prioritize outpatient';
             app.OptPrioritizeOutpatientCheckBox.Value = logical(app.Opts.prioritizeOutpt);
-            app.OptPrioritizeOutpatientCheckBox.Layout.Row = 11;
+            app.OptPrioritizeOutpatientCheckBox.Layout.Row = 12;
             app.OptPrioritizeOutpatientCheckBox.Layout.Column = [1 2];
             app.OptPrioritizeOutpatientCheckBox.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+        end
+
+        function buildAvailableLabCheckboxes(app)
+            if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)
+                return;
+            end
+
+            delete(app.OptAvailableLabsPanel.Children);
+
+            labIds = app.LabIds;
+            if isempty(labIds)
+                labIds = 1:max(1, app.Opts.labs);
+            end
+
+            if isempty(app.AvailableLabIds)
+                app.AvailableLabIds = labIds;
+            end
+
+            checkboxGrid = uigridlayout(app.OptAvailableLabsPanel);
+            checkboxGrid.Padding = [0 0 0 0];
+            checkboxGrid.RowSpacing = 2;
+            checkboxGrid.ColumnSpacing = 12;
+
+            numLabs = numel(labIds);
+            if numLabs == 0
+                app.OptAvailableLabCheckboxes = matlab.ui.control.CheckBox.empty;
+                return;
+            end
+
+            maxColumns = min(3, numLabs);
+            rows = ceil(numLabs / maxColumns);
+            checkboxGrid.RowHeight = repmat({'fit'}, 1, rows);
+            checkboxGrid.ColumnWidth = repmat({'fit'}, 1, maxColumns);
+
+            app.IsSyncingAvailableLabSelection = true;
+            app.OptAvailableLabCheckboxes = matlab.ui.control.CheckBox.empty(0, 1);
+            for idx = 1:numLabs
+                labId = labIds(idx);
+                cb = uicheckbox(checkboxGrid);
+                cb.Text = sprintf('Lab %d', labId);
+                cb.Layout.Row = ceil(idx / maxColumns);
+                cb.Layout.Column = mod(idx - 1, maxColumns) + 1;
+                cb.Value = ismember(labId, app.AvailableLabIds);
+                cb.UserData = labId;
+                cb.ValueChangedFcn = @(src,~) app.onAvailableLabCheckboxChanged(src);
+                app.OptAvailableLabCheckboxes(end+1, 1) = cb; %#ok<AGROW>
+            end
+            app.IsSyncingAvailableLabSelection = false;
+            app.syncAvailableLabsSelectAll();
         end
         
         function initializeOptimizationDefaults(app)

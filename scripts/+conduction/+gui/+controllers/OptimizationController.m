@@ -467,7 +467,10 @@ classdef OptimizationController < handle
                 numLabsValue = round(app.OptLabsSpinner.Value);
                 labIds = 1:max(1, numLabsValue);
 
-                selectedLabs = obj.parseAvailableLabsFromList(app, labIds);
+                selectedLabs = intersect(app.AvailableLabIds, labIds, 'stable');
+                if isempty(selectedLabs)
+                    selectedLabs = labIds;
+                end
 
                 newOpts = struct( ...
                     'turnover', app.OptTurnoverSpinner.Value, ...
@@ -485,11 +488,7 @@ classdef OptimizationController < handle
 
                 app.LabIds = labIds;
                 app.AvailableLabIds = selectedLabs;
-
-                if ~isempty(app.OptAvailableLabsList) && isvalid(app.OptAvailableLabsList)
-                    app.OptAvailableLabsList.Items = arrayfun(@(id) sprintf('Lab %d', id), labIds, 'UniformOutput', false);
-                    app.OptAvailableLabsList.Value = arrayfun(@(id) sprintf('Lab %d', id), selectedLabs, 'UniformOutput', false);
-                end
+                app.buildAvailableLabCheckboxes();
 
                 app.refreshSpecificLabDropdown();
 
@@ -523,35 +522,6 @@ classdef OptimizationController < handle
                 app.DrawerController.setLabelText(app.DrawerLabsValueLabel, sprintf('%d (Active: %s)', labsCount, activeText));
                 app.DrawerController.setLabelText(app.DrawerTimingsValueLabel, sprintf('Turn: %d | Setup/Post: %d/%d', ...
                     turnoverText, setupText, postText));
-            end
-        end
-
-        function selectedLabs = parseAvailableLabsFromList(~, app, labIds)
-            if isempty(app.OptAvailableLabsList) || ~isvalid(app.OptAvailableLabsList)
-                selectedLabs = labIds;
-                return;
-            end
-
-            values = app.OptAvailableLabsList.Value;
-            if isempty(values)
-                selectedLabs = labIds;
-                return;
-            end
-
-            if iscell(values)
-                tokens = regexp(values, '\d+', 'match');
-                numericVals = cellfun(@(t) str2double(t{1}), tokens);
-                selectedLabsRaw = numericVals(:)';
-            else
-                token = regexp(values, '\d+', 'match');
-                selectedLabsRaw = str2double(token{1});
-            end
-
-            selectedLabs = intersect(selectedLabsRaw, labIds, 'stable');
-            if isempty(selectedLabs)
-                selectedLabs = labIds;
-            else
-                selectedLabs = sort(unique(selectedLabs));
             end
         end
 

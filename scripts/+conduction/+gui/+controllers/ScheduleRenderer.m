@@ -49,7 +49,7 @@ classdef ScheduleRenderer < handle
 
             hold(ax, 'off');
 
-            obj.drawClosedLabOverlays(app);
+            obj.drawClosedLabOverlays(app, []);
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
@@ -95,7 +95,7 @@ classdef ScheduleRenderer < handle
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime);  % REALTIME-SCHEDULING
 
-            obj.drawClosedLabOverlays(app);
+            obj.drawClosedLabOverlays(app, dailySchedule);
 
             if app.DrawerWidth > 1 && strlength(app.DrawerCurrentCaseId) > 0
                 app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
@@ -501,8 +501,8 @@ classdef ScheduleRenderer < handle
             delete(findobj(ax, 'Tag', 'ActualTimeLabel'));
         end
 
-        function drawClosedLabOverlays(~, app)
-            % Highlight labs that are marked as unavailable for new assignments
+        function drawClosedLabOverlays(obj, app, dailySchedule)
+            % Highlight labs that are unavailable for new assignments
             ax = app.ScheduleAxes;
             if isempty(ax) || ~isvalid(ax)
                 return;
@@ -510,11 +510,17 @@ classdef ScheduleRenderer < handle
 
             delete(findobj(ax, 'Tag', 'ClosedLabOverlay'));
 
-            if isempty(app.LabIds) || isempty(app.AvailableLabIds)
+            labIds = app.LabIds;
+            if isempty(labIds)
                 return;
             end
 
-            closedLabs = setdiff(app.LabIds, app.AvailableLabIds);
+            availableLabs = app.AvailableLabIds;
+            if isempty(availableLabs)
+                availableLabs = labIds;
+            end
+
+            closedLabs = setdiff(labIds, availableLabs);
             if isempty(closedLabs)
                 return;
             end
@@ -524,22 +530,96 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            assignments = {};
+            if nargin >= 3 && ~isempty(dailySchedule)
+                try
+                    assignments = dailySchedule.labAssignments();
+                catch
+                    assignments = {};
+                end
+            end
+
+            lockedIds = string(app.LockedCaseIds);
+            lockedIds = lockedIds(lockedIds ~= "");
+
             restoreHold = ~ishold(ax);
             hold(ax, 'on');
 
-            topY = yLimits(1) + 0.5;
-            for labIdx = closedLabs(:)'
-                xLeft = labIdx - 0.5;
-                xRight = labIdx + 0.5;
+            for labId = closedLabs(:)'
+                closedStartHour = yLimits(1);
 
-                patch(ax, [xLeft xRight xRight xLeft], [yLimits(1) yLimits(1) yLimits(2) yLimits(2)], ...
-                    [0.8 0.2 0.2], 'FaceAlpha', 0.08, 'EdgeColor', 'none', ...
+                if ~isempty(assignments) && labId >= 1 && labId <= numel(assignments) && ~isempty(lockedIds)
+                    labCases = assignments{labId};
+                    if ~isempty(labCases)
+                        lastEndMinutes = NaN;
+                        for idx = 1:numel(labCases)
+                            caseEntry = labCases(idx);
+                            caseIdentifier = string(obj.getFieldValue(caseEntry, 'caseID', ""));
+                            if ismember(caseIdentifier, lockedIds)
+                                procEnd = obj.getFieldValue(caseEntry, 'procEndTime', NaN);
+                                endTime = obj.getFieldValue(caseEntry, 'endTime', NaN);
+                                if isnan(endTime)
+                                    endTime = procEnd;
+                                end
+                                postTime = obj.getFieldValue(caseEntry, 'postTime', 0);
+                                if isnan(postTime)
+                                    postTime = 0;
+                                end
+
+                                candidate = endTime;
+                                if ~isnan(endTime)
+                                    candidate = endTime + postTime;
+                                end
+                                if isnan(candidate)
+                                    candidate = endTime;
+                                end
+
+                                if ~isnan(candidate)
+                                    if isnan(lastEndMinutes) || candidate > lastEndMinutes
+                                        lastEndMinutes = candidate;
+                                    end
+                                end
+                            end
+                        end
+
+                        if ~isnan(lastEndMinutes)
+                            closedStartHour = max(lastEndMinutes / 60, yLimits(1));
+                        end
+                    end
+                end
+
+                closedEndHour = yLimits(2);
+                if closedStartHour >= closedEndHour
+                    continue;
+                end
+
+                xLeft = labId - 0.5;
+                xRight = labId + 0.5;
+
+                patchHandle = patch(ax, [xLeft xRight xRight xLeft], [closedStartHour closedStartHour closedEndHour closedEndHour], ...
+                    [0.75 0.75 0.75], 'FaceAlpha', 0.16, 'EdgeColor', 'none', ...
                     'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
+                if isprop(patchHandle, 'PickableParts')
+                    patchHandle.PickableParts = 'none';
+                end
 
-                text(ax, labIdx, topY, 'Closed', ...
-                    'Color', [0.85 0.4 0.4], 'FontWeight', 'bold', 'FontSize', 9, ...
-                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-                    'Clipping', 'on', 'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
+                if closedEndHour - closedStartHour > 0.1
+                    if closedStartHour <= yLimits(1) + 1e-3
+                        labelText = 'Closed (all day)';
+                        labelHour = min(closedStartHour + 0.3, closedEndHour - 0.2);
+                    else
+                        labelText = sprintf('Closed after %s', obj.minutesToTimeString(closedStartHour * 60));
+                        labelHour = min(closedStartHour + 0.3, closedEndHour - 0.2);
+                    end
+
+                    textHandle = text(ax, labId, labelHour, labelText, ...
+                        'Color', [0.55 0.55 0.55], 'FontWeight', 'bold', 'FontSize', 8.5, ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                        'Clipping', 'on', 'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
+                    if isprop(textHandle, 'PickableParts')
+                        textHandle.PickableParts = 'none';
+                    end
+                end
             end
 
             if restoreHold
