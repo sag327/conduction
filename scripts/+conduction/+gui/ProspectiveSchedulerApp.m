@@ -949,8 +949,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CasesLabel.Layout.Column = [1 2];
 
             app.CasesTable = uitable(casesGrid);
-            app.CasesTable.ColumnName = {'#', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
-            app.CasesTable.ColumnWidth = {60, 100, 140, 80, 100, 90, 80};
+            app.CasesTable.ColumnName = {'', '#', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
+            app.CasesTable.ColumnWidth = {45, 50, 100, 140, 80, 100, 90, 80};
             app.CasesTable.RowName = {};
             app.CasesTable.Layout.Row = 2;
             app.CasesTable.Layout.Column = [1 2];
@@ -1814,27 +1814,41 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Build table data
-            tableData = cell(caseCount, 7);
+            tableData = cell(caseCount, 8);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
-                tableData{i, 1} = i;
-                tableData{i, 2} = char(caseObj.OperatorName);
-                tableData{i, 3} = char(caseObj.ProcedureName);
-                tableData{i, 4} = round(caseObj.EstimatedDurationMinutes);
-                tableData{i, 5} = char(caseObj.AdmissionStatus);
+
+                % Status icons (column 1)
+                statusIcon = '';
+                if caseObj.IsLocked
+                    statusIcon = '🔒';
+                end
+                if caseObj.isCompleted()
+                    statusIcon = [statusIcon '✓'];
+                elseif caseObj.isInProgress()
+                    statusIcon = [statusIcon '▶'];
+                end
+                tableData{i, 1} = statusIcon;
+
+                % Case number
+                tableData{i, 2} = i;
+                tableData{i, 3} = char(caseObj.OperatorName);
+                tableData{i, 4} = char(caseObj.ProcedureName);
+                tableData{i, 5} = round(caseObj.EstimatedDurationMinutes);
+                tableData{i, 6} = char(caseObj.AdmissionStatus);
 
                 % Lab constraint
                 if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
-                    tableData{i, 6} = 'Any';
+                    tableData{i, 7} = 'Any';
                 else
-                    tableData{i, 6} = char(caseObj.SpecificLab);
+                    tableData{i, 7} = char(caseObj.SpecificLab);
                 end
 
                 % First case constraint
                 if caseObj.IsFirstCaseOfDay
-                    tableData{i, 7} = 'Yes';
+                    tableData{i, 8} = 'Yes';
                 else
-                    tableData{i, 7} = 'No';
+                    tableData{i, 8} = 'No';
                 end
             end
 
