@@ -558,21 +558,32 @@ classdef ScheduleRenderer < handle
                             if ismember(caseIdentifier, lockedIds)
                                 procEnd = obj.getFieldValue(caseEntry, 'procEndTime', NaN);
                                 postTime = obj.getFieldValue(caseEntry, 'postTime', NaN);
+                                turnoverTime = obj.getFieldValue(caseEntry, 'turnoverTime', NaN);
+                                if isnan(turnoverTime)
+                                    turnoverTime = obj.getFieldValue(caseEntry, 'turnoverDuration', NaN);
+                                end
+                                if isnan(turnoverTime)
+                                    turnoverTime = obj.getFieldValue(caseEntry, 'turnoverMinutes', NaN);
+                                end
+
+                                if isnan(postTime)
+                                    postTime = 0;
+                                end
+                                if isnan(turnoverTime)
+                                    turnoverTime = 0;
+                                end
 
                                 candidate = NaN;
                                 if ~isnan(procEnd)
-                                    if isnan(postTime)
-                                        postTime = 0;
-                                    end
-                                    candidate = procEnd + max(0, postTime);
+                                    candidate = procEnd + max(0, postTime) + max(0, turnoverTime);
                                 end
 
                                 if isnan(candidate)
                                     endTime = obj.getFieldValue(caseEntry, 'endTime', NaN);
                                     if ~isnan(endTime)
-                                        candidate = endTime;
+                                        candidate = endTime + max(0, turnoverTime);
                                     elseif ~isnan(procEnd)
-                                        candidate = procEnd;
+                                        candidate = procEnd + max(0, turnoverTime);
                                     end
                                 end
 
