@@ -376,7 +376,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --');
             app.KPI1.Layout.Column = 1;
-            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Last-out: --');
+            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --');
             app.KPI2.Layout.Column = 2;
             app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --');
             app.KPI3.Layout.Column = 3;
@@ -1151,6 +1151,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptPrioritizeOutpatientCheckBox.ValueChangedFcn = @(~,~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
         end
 
+        function initializeOptimizationDefaults(app)
+            % Initialize default optimization options if not already set
+            app.Opts = struct( ...
+                'turnover', 30, ...
+                'setup', 15, ...
+                'post', 15, ...
+                'maxOpMin', 480, ...
+                'enforceMidnight', true, ...
+                'prioritizeOutpt', true, ...
+                'caseFilter', "all", ...
+                'metric', "operatorIdle", ...
+                'labs', 6);
+        end
+
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
         function buildAvailableLabCheckboxes(app)
             if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)
                 return;
@@ -1199,25 +1218,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.IsSyncingAvailableLabSelection = false;
             app.syncAvailableLabsSelectAll();
         end
-        
-        function initializeOptimizationDefaults(app)
-            % Initialize default optimization options if not already set
-            app.Opts = struct( ...
-                'turnover', 30, ...
-                'setup', 15, ...
-                'post', 15, ...
-                'maxOpMin', 480, ...
-                'enforceMidnight', true, ...
-                'prioritizeOutpt', true, ...
-                'caseFilter', "all", ...
-                'metric', "operatorIdle", ...
-                'labs', 6);
-        end
-
-    end
-
-    % App creation and deletion
-    methods (Access = public)
 
         function app = ProspectiveSchedulerApp(targetDate, historicalCollection)
             arguments
