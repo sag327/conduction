@@ -17,7 +17,11 @@ classdef DurationSelector < handle
             summary = app.CaseManager.getDurationSummary(operatorName, procedureName);
             app.CurrentDurationSummary = summary;
 
-            % Update value labels and enable states
+            app.MedianRadioButton.Text = 'Median';
+            app.P70RadioButton.Text = '70th percentile';
+            app.P90RadioButton.Text = '90th percentile';
+            app.CustomRadioButton.Text = 'Custom';
+
             optionKeys = {'median', 'p70', 'p90'};
             optionButtons = {app.MedianRadioButton, app.P70RadioButton, app.P90RadioButton};
             optionLabels = {app.MedianValueLabel, app.P70ValueLabel, app.P90ValueLabel};
@@ -25,8 +29,8 @@ classdef DurationSelector < handle
             firstAvailableButton = [];
             for idx = 1:numel(optionKeys)
                 option = obj.getSummaryOption(summary, optionKeys{idx});
-                label = optionLabels{idx};
                 button = optionButtons{idx};
+                label = optionLabels{idx};
 
                 if option.available
                     label.Text = obj.formatDurationValue(option.value);
@@ -45,7 +49,8 @@ classdef DurationSelector < handle
             end
 
             % Spinner defaults to heuristic estimate
-            app.CustomDurationSpinner.Value = obj.clampSpinnerValue(app, summary.customDefault);
+            customValue = obj.clampSpinnerValue(app, summary.customDefault);
+            app.CustomDurationSpinner.Value = customValue;
             app.CustomRadioButton.Enable = 'on';
 
             if isempty(firstAvailableButton)
@@ -128,6 +133,10 @@ classdef DurationSelector < handle
             app.P70ValueLabel.Text = '-';
             app.P90ValueLabel.Text = '-';
             app.CustomDurationSpinner.Value = obj.clampSpinnerValue(app, 60);
+            app.MedianRadioButton.Text = 'Median';
+            app.P70RadioButton.Text = '70th percentile';
+            app.P90RadioButton.Text = '90th percentile';
+            app.CustomRadioButton.Text = 'Custom';
             obj.updateDurationHeader(app, []);
 
             % Reset button states
@@ -283,8 +292,12 @@ classdef DurationSelector < handle
         function applyDurationThemeColors(obj, app)
             [bgColor, primaryTextColor] = obj.getDurationThemeColors(app);
 
+            % Set button group background
+            if ~isempty(app.DurationButtonGroup) && isvalid(app.DurationButtonGroup)
+                app.DurationButtonGroup.BackgroundColor = bgColor;
+            end
+
             if ~isempty(app.DurationStatsLabel) && isvalid(app.DurationStatsLabel)
-                app.DurationStatsLabel.BackgroundColor = bgColor;
                 app.DurationStatsLabel.FontColor = primaryTextColor;
             end
 
@@ -299,33 +312,38 @@ classdef DurationSelector < handle
                 end
             end
 
+            % Apply histogram-matching colors to value labels (original design)
+            medianColor = [0.9 0.3 0.3];  % Red
+            p70Color = [0.9 0.7 0.2];     % Orange/Yellow
+            p90Color = [0.5 0.9 0.5];     % Green
+
+            labelColors = {medianColor, p70Color, p90Color};
+
             for idx = 1:numel(labelComponents)
                 comp = labelComponents{idx};
                 if ~isempty(comp) && isvalid(comp)
-                    comp.FontColor = primaryTextColor;
-                    comp.BackgroundColor = bgColor;
+                    comp.FontColor = labelColors{idx};
+                    % DO NOT set BackgroundColor - old code never did this!
                 end
             end
 
             if ~isempty(app.CustomDurationSpinner) && isvalid(app.CustomDurationSpinner)
+                app.CustomDurationSpinner.BackgroundColor = bgColor;
                 app.CustomDurationSpinner.FontColor = primaryTextColor;
             end
+
+            % Force MATLAB to render the changes
+            drawnow;
         end
 
         function [bgColor, primaryTextColor] = getDurationThemeColors(~, app)
-            % Get the background color from DurationStatsLabel's parent
-            if ~isempty(app.DurationStatsLabel) && isvalid(app.DurationStatsLabel) && ...
-                    ~isempty(app.DurationStatsLabel.Parent) && isvalid(app.DurationStatsLabel.Parent)
-                try
-                    bgColor = app.DurationStatsLabel.Parent.BackgroundColor;
-                catch
-                    bgColor = [0.94 0.94 0.94];
-                end
-            else
-                bgColor = [0.94 0.94 0.94];
-            end
+            % Use UIFigure.Color directly since Theme property isn't set during UI construction
+            darkBg = [0.149 0.149 0.149];
+            primaryDark = [1 1 1];
 
-            primaryTextColor = [0.95 0.95 0.95];  % White text to match other labels
+            % Always use dark theme colors to match UIFigure
+            bgColor = darkBg;
+            primaryTextColor = primaryDark;
         end
 
         function updateDurationHeader(obj, app, summary)
