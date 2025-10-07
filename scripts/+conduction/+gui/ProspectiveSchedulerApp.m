@@ -169,7 +169,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Timer to refresh actual time indicator
         DrawerTimer timer = timer.empty
-        DrawerWidth double = 28  % Starts collapsed (28px = handle only)
+        DrawerWidth double = conduction.gui.app.Constants.DrawerHandleWidth  % Starts collapsed at the drawer handle width
         DrawerCurrentCaseId string = ""
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
@@ -179,6 +179,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     properties (Access = private)
         IsSyncingAvailableLabSelection logical = false
+    end
+
+
+    methods (Access = public, Hidden)
+        function beginAvailableLabSync(app)
+            app.IsSyncingAvailableLabSelection = true;
+        end
+
+        function endAvailableLabSync(app)
+            app.IsSyncingAvailableLabSelection = false;
+        end
+
+        function tf = isAvailableLabSyncing(app)
+            tf = app.IsSyncingAvailableLabSelection;
+        end
     end
 
     % Component initialization
@@ -270,7 +285,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             addGrid = app.configureAddTabLayout();
             app.buildDateSection(addGrid);
             app.buildCaseDetailsSection(addGrid);
-            app.buildDurationSection(addGrid);
+            conduction.gui.app.buildDurationSection(app, addGrid);
             app.buildConstraintSection(addGrid);
             app.buildOptimizationSection(addGrid);
 
@@ -396,109 +411,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function selectedLabs = getSelectedAvailableLabs(app, labIds)
-            if nargin < 2 || isempty(labIds)
-                labIds = app.LabIds;
-            end
-
-            if isempty(app.OptAvailableLabCheckboxes)
-                selectedLabs = intersect(app.AvailableLabIds, labIds, 'stable');
-                return;
-            end
-
-            selectedLabs = [];
-            for idx = 1:numel(app.OptAvailableLabCheckboxes)
-                cb = app.OptAvailableLabCheckboxes(idx);
-                if ~isvalid(cb)
-                    continue;
-                end
-                labId = cb.UserData;
-                if cb.Value
-                    selectedLabs(end+1) = labId; %#ok<AGROW>
-                end
-            end
-            selectedLabs = intersect(unique(selectedLabs, 'stable'), labIds, 'stable');
+            selectedLabs = conduction.gui.app.availableLabs.getSelected(app, labIds);
         end
 
         function applyAvailableLabSelection(app, selectedLabs, suppressDirty)
-            if nargin < 2
-                selectedLabs = app.LabIds;
-            end
-            if nargin < 3
-                suppressDirty = false;
-            end
-
-            selectedLabs = unique(selectedLabs(:)', 'stable');
-            selectedLabs = intersect(selectedLabs, app.LabIds, 'stable');
-
-            currentSelection = app.AvailableLabIds;
-            changed = ~isequal(currentSelection(:)', selectedLabs(:)');
-
-            app.AvailableLabIds = selectedLabs;
-
-            if ~isempty(app.OptAvailableLabCheckboxes)
-                app.IsSyncingAvailableLabSelection = true;
-                for idx = 1:numel(app.OptAvailableLabCheckboxes)
-                    cb = app.OptAvailableLabCheckboxes(idx);
-                    if ~isvalid(cb)
-                        continue;
-                    end
-                    cb.Value = ismember(cb.UserData, selectedLabs);
-                end
-                app.IsSyncingAvailableLabSelection = false;
-            end
-
-            app.syncAvailableLabsSelectAll();
-
-            if ~suppressDirty && changed
-                app.OptimizationController.updateOptimizationOptionsSummary(app);
-                app.OptimizationController.markOptimizationDirty(app);
-            elseif ~suppressDirty && ~changed
-                app.OptimizationController.updateOptimizationOptionsSummary(app);
-            end
+            conduction.gui.app.availableLabs.applySelection(app, selectedLabs, suppressDirty);
         end
 
         function syncAvailableLabsSelectAll(app)
-            if isempty(app.OptAvailableSelectAll) || ~isvalid(app.OptAvailableSelectAll)
-                return;
-            end
-
-            expectedLabs = app.LabIds;
-            isAllSelected = ~isempty(expectedLabs) && numel(app.AvailableLabIds) == numel(expectedLabs);
-
-            app.IsSyncingAvailableLabSelection = true;
-            app.OptAvailableSelectAll.Value = isAllSelected;
-            app.IsSyncingAvailableLabSelection = false;
+            conduction.gui.app.availableLabs.syncSelectAll(app);
         end
 
         function onAvailableLabsSelectAllChanged(app, checkbox)
-            if app.IsSyncingAvailableLabSelection || isempty(app.LabIds)
-                return;
-            end
-
-            if checkbox.Value
-                app.IsSyncingAvailableLabSelection = true;
-                for idx = 1:numel(app.OptAvailableLabCheckboxes)
-                    cb = app.OptAvailableLabCheckboxes(idx);
-                    if isvalid(cb)
-                        cb.Value = true;
-                    end
-                end
-                app.IsSyncingAvailableLabSelection = false;
-                app.applyAvailableLabSelection(app.LabIds, false);
-            else
-                % Re-sync to actual selection state (may still be all)
-                app.syncAvailableLabsSelectAll();
-            end
+            conduction.gui.app.availableLabs.selectAllChanged(app, checkbox);
         end
 
         function onAvailableLabCheckboxChanged(app, checkbox)
-            if app.IsSyncingAvailableLabSelection
-                return;
-            end
-
-            labIds = app.LabIds;
-            selectedLabs = app.getSelectedAvailableLabs(labIds);
-            app.applyAvailableLabSelection(selectedLabs, false);
+            conduction.gui.app.availableLabs.checkboxChanged(app, checkbox);
         end
 
         function addGrid = configureAddTabLayout(app)
@@ -591,7 +520,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.DrawerLayout = uigridlayout(app.Drawer);
             app.DrawerLayout.RowHeight = {'1x', 60, '1x'};  % Three rows: top spacer, button, bottom spacer
-            app.DrawerLayout.ColumnWidth = {28, 400};  % Column 1: handle (28px), Column 2: content (fixed 400px)
+            app.DrawerLayout.ColumnWidth = {conduction.gui.app.Constants.DrawerHandleWidth, conduction.gui.app.Constants.DrawerContentWidth};  % Column 1: handle width, Column 2: fixed content width
             app.DrawerLayout.Padding = [0 0 0 0];
             app.DrawerLayout.RowSpacing = 0;
             app.DrawerLayout.ColumnSpacing = 0;
@@ -607,7 +536,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create grid for handle button in left panel
             leftGrid = uigridlayout(leftPanel);
             leftGrid.RowHeight = {'1x', 60, '1x'};
-            leftGrid.ColumnWidth = {28};
+            leftGrid.ColumnWidth = {conduction.gui.app.Constants.DrawerHandleWidth};
             leftGrid.Padding = [0 0 0 0];
             leftGrid.RowSpacing = 0;
             leftGrid.ColumnSpacing = 0;
@@ -727,8 +656,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Clear any lingering callbacks from previous attempts
             app.DrawerHistogramPanel.SizeChangedFcn = [];
 
-            % Start with drawer collapsed (28px showing handle only)
-            app.DrawerController.setDrawerWidth(app, 28);
+            % Start with drawer collapsed to the handle-only width
+            app.DrawerController.setDrawerWidth(app, conduction.gui.app.Constants.DrawerHandleWidth);
         end
 
         function createDrawerInspectorRow(app, rowIndex, labelText, valuePropName)
@@ -794,84 +723,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ProcedureDropDown.Layout.Column = [2 4];
             app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
         end
-
-        function buildDurationSection(app, leftGrid)
-            app.DurationStatsLabel = uilabel(leftGrid);
-            app.DurationStatsLabel.Text = 'Duration';
-            app.DurationStatsLabel.FontWeight = 'bold';
-            app.DurationStatsLabel.Layout.Row = 14;
-            app.DurationStatsLabel.Layout.Column = [1 4];
-
-            % Create the ButtonGroup with manual positioning for tight layout
-            app.DurationButtonGroup = uibuttongroup(leftGrid);
-            app.DurationButtonGroup.BorderType = 'none';
-            app.DurationButtonGroup.Layout.Row = 16;
-            app.DurationButtonGroup.Layout.Column = [1 2];
-            app.DurationButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @DurationOptionChanged, true);
-            app.DurationButtonGroup.AutoResizeChildren = 'off';
-
-            % Mini histogram axes to the right of button group
-            app.DurationMiniHistogramAxes = uiaxes(leftGrid);
-            app.DurationMiniHistogramAxes.Layout.Row = 16;
-            app.DurationMiniHistogramAxes.Layout.Column = [3 4];
-            app.DurationMiniHistogramAxes.Toolbar.Visible = 'off';
-            app.DurationMiniHistogramAxes.Interactions = [];
-            app.DurationMiniHistogramAxes.Visible = 'off';
-            disableDefaultInteractivity(app.DurationMiniHistogramAxes);
-
-            startY = 68;
-            rowSpacing = 22;
-            labelX = 85;
-
-            app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
-            app.MedianRadioButton.Interpreter = 'html';
-            app.MedianRadioButton.Text = 'Median';
-            app.MedianRadioButton.Tag = 'median';
-            app.MedianRadioButton.Position = [5 startY 75 22];
-
-            app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
-            app.P70RadioButton.Interpreter = 'html';
-            app.P70RadioButton.Text = 'P70';
-            app.P70RadioButton.Tag = 'p70';
-            app.P70RadioButton.Position = [5 startY - rowSpacing 75 22];
-
-            app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
-            app.P90RadioButton.Interpreter = 'html';
-            app.P90RadioButton.Text = 'P90';
-            app.P90RadioButton.Tag = 'p90';
-            app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 75 22];
-
-            app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
-            app.CustomRadioButton.Interpreter = 'html';
-            app.CustomRadioButton.Text = 'Custom';
-            app.CustomRadioButton.Tag = 'custom';
-            app.CustomRadioButton.Position = [5 startY - 3 * rowSpacing 75 22];
-
-            app.MedianValueLabel = uilabel(app.DurationButtonGroup);
-            app.MedianValueLabel.Text = '-';
-            app.MedianValueLabel.Position = [labelX startY 110 22];
-            app.MedianValueLabel.HorizontalAlignment = 'left';
-
-            app.P70ValueLabel = uilabel(app.DurationButtonGroup);
-            app.P70ValueLabel.Text = '-';
-            app.P70ValueLabel.Position = [labelX startY - rowSpacing 110 22];
-            app.P70ValueLabel.HorizontalAlignment = 'left';
-
-            app.P90ValueLabel = uilabel(app.DurationButtonGroup);
-            app.P90ValueLabel.Text = '-';
-            app.P90ValueLabel.Position = [labelX startY - 2 * rowSpacing 110 22];
-            app.P90ValueLabel.HorizontalAlignment = 'left';
-
-            app.CustomDurationSpinner = uispinner(app.DurationButtonGroup);
-            app.CustomDurationSpinner.Limits = [15 480];
-            app.CustomDurationSpinner.Value = 60;
-            app.CustomDurationSpinner.Step = 15;
-            app.CustomDurationSpinner.Enable = 'off';
-            app.CustomDurationSpinner.Position = [labelX startY - 3 * rowSpacing 70 22];
-
-            app.DurationSelector.applyDurationThemeColors(app);
-        end
-
 
         function buildConstraintSection(app, leftGrid)
             % Admission status dropdown (always visible in row 18)
@@ -1042,7 +893,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptAvailableSelectAll.Text = 'Select all labs';
             app.OptAvailableSelectAll.Layout.Row = 1;
             app.OptAvailableSelectAll.Layout.Column = 1;
-            app.OptAvailableSelectAll.ValueChangedFcn = @(src,~) app.onAvailableLabsSelectAllChanged(src);
+            conduction.gui.app.availableLabs.bindSelectAll(app, app.OptAvailableSelectAll);
 
             app.OptAvailableLabsPanel = uipanel(availableWrapper);
             app.OptAvailableLabsPanel.Layout.Row = 2;
@@ -1212,7 +1063,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 cb.Layout.Column = mod(idx - 1, maxColumns) + 1;
                 cb.Value = ismember(labId, app.AvailableLabIds);
                 cb.UserData = labId;
-                cb.ValueChangedFcn = @(src,~) app.onAvailableLabCheckboxChanged(src);
+                conduction.gui.app.availableLabs.bindCheckbox(app, cb);
                 app.OptAvailableLabCheckboxes(end+1, 1) = cb; %#ok<AGROW>
             end
             app.IsSyncingAvailableLabSelection = false;
@@ -1290,13 +1141,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show selection
             if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                conduction.gui.app.redrawSchedule(app);
             end
 
             % Store the case ID and update drawer if it's open
             app.DrawerCurrentCaseId = caseId;
-            if app.DrawerWidth > 28
+            if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                 app.DrawerController.populateDrawer(app, caseId);
             end
 
@@ -1319,8 +1169,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                 % Re-render schedule to clear selection highlight
                 if ~isempty(app.OptimizedSchedule)
-                    scheduleToRender = app.getScheduleForRendering();
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                    conduction.gui.app.redrawSchedule(app);
                 end
             end
         end
@@ -1363,8 +1212,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Re-render schedule to show/clear selection highlight
             if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender);
+                conduction.gui.app.redrawSchedule(app);
             end
         end
 
@@ -1406,74 +1254,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationSelector.refreshDurationOptions(app);
         end
 
-
         function AddConstraintButtonPushed(app, event)
-            % Toggle constraint panel visibility
-            if strcmp(app.ConstraintPanel.Visible, 'off')
-                % Show panel
-                app.ConstraintPanel.Visible = 'on';
-                app.AddConstraintButton.Text = '− Remove constraint';
-
-                % Expand row 21 to fit the panel (2 rows: 24 + 24 + padding)
-                currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{21} = 60;
-                app.TabAdd.Children(1).RowHeight = currentRowHeights;
-            else
-                % Hide panel
-                app.ConstraintPanel.Visible = 'off';
-                app.AddConstraintButton.Text = '+ Add constraint';
-
-                % Collapse row 21
-                currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                currentRowHeights{21} = 0;
-                app.TabAdd.Children(1).RowHeight = currentRowHeights;
-            end
+            %#ok<INUSD>
+            conduction.gui.app.toggleConstraintPanel(app);
         end
 
         function AddCaseButtonPushed(app, event)
-            operatorName = string(app.OperatorDropDown.Value);
-            procedureName = string(app.ProcedureDropDown.Value);
-            specificLab = string(app.SpecificLabDropDown.Value);
-            isFirstCase = app.FirstCaseCheckBox.Value;
-
-            if operatorName == "" || procedureName == ""
-                uialert(app.UIFigure, 'Please select both operator and procedure.', 'Invalid Input');
-                return;
-            end
-
-            % Get selected duration based on radio button choice
-            duration = app.DurationSelector.getSelectedDuration(app);
-            if isnan(duration)
-                uialert(app.UIFigure, 'Please select a duration option.', 'Invalid Duration');
-                return;
-            end
-
-            admissionStatus = app.getSelectedAdmissionStatus();
-
-            try
-                app.CaseManager.addCase(operatorName, procedureName, duration, specificLab, isFirstCase, admissionStatus);
-
-                % Reset form
-                app.OperatorDropDown.Value = app.OperatorDropDown.Items{1};
-                app.ProcedureDropDown.Value = app.ProcedureDropDown.Items{1};
-                app.SpecificLabDropDown.Value = 'Any Lab';
-                app.FirstCaseCheckBox.Value = false;
-                app.AdmissionStatusDropDown.Value = 'outpatient';
-
-                % Collapse constraint panel
-                if strcmp(app.ConstraintPanel.Visible, 'on')
-                    app.ConstraintPanel.Visible = 'off';
-                    app.AddConstraintButton.Text = '+ Add constraint';
-                    currentRowHeights = app.TabAdd.Children(1).RowHeight;
-                    currentRowHeights{21} = 0;
-                    app.TabAdd.Children(1).RowHeight = currentRowHeights;
-                end
-
-                app.DurationSelector.refreshDurationOptions(app); % Refresh the display
-
-            catch ME
-                uialert(app.UIFigure, sprintf('Error adding case: %s', ME.message), 'Error');
-            end
+            %#ok<INUSD>
+            conduction.gui.app.handleAddCase(app);
         end
 
         function RemoveSelectedButtonPushed(app, event)
@@ -1493,93 +1281,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function LoadDataButtonPushed(app, event)
-            % Load data interactively
-            app.LoadDataButton.Enable = 'off';
-            drawnow;
-
-            success = app.CaseManager.loadClinicalDataInteractive();
-
-            if success
-                app.updateDropdowns();
-                app.DurationSelector.refreshDurationOptions(app); % Refresh duration options with new data
-            end
-
-            app.TestingModeController.refreshTestingAvailability(app);
-
-            app.LoadDataButton.Enable = 'on';
+            %#ok<INUSD>
+            conduction.gui.app.loadBaselineData(app);
         end
 
         function TimeControlSwitchValueChanged(app, ~)
-            % REALTIME-SCHEDULING: Toggle time control mode
-            isEnabling = strcmp(app.TimeControlSwitch.Value, 'On');
-
-            if isEnabling
-                app.IsTimeControlActive = true;
-
-                % Snapshot locks that existed prior to time control mode
-                app.TimeControlBaselineLockedIds = app.LockedCaseIds;
-                app.TimeControlLockedCaseIds = string.empty;
-
-                % Start timeline at 8:00 AM (minutes from midnight)
-                startTimeMinutes = 8 * 60;
-                app.CaseManager.setCurrentTime(startTimeMinutes);
-
-                if ~isempty(app.OptimizedSchedule)
-                    % Build simulated schedule and render with draggable timeline
-                    updatedSchedule = app.ScheduleRenderer.updateCaseStatusesByTime(app, startTimeMinutes);
-                    app.SimulatedSchedule = updatedSchedule;
-
-                    scheduleToRender = app.getScheduleForRendering();
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
-                    app.ScheduleRenderer.enableNowLineDrag(app);
-                    app.ScheduleRenderer.updateActualTimeIndicator(app);
-                else
-                    app.SimulatedSchedule = conduction.DailySchedule.empty;
-                end
-
-                return;
-            end
-
-            if ~app.IsTimeControlActive
-                app.TimeControlSwitch.Value = 'Off';
-                return;
-            end
-
-            % Prompt whether time-control locks should persist
-            keepLocks = true;
-            if ~isempty(app.TimeControlLockedCaseIds)
-                confirmMsg = sprintf(['Time control locked %d case(s).\n' ...
-                    'Do you want to keep these cases locked after disabling time control?'], ...
-                    numel(app.TimeControlLockedCaseIds));
-                choice = uiconfirm(app.UIFigure, confirmMsg, 'Time Control Locks', ...
-                    'Options', {'Keep Locks', 'Unlock Cases'}, ...
-                    'DefaultOption', 'Keep Locks', ...
-                    'CancelOption', 'Keep Locks', ...
-                    'Icon', 'question');
-
-                keepLocks = strcmp(choice, 'Keep Locks');
-            end
-
-            if ~keepLocks && ~isempty(app.TimeControlLockedCaseIds)
-                remainingLocks = setdiff(app.LockedCaseIds, app.TimeControlLockedCaseIds);
-                app.LockedCaseIds = remainingLocks;
-            end
-
-            % Disable time control mode and restore defaults
-            app.IsTimeControlActive = false;
-            app.ScheduleRenderer.disableNowLineDrag(app);
-            app.CaseManager.setCurrentTime(NaN);
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
-            app.TimeControlLockedCaseIds = string.empty;
-            app.TimeControlBaselineLockedIds = string.empty;
-
-            if ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-            end
-
-            app.ScheduleRenderer.updateActualTimeIndicator(app);
-            app.TimeControlSwitch.Value = 'Off';
+            conduction.gui.app.toggleTimeControl(app);
         end
+
+
 
         function CurrentTimeCheckboxValueChanged(app, ~)
             app.IsCurrentTimeVisible = logical(app.CurrentTimeCheckbox.Value);
@@ -1640,33 +1350,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function TestToggleValueChanged(app, ~)
-            if app.IsSyncingTestingToggle
-                return;
-            end
-            isOn = strcmp(app.TestToggle.Value, 'On');
-            if ~isempty(app.TestPanel) && isvalid(app.TestPanel)
-                panelState = 'off';
-                if isOn
-                    panelState = 'on';
-                end
-                app.TestPanel.Visible = panelState;
-            end
-
-            if isOn
-                app.TestingModeController.enterTestingMode(app);
-            else
-                app.TestingModeController.exitTestingMode(app);
-            end
+            conduction.gui.app.testingMode.handleToggle(app);
         end
 
         function TestingDateDropDownValueChanged(app, event)
             %#ok<*INUSD>
-            app.TestingModeController.updateTestingActionStates(app);
-            selectedDate = app.TestingModeController.getSelectedTestingDate(app);
-            if app.IsTestingModeActive && isa(selectedDate, 'datetime') && ~isnat(selectedDate)
-                app.TestingInfoLabel.FontColor = [0.3 0.3 0.3];
-                app.TestingInfoLabel.Text = 'Press "Run Test Day" to load the selected historical cases.';
-            end
+            conduction.gui.app.testingMode.handleDateChange(app);
         end
 
         function TestingRunButtonPushed(app, event)
@@ -1684,7 +1373,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function DrawerHandleButtonPushed(app, ~)
-            if app.DrawerWidth > 28
+            if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                 app.DrawerController.closeDrawer(app);
             else
                 app.DrawerController.openDrawer(app, app.DrawerCurrentCaseId);
@@ -1707,15 +1396,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             if event.NewValue == app.CanvasAnalyzeTab
-                if ~isempty(app.UtilAxes) && isvalid(app.UtilAxes)
-                    app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
-                end
-                if ~isempty(app.FlipAxes) && isvalid(app.FlipAxes)
-                    app.AnalyticsRenderer.drawFlipMetrics(app, app.FlipAxes);
-                end
-                if ~isempty(app.IdleAxes) && isvalid(app.IdleAxes)
-                    app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
-                end
+                conduction.gui.app.renderAnalyticsTab(app);
             end
         end
 
@@ -1830,7 +1511,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.updateOptimizationOptionsSummary(app);
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
-            app.AnalyticsRenderer.resetKPIBar(app);
+            conduction.gui.app.analytics.resetSummaries(app);
         end
 
 
