@@ -9,6 +9,7 @@ function buildDurationSection(app, leftGrid)
 
     app.DurationButtonGroup = uibuttongroup(leftGrid);
     app.DurationButtonGroup.BorderType = 'none';
+    app.DurationButtonGroup.BackgroundColor = [0.149 0.149 0.149];  % Match figure background
     app.DurationButtonGroup.Layout.Row = 16;
     app.DurationButtonGroup.Layout.Column = [1 2];
     app.DurationButtonGroup.SelectionChangedFcn = @(src, event) app.DurationSelector.DurationOptionChanged(app, event);
@@ -18,6 +19,9 @@ function buildDurationSection(app, leftGrid)
     app.DurationMiniHistogramAxes = uiaxes(leftGrid);
     app.DurationMiniHistogramAxes.Layout.Row = 16;
     app.DurationMiniHistogramAxes.Layout.Column = [3 4];
+    app.DurationMiniHistogramAxes.Color = 'none';  % Transparent background
+    app.DurationMiniHistogramAxes.XColor = [0.7 0.7 0.7];  % Lighter axis lines
+    app.DurationMiniHistogramAxes.YColor = [0.7 0.7 0.7];
     app.DurationMiniHistogramAxes.Toolbar.Visible = 'off';
     app.DurationMiniHistogramAxes.Interactions = [];
     app.DurationMiniHistogramAxes.Visible = 'off';

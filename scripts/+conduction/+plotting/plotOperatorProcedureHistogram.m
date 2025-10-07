@@ -181,8 +181,10 @@ else
     set(ax, 'LineWidth', 1);
 end
 
-% Set background color
-set(ax, 'Color', bgColor);
+% Set background color (preserve 'none' if already set)
+if ~strcmp(ax.Color, 'none')
+    set(ax, 'Color', bgColor);
+end
 
 % Don't override position when parent is provided - respect the fixed pixel size
 if isempty(parentAxes)

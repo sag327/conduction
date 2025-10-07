@@ -433,7 +433,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function addGrid = configureAddTabLayout(app)
             addGrid = uigridlayout(app.TabAdd);
             addGrid.ColumnWidth = {90, 110, 90, '1x'};
-            addGrid.RowHeight = {30, 0, 0, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 0, 90, 12, 24, 3, 24, 0, 12, 28, 32, '1x'};
+            addGrid.RowHeight = {30, 0, 0, 0, 0, 0, 0, 0, 12, 24, 24, 24, 12, 24, 0, 90, 12, 24, 3, 24, 0, '1x', 32};
             addGrid.Padding = [10 10 10 10];
             addGrid.RowSpacing = 3;
             addGrid.ColumnSpacing = 6;
@@ -778,10 +778,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SpecificLabDropDown.Layout.Row = 2;
             app.SpecificLabDropDown.Layout.Column = 2;
 
-            % Add Case button at bottom
+            % Add Case button (anchored at bottom)
             app.AddCaseButton = uibutton(leftGrid, 'push');
             app.AddCaseButton.Text = 'Add Case';
-            app.AddCaseButton.Layout.Row = 24;
+            app.AddCaseButton.Layout.Row = 23;
             app.AddCaseButton.Layout.Column = [1 4];
             app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
             app.AddCaseButton.FontSize = 16;

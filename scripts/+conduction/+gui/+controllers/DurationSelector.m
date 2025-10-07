@@ -106,19 +106,16 @@ classdef DurationSelector < handle
                 return;
             end
 
-            % Get background color
-            [bgColor, ~] = obj.getDurationThemeColors(app);
-
             % Plot minimal histogram
             % The plotting function will automatically fall back to all-operators data
             % if operator-specific data is insufficient (< 3 cases)
+            % Note: We don't pass BackgroundColor so the transparent axes background (set in buildDurationSection) is preserved
             try
                 conduction.plotting.plotOperatorProcedureHistogram(...
                     aggregator, ...
                     operatorName, procedureName, 'procedureMinutes', ...
                     'Parent', app.DurationMiniHistogramAxes, ...
-                    'MinimalMode', true, ...
-                    'BackgroundColor', bgColor);
+                    'MinimalMode', true);
                 app.DurationMiniHistogramAxes.Visible = 'on';
             catch ME
                 % If plotting fails, it means no data is available (not even procedure-level)
