@@ -14,10 +14,7 @@ function buildDurationSection(app, leftGrid)
     app.DurationButtonGroup.SelectionChangedFcn = @(src, event) app.DurationSelector.DurationOptionChanged(app, event);
     app.DurationButtonGroup.AutoResizeChildren = 'off';
 
-    startY = 90;
-    rowSpacing = 24;
-    labelX = 90;
-
+    % Mini histogram axes to the right of button group
     app.DurationMiniHistogramAxes = uiaxes(leftGrid);
     app.DurationMiniHistogramAxes.Layout.Row = 16;
     app.DurationMiniHistogramAxes.Layout.Column = [3 4];
@@ -26,24 +23,35 @@ function buildDurationSection(app, leftGrid)
     app.DurationMiniHistogramAxes.Visible = 'off';
     disableDefaultInteractivity(app.DurationMiniHistogramAxes);
 
+    % Use EXACT original positioning from main branch
+    startY = 68;
+    rowSpacing = 22;
+    labelX = 85;
+
     app.MedianRadioButton = uiradiobutton(app.DurationButtonGroup);
+    app.MedianRadioButton.Interpreter = 'html';
     app.MedianRadioButton.Text = 'Median';
+    app.MedianRadioButton.Tag = 'median';
     app.MedianRadioButton.Position = [5 startY 75 22];
-    app.MedianRadioButton.Value = true;
 
     app.P70RadioButton = uiradiobutton(app.DurationButtonGroup);
-    app.P70RadioButton.Text = '70th percentile';
-    app.P70RadioButton.Position = [5 startY - rowSpacing 110 22];
+    app.P70RadioButton.Interpreter = 'html';
+    app.P70RadioButton.Text = 'P70';
+    app.P70RadioButton.Tag = 'p70';
+    app.P70RadioButton.Position = [5 startY - rowSpacing 75 22];
 
     app.P90RadioButton = uiradiobutton(app.DurationButtonGroup);
-    app.P90RadioButton.Text = '90th percentile';
-    app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 110 22];
+    app.P90RadioButton.Interpreter = 'html';
+    app.P90RadioButton.Text = 'P90';
+    app.P90RadioButton.Tag = 'p90';
+    app.P90RadioButton.Position = [5 startY - 2 * rowSpacing 75 22];
 
     app.CustomRadioButton = uiradiobutton(app.DurationButtonGroup);
+    app.CustomRadioButton.Interpreter = 'html';
     app.CustomRadioButton.Text = 'Custom';
+    app.CustomRadioButton.Tag = 'custom';
     app.CustomRadioButton.Position = [5 startY - 3 * rowSpacing 75 22];
 
-    % Create value labels (no background color - inherit from parent)
     app.MedianValueLabel = uilabel(app.DurationButtonGroup);
     app.MedianValueLabel.Text = '-';
     app.MedianValueLabel.Position = [labelX startY 110 22];
