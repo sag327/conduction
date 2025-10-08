@@ -448,6 +448,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DatePicker = uidatepicker(leftGrid);
             app.DatePicker.Layout.Row = 1;
             app.DatePicker.Layout.Column = [2 4];
+            app.DatePicker.DisplayFormat = 'dd-MMM-yyyy';
+            app.DatePicker.ValueChangedFcn = createCallbackFcn(app, @DatePickerValueChanged, true);
             if ~isempty(app.TargetDate)
                 app.DatePicker.Value = app.TargetDate;
             end
@@ -1213,6 +1215,40 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Re-render schedule to show/clear selection highlight
             if ~isempty(app.OptimizedSchedule)
                 conduction.gui.app.redrawSchedule(app);
+            end
+        end
+
+        function DatePickerValueChanged(app, event)
+            % Update target date when date picker changes
+            newDate = app.DatePicker.Value;
+            if isempty(newDate) || isnat(newDate)
+                return;
+            end
+
+            % Update target date
+            app.TargetDate = newDate;
+
+            % Update optimized schedule date if it exists
+            % Note: Date property is immutable, so we need to recreate the schedule
+            if ~isempty(app.OptimizedSchedule)
+                % Recreate schedule with new date
+                app.OptimizedSchedule = conduction.DailySchedule( ...
+                    newDate, ...
+                    app.OptimizedSchedule.Labs, ...
+                    app.OptimizedSchedule.labAssignments(), ...
+                    app.OptimizedSchedule.metrics());
+
+                % Explicitly pass the updated schedule to ensure new date is used
+                conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            end
+
+            % Update simulated schedule date if it exists (for time control mode)
+            if ~isempty(app.SimulatedSchedule)
+                app.SimulatedSchedule = conduction.DailySchedule( ...
+                    newDate, ...
+                    app.SimulatedSchedule.Labs, ...
+                    app.SimulatedSchedule.labAssignments(), ...
+                    app.SimulatedSchedule.metrics());
             end
         end
 
