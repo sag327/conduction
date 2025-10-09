@@ -23,9 +23,11 @@ function testCase = createTestCase(varargin)
         error('Provide either 0 or at least 3 arguments');
     end
 
-    % Create case
-    testCase = conduction.gui.models.ProspectiveCase(...
-        operatorName, procedureName, duration);
+    % Create case (constructor only takes operator, procedure, and admission status)
+    testCase = conduction.gui.models.ProspectiveCase(operatorName, procedureName);
+
+    % Set duration via updateDuration method
+    testCase.updateDuration(duration);
 
     % Set optional properties if provided
     if nargin >= 4

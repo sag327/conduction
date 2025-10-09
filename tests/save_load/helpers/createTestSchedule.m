@@ -15,7 +15,7 @@ function schedule = createTestSchedule(targetDate, numLabs)
     % Create lab objects
     labs = conduction.Lab.empty(0, numLabs);
     for i = 1:numLabs
-        labs(i) = conduction.Lab(i);
+        labs(i) = conduction.Lab(sprintf('Lab %d', i), 'Test Location');
     end
 
     % Create empty assignments
