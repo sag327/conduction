@@ -131,7 +131,7 @@ TimeControlState = struct(...
 - [x] **Stage 1:** Serialization Layer ✅ (Completed 2025-10-08)
 - [x] **Stage 2:** State Extraction ✅ (Completed 2025-10-08)
 - [x] **Stage 3:** State Restoration ✅ (Completed 2025-10-08)
-- [ ] **Stage 4:** File I/O
+- [x] **Stage 4:** File I/O ✅ (Completed 2025-10-09)
 - [ ] **Stage 5:** UI Integration - Save
 - [ ] **Stage 6:** UI Integration - Load
 - [ ] **Stage 7:** Dirty Flag Tracking
@@ -816,12 +816,54 @@ assert(contains(filepath, '.mat'));
 ```
 
 ### Deliverables
-- File save/load functions working
-- Version validation implemented
-- Backup mechanism working
-- Error handling for file I/O
+- ✅ File save/load functions working
+- ✅ Version validation implemented
+- ✅ Backup mechanism working
+- ✅ Error handling for file I/O
+- ✅ 10 integration tests passing
+
+### What Was Built
+- `saveSessionToFile()` function in `+conduction/+session/` - saves SessionData struct to .mat file with safety features
+  - Input validation for sessionData and filepath
+  - Auto-appends .mat extension if missing
+  - Creates backup of existing file before overwrite (filename.mat.backup)
+  - Uses MATLAB v7.3 format for compatibility
+  - Comprehensive error handling with specific error identifiers
+
+- `loadSessionFromFile()` function in `+conduction/+session/` - loads and validates SessionData from .mat file
+  - File existence validation
+  - MAT file format validation with specific error messages
+  - Version compatibility checking with warnings
+  - Required field validation
+  - Distinguishes between CorruptFile and LoadFailed errors
+
+- `generateSessionFilename()` function in `+conduction/+session/` - generates timestamped session filenames
+  - Format: `session_YYYY-MM-DD_HHmmss.mat`
+  - Date from target date parameter
+  - Time from current time for uniqueness
+  - Auto-creates sessions directory if needed
+  - Supports custom base path parameter
+
+### Test Results
+✅ All 10 tests passing:
+1. Save and load basic file
+2. Save with .mat extension auto-append
+3. Backup on overwrite
+4. Load nonexistent file error
+5. Load corrupt file error
+6. Generate session filename format
+7. Generate session filename with custom base path
+8. Full roundtrip with real app data
+9. Complete save/load/import workflow
+10. Version warning on mismatch
+
+### Issues Found & Fixed
+- String comparison using `~=` operator doesn't work correctly for char arrays in MATLAB
+  - Fixed by using `~strcmp()` for version comparison in `loadSessionFromFile()`
 
 **Time Estimate:** 1-2 hours
+**Actual Time:** ~45 minutes
+**Status:** ✅ COMPLETE (2025-10-09)
 
 ---
 
