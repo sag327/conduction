@@ -1624,6 +1624,143 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function importAppState(app, sessionData)
+            % SAVE/LOAD: Restore app state from SessionData struct
+            % This is part of Stage 3 of the save/load implementation
+
+            % Validate session data
+            if ~isfield(sessionData, 'version')
+                error('Invalid session data: missing version field');
+            end
+
+            % Version compatibility check
+            if sessionData.version ~= '1.0.0'
+                warning('Session version %s may be incompatible with current version', ...
+                    sessionData.version);
+            end
+
+            % Clear current state
+            app.CaseManager.clearAllCases();
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.SimulatedSchedule = conduction.DailySchedule.empty;
+            app.LockedCaseIds = string.empty;
+
+            % Restore target date
+            app.TargetDate = sessionData.targetDate;
+            if ~isempty(app.DatePicker) && isvalid(app.DatePicker)
+                app.DatePicker.Value = sessionData.targetDate;
+            end
+
+            % Restore cases
+            if isfield(sessionData, 'cases') && ~isempty(sessionData.cases)
+                restoredCases = conduction.session.deserializeProspectiveCase(sessionData.cases);
+                for i = 1:length(restoredCases)
+                    app.CaseManager.addCase( ...
+                        restoredCases(i).OperatorName, ...
+                        restoredCases(i).ProcedureName, ...
+                        restoredCases(i).EstimatedDurationMinutes, ...
+                        restoredCases(i).SpecificLab, ...
+                        restoredCases(i).IsFirstCaseOfDay, ...
+                        restoredCases(i).AdmissionStatus);
+
+                    % Restore additional state that addCase doesn't handle
+                    caseObj = app.CaseManager.getCase(i);
+                    caseObj.IsLocked = restoredCases(i).IsLocked;
+                    caseObj.CaseStatus = restoredCases(i).CaseStatus;
+                end
+            end
+
+            % Note: Completed cases are not directly restorable through public API
+            % They would need a special CaseManager method to restore
+
+            % Restore schedules
+            if isfield(sessionData, 'optimizedSchedule') && ...
+                    ~isempty(fieldnames(sessionData.optimizedSchedule))
+                app.OptimizedSchedule = conduction.session.deserializeDailySchedule(...
+                    sessionData.optimizedSchedule);
+            end
+
+            if isfield(sessionData, 'simulatedSchedule') && ...
+                    ~isempty(fieldnames(sessionData.simulatedSchedule))
+                app.SimulatedSchedule = conduction.session.deserializeDailySchedule(...
+                    sessionData.simulatedSchedule);
+            end
+
+            % Restore optimization state
+            if isfield(sessionData, 'optimizationOutcome')
+                app.OptimizationOutcome = sessionData.optimizationOutcome;
+            end
+
+            if isfield(sessionData, 'opts')
+                app.Opts = sessionData.opts;
+            end
+
+            % Restore lab configuration
+            if isfield(sessionData, 'labIds')
+                app.LabIds = sessionData.labIds;
+            end
+
+            if isfield(sessionData, 'availableLabIds')
+                app.AvailableLabIds = sessionData.availableLabIds;
+                % Update available labs checkboxes
+                app.buildAvailableLabCheckboxes();
+            end
+
+            % Restore UI state
+            if isfield(sessionData, 'lockedCaseIds')
+                app.LockedCaseIds = sessionData.lockedCaseIds;
+            end
+
+            if isfield(sessionData, 'isOptimizationDirty')
+                app.IsOptimizationDirty = sessionData.isOptimizationDirty;
+            end
+
+            % Restore time control state
+            if isfield(sessionData, 'timeControlState')
+                tcs = sessionData.timeControlState;
+                if isfield(tcs, 'isActive')
+                    app.IsTimeControlActive = tcs.isActive;
+                end
+                if isfield(tcs, 'baselineLockedIds')
+                    app.TimeControlBaselineLockedIds = tcs.baselineLockedIds;
+                end
+                if isfield(tcs, 'lockedCaseIds')
+                    app.TimeControlLockedCaseIds = tcs.lockedCaseIds;
+                end
+                if isfield(tcs, 'currentTimeMinutes') && ~isnan(tcs.currentTimeMinutes)
+                    app.CaseManager.setCurrentTime(tcs.currentTimeMinutes);
+                end
+            end
+
+            % Restore operator colors
+            if isfield(sessionData, 'operatorColors')
+                app.OperatorColors = conduction.session.deserializeOperatorColors(...
+                    sessionData.operatorColors);
+            end
+
+            % Trigger UI updates
+            app.updateCasesTable();
+            app.OptimizationController.updateOptimizationOptionsSummary(app);
+            app.OptimizationController.updateOptimizationStatus(app);
+            app.OptimizationController.updateOptimizationActionAvailability(app);
+
+            % Re-render schedule
+            if ~isempty(app.OptimizedSchedule)
+                conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, ...
+                    app.OptimizationOutcome);
+            else
+                app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            end
+
+            % Notify user
+            if isfield(sessionData, 'savedDate')
+                fprintf('Session loaded successfully from %s\n', ...
+                    datestr(sessionData.savedDate, 'yyyy-mm-dd HH:MM:SS'));
+            else
+                fprintf('Session loaded successfully\n');
+            end
+        end
+
         function sessionData = exportAppState(app)
             % SAVE/LOAD: Export all saveable app state to SessionData struct
             % This is part of Stage 2 of the save/load implementation
