@@ -150,17 +150,30 @@ TimeControlState = struct(...
 - [x] Create test directory structure: `tests/save_load/`
 - [x] Create test helper functions
 - [x] Document example session data structures
+- [x] Create verification tests for all helper functions
+- [x] Fix issues discovered during testing
 
 ### Testing
-- Verify documentation is clear and complete
-- Create example SessionData struct for reference
+- [x] Verify documentation is clear and complete
+- [x] Create example SessionData struct for reference
+- [x] Created `test_stage0_helpers.m` with 10 verification tests
+- [x] All tests passing ✅
 
 ### Deliverables
 - ✅ Implementation guide (this file)
-- Test infrastructure ready
-- Example data structures documented
+- ✅ Test infrastructure ready (`tests/save_load/helpers/`)
+- ✅ Example data structures documented (`example_session_data.md`)
+- ✅ 6 helper functions created and tested
+- ✅ Verification test suite passing
 
-**Time Estimate:** 30-60 minutes
+### Issues Found & Fixed
+- `ProspectiveCase` constructor doesn't accept duration parameter - use `updateDuration()` method
+- `Lab` constructor requires `room` and `location` parameters
+- `CaseManager.Cases` is private - use public `getCase()` method
+
+**Actual Time:** ~60 minutes
+
+**Status:** ✅ COMPLETE (2025-10-08)
 
 ---
 
