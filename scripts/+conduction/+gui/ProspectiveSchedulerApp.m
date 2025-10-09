@@ -1624,5 +1624,87 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function sessionData = exportAppState(app)
+            % SAVE/LOAD: Export all saveable app state to SessionData struct
+            % This is part of Stage 2 of the save/load implementation
+
+            % Version info
+            versionInfo = conduction.version();
+
+            % Initialize struct
+            sessionData = struct();
+            sessionData.version = '1.0.0';  % Session format version
+            sessionData.appVersion = versionInfo.Version;
+            sessionData.savedDate = datetime('now');
+            sessionData.targetDate = app.TargetDate;
+            sessionData.userNotes = '';
+
+            % Serialize cases
+            allCases = [];
+            for i = 1:app.CaseManager.CaseCount
+                allCases = [allCases; app.CaseManager.getCase(i)]; %#ok<AGROW>
+            end
+            if isempty(allCases)
+                sessionData.cases = [];
+            else
+                sessionData.cases = conduction.session.serializeProspectiveCase(allCases);
+            end
+
+            % Serialize completed cases
+            completedCases = app.CaseManager.getCompletedCases();
+            if isempty(completedCases)
+                sessionData.completedCases = [];
+            else
+                sessionData.completedCases = conduction.session.serializeProspectiveCase(completedCases);
+            end
+
+            % Serialize schedules
+            if ~isempty(app.OptimizedSchedule)
+                sessionData.optimizedSchedule = ...
+                    conduction.session.serializeDailySchedule(app.OptimizedSchedule);
+            else
+                sessionData.optimizedSchedule = struct();
+            end
+
+            if ~isempty(app.SimulatedSchedule)
+                sessionData.simulatedSchedule = ...
+                    conduction.session.serializeDailySchedule(app.SimulatedSchedule);
+            else
+                sessionData.simulatedSchedule = struct();
+            end
+
+            % Optimization state
+            sessionData.optimizationOutcome = app.OptimizationOutcome;
+            sessionData.opts = app.Opts;
+
+            % Lab configuration
+            sessionData.labIds = app.LabIds;
+            sessionData.availableLabIds = app.AvailableLabIds;
+
+            % UI state
+            sessionData.lockedCaseIds = app.LockedCaseIds;
+            sessionData.isOptimizationDirty = app.IsOptimizationDirty;
+
+            % Time control state
+            sessionData.timeControlState = struct(...
+                'isActive', app.IsTimeControlActive, ...
+                'currentTimeMinutes', app.CaseManager.getCurrentTime(), ...
+                'baselineLockedIds', app.TimeControlBaselineLockedIds, ...
+                'lockedCaseIds', app.TimeControlLockedCaseIds);
+
+            % Operator colors
+            sessionData.operatorColors = ...
+                conduction.session.serializeOperatorColors(app.OperatorColors);
+
+            % Historical data reference
+            historicalCollection = app.CaseManager.getHistoricalCollection();
+            if ~isempty(historicalCollection)
+                % Try to extract path if available
+                sessionData.historicalDataPath = "";
+            else
+                sessionData.historicalDataPath = "";
+            end
+        end
+
     end
 end
