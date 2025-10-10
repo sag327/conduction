@@ -370,11 +370,14 @@ classdef ScheduleRenderer < handle
                     % Do NOT modify ProspectiveCase objects to keep case IDs stable
                     labAssignments{labIdx}(caseIdx).caseStatus = char(newStatus);
 
-                    % Update ProspectiveCase object status and lock for table display
-                    if ~isnan(caseIdNumeric) && caseIdNumeric > 0 && caseIdNumeric <= app.CaseManager.CaseCount
-                        caseObj = app.CaseManager.getCase(caseIdNumeric);
-                        caseObj.CaseStatus = newStatus;
-                        caseObj.IsLocked = shouldBeLocked;
+                    % PERSISTENT-ID: Update ProspectiveCase object status and lock for table display
+                    % Use findCaseById instead of numeric index
+                    if strlength(caseIdStr) > 0
+                        [caseObj, ~] = app.CaseManager.findCaseById(caseIdStr);
+                        if ~isempty(caseObj)
+                            caseObj.CaseStatus = newStatus;
+                            caseObj.IsLocked = shouldBeLocked;
+                        end
                     end
                 end
             end

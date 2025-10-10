@@ -268,6 +268,13 @@ classdef DrawerController < handle
             % Update cases table to reflect lock status
             app.updateCasesTable();
 
+            % Update drawer toggle if drawer is showing this case
+            if ~isempty(app.DrawerCurrentCaseId) && app.DrawerCurrentCaseId == caseId
+                if ~isempty(app.DrawerLockToggle) && isvalid(app.DrawerLockToggle)
+                    app.DrawerLockToggle.Value = caseObj.IsLocked;
+                end
+            end
+
             % Re-render schedule to show lock state change
             if ~isempty(app.OptimizedSchedule)
                 scheduleToRender = app.getScheduleForRendering();
