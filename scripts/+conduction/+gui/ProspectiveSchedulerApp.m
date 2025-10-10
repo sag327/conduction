@@ -12,6 +12,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LoadDataButton              matlab.ui.control.Button
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
+        SaveSessionButton           matlab.ui.control.Button  % SAVE/LOAD: Save session button
+        LoadSessionButton           matlab.ui.control.Button  % SAVE/LOAD: Load session button
+        AutoSaveCheckbox            matlab.ui.control.CheckBox  % SAVE/LOAD: Auto-save checkbox (Stage 8)
         CurrentTimeLabel            matlab.ui.control.Label
         CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
         TestToggle                  matlab.ui.control.Switch
@@ -175,6 +178,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
+        IsDirty logical = false  % SAVE/LOAD: Track unsaved changes (Stage 7)
+        AutoSaveEnabled logical = false  % SAVE/LOAD: Auto-save enabled flag (Stage 8)
+        AutoSaveInterval double = 5  % SAVE/LOAD: Auto-save interval in minutes (Stage 8)
+        AutoSaveTimer timer = timer.empty  % SAVE/LOAD: Auto-save timer object (Stage 8)
+        AutoSaveMaxFiles double = 5  % SAVE/LOAD: Maximum number of auto-save files to keep (Stage 8)
     end
 
     properties (Access = private)
@@ -221,7 +229,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','1x','fit','fit','fit','fit'};  % REALTIME-SCHEDULING: Added columns for time indicators
+            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','1x','fit','fit','fit','fit'};  % SAVE/LOAD: Added columns for Save/Load Session buttons
             app.TopBarLayout.ColumnSpacing = 12;
             app.TopBarLayout.Padding = [0 0 0 0];
 
@@ -235,21 +243,43 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.Layout.Column = 2;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
 
+            % SAVE/LOAD: Save Session button
+            app.SaveSessionButton = uibutton(app.TopBarLayout, 'push');
+            app.SaveSessionButton.Text = 'Save Session';
+            app.SaveSessionButton.Layout.Column = 3;
+            app.SaveSessionButton.ButtonPushedFcn = createCallbackFcn(app, @SaveSessionButtonPushed, true);
+            app.SaveSessionButton.Tooltip = 'Save current session to file';
+
+            % SAVE/LOAD: Load Session button
+            app.LoadSessionButton = uibutton(app.TopBarLayout, 'push');
+            app.LoadSessionButton.Text = 'Load Session';
+            app.LoadSessionButton.Layout.Column = 4;
+            app.LoadSessionButton.ButtonPushedFcn = createCallbackFcn(app, @LoadSessionButtonPushed, true);
+            app.LoadSessionButton.Tooltip = 'Load a saved session';
+
+            % SAVE/LOAD: Auto-save checkbox (Stage 8)
+            app.AutoSaveCheckbox = uicheckbox(app.TopBarLayout);
+            app.AutoSaveCheckbox.Text = 'Auto-save';
+            app.AutoSaveCheckbox.Layout.Column = 5;
+            app.AutoSaveCheckbox.Value = false;
+            app.AutoSaveCheckbox.ValueChangedFcn = createCallbackFcn(app, @AutoSaveCheckboxValueChanged, true);
+            app.AutoSaveCheckbox.Tooltip = 'Automatically save session every 5 minutes';
+
             app.CurrentTimeLabel = uilabel(app.TopBarLayout);
             app.CurrentTimeLabel.Text = 'Current Time';
-            app.CurrentTimeLabel.Layout.Column = 4;
+            app.CurrentTimeLabel.Layout.Column = 6;
             app.CurrentTimeLabel.HorizontalAlignment = 'right';
 
             app.CurrentTimeCheckbox = uicheckbox(app.TopBarLayout);
             app.CurrentTimeCheckbox.Text = '';
-            app.CurrentTimeCheckbox.Layout.Column = 5;
+            app.CurrentTimeCheckbox.Layout.Column = 7;
             app.CurrentTimeCheckbox.Value = false;
             app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
 
 
             % REALTIME-SCHEDULING: Time Control Switch
             app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
-            app.TimeControlSwitch.Layout.Column = 6;
+            app.TimeControlSwitch.Layout.Column = 8;
             app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
             app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
             app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
@@ -257,7 +287,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 7;  % REALTIME-SCHEDULING: Moved to column 7
+            app.TestToggle.Layout.Column = 9;  % SAVE/LOAD: Moved to column 9 to make room for Save/Load Session buttons
             app.TestToggle.Items = {'Test Mode',''};
             app.TestToggle.ItemsData = {'Off','On'};
             app.TestToggle.Value = 'Off';
@@ -1192,6 +1222,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 delete(app.CurrentTimeTimer);
                 app.CurrentTimeTimer = timer.empty;
             end
+            app.stopAutoSaveTimer();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
             delete(app.UIFigure);
         end
@@ -1227,6 +1258,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Update target date
             app.TargetDate = newDate;
+            app.markDirty();  % SAVE/LOAD: Mark as dirty when date changed (Stage 7)
 
             % Update optimized schedule date if it exists
             % Note: Date property is immutable, so we need to recreate the schedule
@@ -1298,12 +1330,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function AddCaseButtonPushed(app, event)
             %#ok<INUSD>
             conduction.gui.app.handleAddCase(app);
+            app.markDirty();  % SAVE/LOAD: Mark as dirty when case added (Stage 7)
         end
 
         function RemoveSelectedButtonPushed(app, event)
             selection = app.CasesTable.Selection;
             if ~isempty(selection)
                 app.CaseManager.removeCase(selection(1));
+                app.markDirty();  % SAVE/LOAD: Mark as dirty when case removed (Stage 7)
             end
         end
 
@@ -1313,6 +1347,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if strcmp(answer, 'Yes')
                 app.CaseManager.clearAllCases();
+                app.markDirty();  % SAVE/LOAD: Mark as dirty when all cases cleared (Stage 7)
             end
         end
 
@@ -1402,6 +1437,107 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingModeController.exitTestingMode(app);
         end
 
+        function SaveSessionButtonPushed(app, event)
+            % SAVE/LOAD: Save current session to file (Stage 5)
+            %#ok<INUSD>
+
+            % Generate default filename
+            defaultPath = conduction.session.generateSessionFilename(app.TargetDate);
+            [~, defaultFile, ~] = fileparts(defaultPath);
+
+            % Show file dialog
+            [filename, pathname] = uiputfile('*.mat', 'Save Session', [defaultFile '.mat']);
+
+            if isequal(filename, 0)
+                % User cancelled
+                return;
+            end
+
+            filepath = fullfile(pathname, filename);
+
+            try
+                % Export app state
+                sessionData = app.exportAppState();
+
+                % Save to file
+                conduction.session.saveSessionToFile(sessionData, filepath);
+
+                % SAVE/LOAD: Clear dirty flag after successful save (Stage 7)
+                app.IsDirty = false;
+                app.updateWindowTitle();
+
+                % Success message
+                uialert(app.UIFigure, sprintf('Session saved to:\n%s', filepath), ...
+                    'Session Saved', 'Icon', 'success');
+
+            catch ME
+                % Error dialog
+                uialert(app.UIFigure, sprintf('Failed to save session:\n%s', ME.message), ...
+                    'Save Error', 'Icon', 'error');
+            end
+        end
+
+        function LoadSessionButtonPushed(app, event)
+            % SAVE/LOAD: Load session from file (Stage 6, updated Stage 7)
+            %#ok<INUSD>
+
+            % SAVE/LOAD: Check for unsaved changes (Stage 7)
+            if app.IsDirty
+                answer = uiconfirm(app.UIFigure, ...
+                    'You have unsaved changes. Continue loading?', ...
+                    'Unsaved Changes', ...
+                    'Options', {'Load Anyway', 'Cancel'}, ...
+                    'DefaultOption', 'Cancel', ...
+                    'Icon', 'warning');
+
+                if strcmp(answer, 'Cancel')
+                    return;
+                end
+            end
+
+            % Show file dialog (start in ./sessions directory if it exists)
+            defaultPath = './sessions/';
+            if ~isfolder(defaultPath)
+                defaultPath = pwd;
+            end
+
+            [filename, pathname] = uigetfile('*.mat', 'Load Session', defaultPath);
+
+            if isequal(filename, 0)
+                % User cancelled
+                return;
+            end
+
+            filepath = fullfile(pathname, filename);
+
+            try
+                % Load from file
+                sessionData = conduction.session.loadSessionFromFile(filepath);
+
+                % Import app state
+                app.importAppState(sessionData);
+
+                % SAVE/LOAD: Clear dirty flag after successful load (Stage 7)
+                app.IsDirty = false;
+                app.updateWindowTitle();
+
+                % Success message
+                uialert(app.UIFigure, sprintf('Session loaded from:\n%s', filepath), ...
+                    'Session Loaded', 'Icon', 'success');
+
+            catch ME
+                % Error dialog
+                uialert(app.UIFigure, sprintf('Failed to load session:\n%s', ME.message), ...
+                    'Load Error', 'Icon', 'error');
+            end
+        end
+
+        function AutoSaveCheckboxValueChanged(app, event)
+            % SAVE/LOAD: Auto-save checkbox toggled (Stage 8)
+            %#ok<INUSD>
+            value = app.AutoSaveCheckbox.Value;
+            app.enableAutoSave(value, app.AutoSaveInterval);
+        end
 
         function OptimizationRunButtonPushed(app, event)
             %#ok<INUSD>
@@ -1424,6 +1560,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Toggle the lock state
             app.DrawerController.toggleCaseLock(app, app.DrawerCurrentCaseId);
+            app.markDirty();  % SAVE/LOAD: Mark as dirty when case lock state changed (Stage 7)
         end
 
         function CanvasTabGroupSelectionChanged(app, event)
@@ -1840,6 +1977,125 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 sessionData.historicalDataPath = "";
             else
                 sessionData.historicalDataPath = "";
+            end
+        end
+
+        function markDirty(app)
+            % SAVE/LOAD: Mark app as having unsaved changes (Stage 7)
+            app.IsDirty = true;
+            app.updateWindowTitle();
+        end
+
+        function updateWindowTitle(app)
+            % SAVE/LOAD: Update window title with dirty flag indicator (Stage 7)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            versionInfo = conduction.version();
+            baseTitle = sprintf('Conduction v%s', versionInfo.Version);
+
+            if app.IsDirty
+                app.UIFigure.Name = [baseTitle ' *'];
+            else
+                app.UIFigure.Name = baseTitle;
+            end
+        end
+
+        function enableAutoSave(app, enabled, interval)
+            % SAVE/LOAD: Enable or disable auto-save (Stage 8)
+            if nargin < 3
+                interval = 5;  % default 5 minutes
+            end
+
+            app.AutoSaveEnabled = enabled;
+            app.AutoSaveInterval = interval;
+
+            if enabled
+                app.startAutoSaveTimer();
+            else
+                app.stopAutoSaveTimer();
+            end
+        end
+
+        function startAutoSaveTimer(app)
+            % SAVE/LOAD: Start the auto-save timer (Stage 8)
+            % Stop existing timer
+            app.stopAutoSaveTimer();
+
+            % Create new timer
+            app.AutoSaveTimer = timer(...
+                'ExecutionMode', 'fixedSpacing', ...
+                'Period', app.AutoSaveInterval * 60, ...  % Convert to seconds
+                'StartDelay', app.AutoSaveInterval * 60, ...
+                'TimerFcn', @(~,~) app.autoSaveCallback(), ...
+                'Name', 'ConductionAutoSaveTimer');
+
+            start(app.AutoSaveTimer);
+            fprintf('Auto-save enabled: saving every %.1f minutes\n', app.AutoSaveInterval);
+        end
+
+        function stopAutoSaveTimer(app)
+            % SAVE/LOAD: Stop the auto-save timer (Stage 8)
+            if ~isempty(app.AutoSaveTimer) && isvalid(app.AutoSaveTimer)
+                stop(app.AutoSaveTimer);
+                delete(app.AutoSaveTimer);
+                app.AutoSaveTimer = timer.empty;
+            end
+        end
+
+        function autoSaveCallback(app)
+            % SAVE/LOAD: Auto-save timer callback (Stage 8)
+            % Only save if dirty
+            if ~app.IsDirty
+                return;
+            end
+
+            try
+                % Generate auto-save filename
+                autoSaveDir = './sessions/autosave';
+                if ~isfolder(autoSaveDir)
+                    mkdir(autoSaveDir);
+                end
+
+                timestamp = datestr(datetime('now'), 'yyyy-mm-dd_HHMMSS');
+                filename = sprintf('autosave_%s.mat', timestamp);
+                filepath = fullfile(autoSaveDir, filename);
+
+                % Save session
+                sessionData = app.exportAppState();
+                conduction.session.saveSessionToFile(sessionData, filepath);
+
+                % Rotate old auto-saves
+                app.rotateAutoSaves(autoSaveDir);
+
+                fprintf('Auto-saved to: %s\n', filepath);
+
+            catch ME
+                warning('Auto-save failed: %s', ME.message);
+            end
+        end
+
+        function rotateAutoSaves(app, autoSaveDir)
+            % SAVE/LOAD: Rotate auto-save files to limit disk usage (Stage 8)
+            % Get all auto-save files
+            files = dir(fullfile(autoSaveDir, 'autosave_*.mat'));
+
+            if isempty(files)
+                return;
+            end
+
+            % Sort by date (oldest first)
+            [~, idx] = sort([files.datenum]);
+            files = files(idx);
+
+            % Delete oldest if too many
+            numToDelete = length(files) - app.AutoSaveMaxFiles;
+            if numToDelete > 0
+                for i = 1:numToDelete
+                    delete(fullfile(autoSaveDir, files(i).name));
+                    fprintf('Deleted old auto-save: %s\n', files(i).name);
+                end
             end
         end
 

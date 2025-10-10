@@ -132,10 +132,10 @@ TimeControlState = struct(...
 - [x] **Stage 2:** State Extraction ✅ (Completed 2025-10-08)
 - [x] **Stage 3:** State Restoration ✅ (Completed 2025-10-08)
 - [x] **Stage 4:** File I/O ✅ (Completed 2025-10-09)
-- [ ] **Stage 5:** UI Integration - Save
-- [ ] **Stage 6:** UI Integration - Load
-- [ ] **Stage 7:** Dirty Flag Tracking
-- [ ] **Stage 8:** Auto-save
+- [x] **Stage 5:** UI Integration - Save ✅ (Completed 2025-10-09)
+- [x] **Stage 6:** UI Integration - Load ✅ (Completed 2025-10-09)
+- [x] **Stage 7:** Dirty Flag Tracking ✅ (Completed 2025-10-09)
+- [x] **Stage 8:** Auto-save ✅ (Completed 2025-10-09)
 - [ ] **Stage 9:** Error Handling & Edge Cases
 - [ ] **Stage 10:** Documentation & Polish
 
@@ -968,12 +968,37 @@ assert(isfile([testFile '.mat']));
 ```
 
 ### Deliverables
-- Save button in UI
-- Save dialog working
-- Success/error messages
-- Keyboard shortcut functional
+- ✅ Save button in UI (already present from earlier work)
+- ✅ Save callback implemented
+- ✅ Save dialog working with default filename
+- ✅ Success/error messages with uialert
+- ❌ Keyboard shortcut (deferred to Stage 10)
+
+### What Was Built
+- `SaveSessionButtonPushed()` callback method in ProspectiveSchedulerApp.m
+  - Generates default filename using `generateSessionFilename()` based on target date
+  - Shows native MATLAB `uiputfile` dialog with default filename
+  - Handles user cancellation gracefully
+  - Exports app state using `exportAppState()`
+  - Saves to file using `saveSessionToFile()`
+  - Shows success message with `uialert` displaying filepath
+  - Shows error message with `uialert` on failure with exception details
+  - Includes comprehensive try-catch error handling
+
+### Test Results
+✅ All 5 tests passing:
+1. Programmatic save workflow (simulates button click)
+2. Default filename generation with date
+3. Save with empty app
+4. Full save/load roundtrip
+5. Error handling for invalid path
+
+### Issues Found & Fixed
+None - implementation worked on first attempt
 
 **Time Estimate:** 1 hour
+**Actual Time:** ~30 minutes
+**Status:** ✅ COMPLETE (2025-10-09)
 
 ---
 
@@ -1096,12 +1121,41 @@ assert(app2.TargetDate == datetime('2025-02-20'));
 ```
 
 ### Deliverables
-- Load button in UI
-- Load dialog working
-- Unsaved changes warning
-- Full save/load roundtrip functional
+- ✅ Load button in UI
+- ✅ Load callback implemented
+- ✅ Load dialog working with default path (./sessions/)
+- ✅ Success/error messages with uialert
+- ❌ Unsaved changes warning (deferred to Stage 7 - dirty flag not yet implemented)
+- ❌ Keyboard shortcut (deferred to Stage 10)
+
+### What Was Built
+- `LoadSessionButtonPushed()` callback method in ProspectiveSchedulerApp.m
+  - Shows native MATLAB `uigetfile` dialog starting in ./sessions/ directory (or pwd if doesn't exist)
+  - Handles user cancellation gracefully
+  - Loads session from file using `loadSessionFromFile()`
+  - Imports app state using `importAppState()`
+  - Clears existing app data before loading (handled by importAppState)
+  - Shows success message with `uialert` displaying filepath
+  - Shows error message with `uialert` on failure with exception details
+  - Includes comprehensive try-catch error handling
+  - Note added for dirty flag checking to be implemented in Stage 7
+
+### Test Results
+✅ All 7 tests passing:
+1. Full save/load workflow
+2. Load with different target dates
+3. Load clears existing data
+4. Load with case properties (locked, admission status, etc.)
+5. Error handling for invalid file
+6. Load empty session
+7. Multiple save/load cycles
+
+### Issues Found & Fixed
+None - implementation worked on first attempt
 
 **Time Estimate:** 1-2 hours
+**Actual Time:** ~30 minutes
+**Status:** ✅ COMPLETE (2025-10-09)
 
 ---
 
@@ -1208,12 +1262,50 @@ assert(app.IsDirty);
 ```
 
 ### Deliverables
-- Dirty flag tracking working
-- Visual indicator in window title
-- All change operations mark dirty
-- Save/load clears dirty flag
+- ✅ Dirty flag tracking working
+- ✅ Visual indicator in window title (asterisk)
+- ✅ All change operations mark dirty
+- ✅ Save/load clears dirty flag
+- ✅ Warning dialog on load when dirty
+- ✅ 10 tests passing
+
+### What Was Built
+- `IsDirty` property in ProspectiveSchedulerApp.m - logical flag tracking unsaved changes
+- `markDirty()` method - sets dirty flag and updates window title
+- `updateWindowTitle()` method - updates window title with asterisk when dirty
+- markDirty() calls added to:
+  - `AddCaseButtonPushed()` - when cases added
+  - `RemoveSelectedButtonPushed()` - when cases removed
+  - `ClearAllButtonPushed()` - when all cases cleared
+  - `DrawerLockToggleChanged()` - when case lock state changes
+  - `DatePickerValueChanged()` - when target date changes
+  - `OptimizationController.executeOptimization()` - when optimization runs
+  - `OptimizationController.updateOptimizationOptionsFromTab()` - when options change
+  - `availableLabs.applySelection()` - when available labs selection changes
+- `SaveSessionButtonPushed()` updated to clear dirty flag after successful save
+- `LoadSessionButtonPushed()` updated to:
+  - Check dirty flag and show warning dialog before loading
+  - Clear dirty flag after successful load
+
+### Test Results
+✅ All 10 tests passing:
+1. App starts not dirty
+2. Dirty after adding case
+3. Clean after save
+4. Clean after load, dirty after change
+5. Dirty after removing case
+6. Dirty after clearing all cases
+7. Dirty after changing date
+8. Window title format
+9. markDirty() sets flag and updates title
+10. Multiple dirty operations maintain dirty state
+
+### Issues Found & Fixed
+None - implementation worked on first attempt
 
 **Time Estimate:** 1 hour
+**Actual Time:** ~1 hour
+**Status:** ✅ COMPLETE (2025-10-09)
 
 ---
 
@@ -1373,12 +1465,59 @@ app.AutoSaveMaxFiles = 3;
 ```
 
 ### Deliverables
-- Auto-save checkbox in UI
-- Auto-save timer functional
-- File rotation working
-- Recovery from auto-save possible
+- ✅ Auto-save checkbox in UI
+- ✅ Auto-save timer functional
+- ✅ File rotation working
+- ✅ Recovery from auto-save possible
+- ✅ 10 integration tests passing
+
+### What Was Built
+- **Auto-save properties** in ProspectiveSchedulerApp.m:
+  - `AutoSaveEnabled` - logical flag for auto-save state
+  - `AutoSaveInterval` - interval in minutes (default 5)
+  - `AutoSaveTimer` - MATLAB timer object
+  - `AutoSaveMaxFiles` - maximum number of auto-saves to keep (default 5)
+
+- **Auto-save methods**:
+  - `enableAutoSave(enabled, interval)` - enable/disable auto-save with configurable interval
+  - `startAutoSaveTimer()` - creates and starts timer with configured period
+  - `stopAutoSaveTimer()` - stops and cleans up timer
+  - `autoSaveCallback()` - timer callback that saves only when dirty
+  - `rotateAutoSaves(autoSaveDir)` - deletes oldest auto-saves to maintain max file limit
+
+- **UI Integration**:
+  - `AutoSaveCheckbox` component in top bar (column 5)
+  - `AutoSaveCheckboxValueChanged()` callback to toggle auto-save
+  - Tooltip: "Automatically save session every 5 minutes"
+  - Timer cleanup in app `delete()` method
+
+- **Auto-save behavior**:
+  - Saves to `./sessions/autosave/` directory (auto-created if needed)
+  - Filename format: `autosave_YYYY-MM-DD_HHmmss.mat`
+  - Only saves when `IsDirty` flag is true
+  - Automatically rotates old files to maintain max count
+  - Prints confirmation message on successful auto-save
+  - Warnings on failure (non-fatal)
+
+### Test Results
+✅ All 10 tests passing:
+1. Enable auto-save sets properties correctly
+2. Disable auto-save stops timer
+3. Auto-save creates file when dirty
+4. Auto-save skips when not dirty
+5. Auto-save directory creation
+6. File rotation limits auto-saves
+7. Auto-saved session can be loaded
+8. Timer cleanup on app delete
+9. Manual callback respects dirty flag
+10. Auto-save filename format
+
+### Issues Found & Fixed
+None - implementation worked on first attempt
 
 **Time Estimate:** 2 hours
+**Actual Time:** ~1.5 hours
+**Status:** ✅ COMPLETE (2025-10-09)
 
 ---
 
