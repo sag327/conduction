@@ -1239,8 +1239,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Clear selection
                 app.SelectedCaseId = "";
             else
-                % Select the case
-                app.SelectedCaseId = string(selection(1));
+                % PERSISTENT-ID: Get the CaseId from the selected row
+                selectedIndex = selection(1);
+                if selectedIndex > 0 && selectedIndex <= app.CaseManager.CaseCount
+                    caseObj = app.CaseManager.getCase(selectedIndex);
+                    app.SelectedCaseId = caseObj.CaseId;
+                else
+                    app.SelectedCaseId = "";
+                end
             end
 
             % Re-render schedule to show/clear selection highlight
@@ -1336,13 +1342,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function RemoveSelectedButtonPushed(app, event)
             selection = app.CasesTable.Selection;
             if ~isempty(selection)
-                % Get case ID before removal (case index is the ID for prospective cases)
-                caseId = selection(1);
+                % PERSISTENT-ID: Get persistent CaseId from the selected table row
+                selectedIndex = selection(1);
+                if selectedIndex < 1 || selectedIndex > app.CaseManager.CaseCount
+                    return;
+                end
 
-                % Remove from case manager
-                app.CaseManager.removeCase(caseId);
+                caseObj = app.CaseManager.getCase(selectedIndex);
+                caseId = caseObj.CaseId;
 
-                % Remove from visualized schedule if it exists and re-render
+                % Remove from case manager (using array index)
+                app.CaseManager.removeCase(selectedIndex);
+
+                % Remove from visualized schedule if it exists (using persistent ID)
                 scheduleWasUpdated = false;
                 if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
                     app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseId);
@@ -1359,6 +1371,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Re-render the schedule immediately to show removal with fade effect
                 if scheduleWasUpdated
                     app.OptimizationController.markOptimizationDirty(app);
+                    % Explicitly re-render the updated schedule
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
                 end
             end
         end
@@ -1390,12 +1404,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Options', {'Yes', 'No'}, 'DefaultOption', 'No');
 
             if strcmp(answer, 'Yes')
-                % Get all case IDs currently in the schedule before deletion
-                scheduleCaseIds = [];
+                % PERSISTENT-ID: Get all case IDs currently in the schedule before deletion
+                scheduleCaseIds = string.empty(0, 1);
                 if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
                     scheduleCases = app.OptimizedSchedule.cases();
                     if ~isempty(scheduleCases)
-                        scheduleCaseIds = arrayfun(@(c) c.caseID, scheduleCases);
+                        % Use 'UniformOutput', false because caseID is now a string
+                        scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
                     end
                 end
 
@@ -1456,6 +1471,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Re-render the schedule immediately to show removal with fade effect
                 if scheduleWasUpdated
                     app.OptimizationController.markOptimizationDirty(app);
+                    % Explicitly re-render the updated schedule
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
                 end
             end
         end
