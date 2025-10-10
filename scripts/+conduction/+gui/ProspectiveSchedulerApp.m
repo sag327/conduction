@@ -1803,7 +1803,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     % Restore additional state that addCase doesn't handle
                     caseObj = app.CaseManager.getCase(i);
                     caseObj.IsLocked = restoredCases(i).IsLocked;
-                    caseObj.CaseStatus = restoredCases(i).CaseStatus;
+
+                    % Reset case status to "pending" - session loads fresh
+                    caseObj.CaseStatus = "pending";
+
+                    % Clear actual times - no execution data on load
+                    caseObj.ActualStartTime = NaN;
+                    caseObj.ActualProcStartTime = NaN;
+                    caseObj.ActualProcEndTime = NaN;
+                    caseObj.ActualEndTime = NaN;
                 end
             end
 
@@ -1817,11 +1825,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     sessionData.optimizedSchedule);
             end
 
-            if isfield(sessionData, 'simulatedSchedule') && ...
-                    ~isempty(fieldnames(sessionData.simulatedSchedule))
-                app.SimulatedSchedule = conduction.session.deserializeDailySchedule(...
-                    sessionData.simulatedSchedule);
-            end
+            % Don't restore SimulatedSchedule - time control always loads OFF
+            % (Keep it empty as set in clearAllCases above)
 
             % Restore optimization state
             if isfield(sessionData, 'optimizationOutcome')
@@ -1843,31 +1848,55 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.buildAvailableLabCheckboxes();
             end
 
-            % Restore UI state
-            if isfield(sessionData, 'lockedCaseIds')
-                app.LockedCaseIds = sessionData.lockedCaseIds;
+            % Merge all locks into LockedCaseIds
+            % Time control always loads OFF, but preserve user locks
+            allLocks = string.empty(0, 1);  % Initialize as column vector of strings
+
+            if isfield(sessionData, 'lockedCaseIds') && ~isempty(sessionData.lockedCaseIds)
+                lockedIds = sessionData.lockedCaseIds;
+                % Ensure it's a column vector
+                if isrow(lockedIds)
+                    lockedIds = lockedIds(:);
+                end
+                allLocks = [allLocks; lockedIds];
+            end
+
+            if isfield(sessionData, 'timeControlState')
+                tcs = sessionData.timeControlState;
+                if isfield(tcs, 'baselineLockedIds') && ~isempty(tcs.baselineLockedIds)
+                    baselineIds = tcs.baselineLockedIds;
+                    if isrow(baselineIds)
+                        baselineIds = baselineIds(:);
+                    end
+                    allLocks = [allLocks; baselineIds];
+                end
+                if isfield(tcs, 'lockedCaseIds') && ~isempty(tcs.lockedCaseIds)
+                    tcLockedIds = tcs.lockedCaseIds;
+                    if isrow(tcLockedIds)
+                        tcLockedIds = tcLockedIds(:);
+                    end
+                    allLocks = [allLocks; tcLockedIds];
+                end
+            end
+
+            % Remove duplicates and assign to LockedCaseIds
+            if ~isempty(allLocks)
+                app.LockedCaseIds = unique(allLocks);
+            else
+                app.LockedCaseIds = string.empty;
             end
 
             if isfield(sessionData, 'isOptimizationDirty')
                 app.IsOptimizationDirty = sessionData.isOptimizationDirty;
             end
 
-            % Restore time control state
-            if isfield(sessionData, 'timeControlState')
-                tcs = sessionData.timeControlState;
-                if isfield(tcs, 'isActive')
-                    app.IsTimeControlActive = tcs.isActive;
-                end
-                if isfield(tcs, 'baselineLockedIds')
-                    app.TimeControlBaselineLockedIds = tcs.baselineLockedIds;
-                end
-                if isfield(tcs, 'lockedCaseIds')
-                    app.TimeControlLockedCaseIds = tcs.lockedCaseIds;
-                end
-                if isfield(tcs, 'currentTimeMinutes') && ~isnan(tcs.currentTimeMinutes)
-                    app.CaseManager.setCurrentTime(tcs.currentTimeMinutes);
-                end
+            % Force time control OFF on load (always starts disabled)
+            app.IsTimeControlActive = false;
+            if ~isempty(app.TimeControlSwitch) && isvalid(app.TimeControlSwitch)
+                app.TimeControlSwitch.Value = 'Off';
             end
+            app.TimeControlBaselineLockedIds = string.empty;
+            app.TimeControlLockedCaseIds = string.empty;
 
             % Restore operator colors
             if isfield(sessionData, 'operatorColors')
@@ -1888,6 +1917,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
             end
+
+            % Clear timeline position (time control is OFF)
+            app.CaseManager.setCurrentTime(NaN);
 
             % Notify user
             if isfield(sessionData, 'savedDate')
