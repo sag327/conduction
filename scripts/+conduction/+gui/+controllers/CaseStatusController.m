@@ -172,18 +172,12 @@ classdef CaseStatusController < handle
             %FINDCASEINDEXBYID Find the index of a case in the Cases array by ID
             %   Returns NaN if not found
 
-            caseId = string(caseId);
-            cases = app.CaseManager.getAllCases();
+            % PERSISTENT-ID: Use CaseManager's findCaseById method
+            [~, caseIndex] = app.CaseManager.findCaseById(string(caseId));
 
-            for idx = 1:numel(cases)
-                % Generate the same ID format used in buildOptimizationCases
-                if idx == str2double(caseId)
-                    caseIndex = idx;
-                    return;
-                end
+            if isempty(caseIndex)
+                caseIndex = NaN;
             end
-
-            caseIndex = NaN;
         end
 
         function timeStr = minutesToTime(~, minutes)

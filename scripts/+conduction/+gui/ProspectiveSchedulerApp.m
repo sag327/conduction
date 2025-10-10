@@ -1165,8 +1165,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Set selected case
             app.SelectedCaseId = string(caseId);
 
-            % Highlight corresponding row in cases table
-            caseIndex = str2double(caseId);
+            % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
+            [~, caseIndex] = app.CaseManager.findCaseById(caseId);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
                 app.CasesTable.Selection = caseIndex;
             end
@@ -1336,18 +1336,127 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function RemoveSelectedButtonPushed(app, event)
             selection = app.CasesTable.Selection;
             if ~isempty(selection)
-                app.CaseManager.removeCase(selection(1));
+                % Get case ID before removal (case index is the ID for prospective cases)
+                caseId = selection(1);
+
+                % Remove from case manager
+                app.CaseManager.removeCase(caseId);
+
+                % Remove from visualized schedule if it exists and re-render
+                scheduleWasUpdated = false;
+                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                    app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseId);
+                    scheduleWasUpdated = true;
+                end
+
+                % Also remove from simulated schedule if time control is active
+                if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
+                    app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseId);
+                end
+
                 app.markDirty();  % SAVE/LOAD: Mark as dirty when case removed (Stage 7)
+
+                % Re-render the schedule immediately to show removal with fade effect
+                if scheduleWasUpdated
+                    app.OptimizationController.markOptimizationDirty(app);
+                end
             end
         end
 
         function ClearAllButtonPushed(app, event)
-            answer = uiconfirm(app.UIFigure, 'Remove all cases?', 'Confirm Clear', ...
+            % Build message based on whether there are locked cases
+            caseCount = app.CaseManager.CaseCount;
+            if caseCount == 0
+                return;
+            end
+
+            % Count locked cases
+            lockedCount = 0;
+            for i = 1:caseCount
+                caseObj = app.CaseManager.getCase(i);
+                if caseObj.IsLocked
+                    lockedCount = lockedCount + 1;
+                end
+            end
+
+            % Build confirmation message
+            if lockedCount > 0
+                message = sprintf('Remove all unlocked cases? (%d locked case(s) will be preserved.)', lockedCount);
+            else
+                message = 'Remove all cases?';
+            end
+
+            answer = uiconfirm(app.UIFigure, message, 'Confirm Clear', ...
                 'Options', {'Yes', 'No'}, 'DefaultOption', 'No');
 
             if strcmp(answer, 'Yes')
-                app.CaseManager.clearAllCases();
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when all cases cleared (Stage 7)
+                % Get all case IDs currently in the schedule before deletion
+                scheduleCaseIds = [];
+                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                    scheduleCases = app.OptimizedSchedule.cases();
+                    if ~isempty(scheduleCases)
+                        scheduleCaseIds = arrayfun(@(c) c.caseID, scheduleCases);
+                    end
+                end
+
+                % PERSISTENT-ID: Collect persistent IDs of LOCKED cases
+                lockedCaseIds = string.empty(0, 1);
+                for i = 1:caseCount
+                    caseObj = app.CaseManager.getCase(i);
+                    if caseObj.IsLocked
+                        lockedCaseIds(end+1, 1) = caseObj.CaseId;
+                    end
+                end
+
+                % Delete unlocked cases from CaseManager (backwards to avoid index shift issues)
+                for i = caseCount:-1:1
+                    caseObj = app.CaseManager.getCase(i);
+                    if ~caseObj.IsLocked
+                        app.CaseManager.removeCase(i);
+                    end
+                end
+
+                % PERSISTENT-ID: Calculate which IDs to remove from schedule
+                % Remove all cases except the ones that are locked
+                scheduleCaseIds = string(scheduleCaseIds);  % Convert to string array
+                caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
+
+                % Remove deleted cases from visualized schedule if it exists
+                scheduleWasUpdated = false;
+                if ~isempty(caseIdsToRemove)
+                    if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                        app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseIdsToRemove);
+                        scheduleWasUpdated = true;
+                    end
+
+                    % Also remove from simulated schedule if time control is active
+                    if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
+                        app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseIdsToRemove);
+                    end
+                end
+
+                % PERSISTENT-ID: Check if DrawerCurrentCaseId is still valid
+                % If the case was deleted, close the drawer
+                if ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
+                    [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+                    if isempty(caseObj)
+                        % Case was deleted, close drawer
+                        app.DrawerController.closeDrawer(app);
+                        app.DrawerCurrentCaseId = "";
+                    else
+                        % Case still exists, refresh drawer content
+                        if app.DrawerWidth > 28
+                            app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
+                        end
+                    end
+                end
+
+                app.markDirty();  % SAVE/LOAD: Mark as dirty when cases cleared (Stage 7)
+
+                % Re-render the schedule immediately to show removal with fade effect
+                if scheduleWasUpdated
+                    app.OptimizationController.markOptimizationDirty(app);
+                end
             end
         end
 

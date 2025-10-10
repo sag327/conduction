@@ -2,6 +2,11 @@ classdef ProspectiveCase < handle
     %PROSPECTIVECASE Represents a case to be scheduled in the GUI.
 
     properties
+        % PERSISTENT-ID: Unique, permanent identifier for this case
+        % This ID never changes, even when array position changes due to deletion
+        % Format: "case_YYYYMMDD_HHMMSS_XXX" (timestamp + counter for uniqueness)
+        CaseId string = ""
+
         OperatorName string
         OperatorId string
         ProcedureName string
@@ -113,6 +118,27 @@ classdef ProspectiveCase < handle
             end
             sanitized = matlab.lang.makeValidName(lower(char(procedureName)));
             id = string(lower(sanitized));
+        end
+
+        function caseId = generateUniqueCaseId()
+            %GENERATEUNIQUECASEID Generate a unique persistent ID for a case
+            %   Returns a string in format: "case_YYYYMMDD_HHMMSS_XXX"
+            %   Uses current timestamp + random suffix for uniqueness
+
+            % Use persistent variable to track counter within same MATLAB session
+            persistent idCounter;
+            if isempty(idCounter)
+                idCounter = 0;
+            end
+
+            idCounter = idCounter + 1;
+
+            % Format: case_20250110_143025_001
+            timestamp = datetime('now');
+            dateStr = char(datetime(timestamp, 'Format', 'yyyyMMdd_HHmmss'));
+            counterStr = sprintf('%03d', mod(idCounter, 1000));
+
+            caseId = sprintf("case_%s_%s", dateStr, counterStr);
         end
     end
 end

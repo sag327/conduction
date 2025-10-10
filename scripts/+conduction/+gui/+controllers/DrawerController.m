@@ -245,25 +245,24 @@ classdef DrawerController < handle
             %   Re-renders the schedule to show visual change
 
             caseId = string(caseId);
-            caseIndex = str2double(caseId);
+
+            % PERSISTENT-ID: Find the case by its persistent ID (not index)
+            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+
+            if isempty(caseObj)
+                warning('DrawerController:CaseNotFound', 'Case with ID "%s" not found', caseId);
+                return;
+            end
 
             % Toggle in LockedCaseIds array
             if ismember(caseId, app.LockedCaseIds)
                 % Unlock: remove from array
                 app.LockedCaseIds(app.LockedCaseIds == caseId) = [];
-                % Update ProspectiveCase object
-                if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
-                    caseObj = app.CaseManager.getCase(caseIndex);
-                    caseObj.IsLocked = false;
-                end
+                caseObj.IsLocked = false;
             else
                 % Lock: add to array
                 app.LockedCaseIds(end+1) = caseId;
-                % Update ProspectiveCase object
-                if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
-                    caseObj = app.CaseManager.getCase(caseIndex);
-                    caseObj.IsLocked = true;
-                end
+                caseObj.IsLocked = true;
             end
 
             % Update cases table to reflect lock status

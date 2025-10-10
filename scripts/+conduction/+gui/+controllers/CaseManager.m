@@ -117,6 +117,31 @@ classdef CaseManager < handle
             end
         end
 
+        function [caseObj, index] = findCaseById(obj, caseId)
+            %FINDCASEBYID Find case by its persistent CaseId
+            %   Returns the case object and its current array index
+            %   Returns empty case and NaN index if not found
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            index = NaN;
+
+            if isempty(obj.Cases)
+                return;
+            end
+
+            for i = 1:numel(obj.Cases)
+                if obj.Cases(i).CaseId == caseId
+                    caseObj = obj.Cases(i);
+                    index = i;
+                    return;
+                end
+            end
+        end
+
         function operatorList = getOperatorOptions(obj)
             if isempty(obj.KnownOperators)
                 operatorList = {'Other...'};
@@ -681,7 +706,8 @@ classdef CaseManager < handle
             for idx = 1:obj.CaseCount
                 caseObj = obj.Cases(idx);
 
-                casesStruct(idx).caseID = idx;
+                % PERSISTENT-ID: Use persistent CaseId instead of array index
+                casesStruct(idx).caseID = char(caseObj.CaseId);
                 casesStruct(idx).operator = char(caseObj.OperatorName);
                 casesStruct(idx).procedure = char(caseObj.ProcedureName);
                 casesStruct(idx).setupTime = defaults.SetupMinutes;
@@ -785,6 +811,9 @@ classdef CaseManager < handle
             end
 
             caseObj = conduction.gui.models.ProspectiveCase(operatorName, procedureName, admissionStatus);
+
+            % PERSISTENT-ID: Assign unique persistent ID to new case
+            caseObj.CaseId = conduction.gui.models.ProspectiveCase.generateUniqueCaseId();
 
             if ~obj.isKnownOperator(operatorName)
                 caseObj.IsCustomOperator = true;
