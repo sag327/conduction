@@ -96,6 +96,7 @@ classdef OptimizationController < handle
                 app.OptimizationOutcome = outcome;
                 app.IsOptimizationDirty = false;
                 app.OptimizationLastRun = datetime('now');
+                app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
 
                 if app.IsTimeControlActive
                     currentTimeMinutes = app.CaseManager.getCurrentTime();
@@ -494,6 +495,7 @@ classdef OptimizationController < handle
 
                 obj.updateOptimizationOptionsSummary(app);
                 obj.markOptimizationDirty(app);
+                app.markDirty();  % SAVE/LOAD: Mark as dirty when options change (Stage 7)
             catch ME
                 fprintf('Warning: Failed to update optimization options: %s\n', ME.message);
             end
