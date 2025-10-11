@@ -1,6 +1,6 @@
 # Prospective Scheduler GUI
 
-An interactive MATLAB GUI for adding and managing prospective surgical cases before optimization.
+An interactive MATLAB GUI for adding and managing prospective surgical cases, optimising the day, and analysing outcomes.
 
 ## Quick Start
 
@@ -17,34 +17,37 @@ conduction.gui.demoSchedulerGUI();
 
 ## Features
 
-### ✅ **Implemented (Phase 1)**
-- **Case Input Form**: Dropdown menus for operators and procedures
-- **Clinical Data Loading**: Interactive file picker or programmatic loading of historical datasets
-- **Smart Duration Estimation**: Uses operator-specific procedure statistics from clinical data
-- **Statistical Integration**: Shows historical case counts and data sources for duration estimates
-- **Custom Entries**: "Other..." option for unlisted operators/procedures
-- **Case Management Table**: View, edit, and remove added cases
-- **Historical Analytics Integration**: Leverages existing procedure analytics for accurate estimates
-- **Input Validation**: Prevents invalid case entries
-- **Progress Indicators**: Loading status and data validation feedback
-
-### 🚧 **Coming Next (Phase 2)**
-- **Real-time Schedule Optimization**: Integration with existing optimization pipeline
-- **Timeline Visualization**: Gantt chart showing lab assignments and case schedules
-- **Optimization Metrics Display**: Live updates of makespan, utilization, idle time
-- **Schedule Export**: Save prospective schedules for further analysis
+- Case input form with operator/procedure lists (historical‑data aware)
+- Duration selector (median/P70/P90/custom) with mini histogram
+- Case table with selection, removal, and persistent IDs
+- Optimisation controls and status, KPI bar, and analyse tab
+- Drawer inspector for case details, solver diagnostics, and history plot
+- Save/Load sessions with auto‑save rotation
+- Time Control mode with draggable NOW line (simulated status updates)
 
 ## Architecture
 
 ```
-+conduction/+gui/
-├── ProspectiveSchedulerApp.m          # Main GUI (MATLAB App Designer style)
-├── launchSchedulerGUI.m               # Launch function
-├── demoSchedulerGUI.m                 # Demo with sample data
-├── +models/
-│   └── ProspectiveCase.m              # Case data model
-└── +controllers/
-    └── CaseManager.m                  # Business logic for case management
+scripts/+conduction/+gui/
+├── ProspectiveSchedulerApp.m           # Thin app shell (wiring + forwards)
+├── launchSchedulerGUI.m                # Launch function
+├── demoSchedulerGUI.m                  # Sample data demo
+├── +controllers/                       # Logic modules
+│   ├── ScheduleRenderer.m              # Schedule drawing + NOW drag
+│   ├── OptimizationController.m        # Options, execute, status
+│   ├── DrawerController.m              # Drawer and lock toggling
+│   ├── CaseManager.m                   # Case CRUD, current time, archive
+│   ├── TestingModeController.m         # Testing dataset support
+│   ├── DurationSelector.m              # Duration option logic
+│   └── CaseStatusController.m          # Status helpers
+└── +app/                               # View helpers
+    ├── buildDateSection.m              # Add/Edit tab sections
+    ├── buildCaseDetailsSection.m
+    ├── buildConstraintSection.m
+    ├── buildCaseManagementSection.m    # Cases tab
+    ├── buildOptimizationTab.m          # Optimization tab controls
+    ├── +drawer/buildDrawerUI.m         # Drawer UI
+    └── +testingMode/buildTestingPanel.m
 ```
 
 ## GUI Layout
@@ -127,15 +130,18 @@ end
 
 ## Integration Points
 
-The GUI is designed to integrate seamlessly with the existing conduction framework:
-
-- **Data Models**: Uses existing `Operator` and `Procedure` classes
-- **Historical Data**: Loads from `ScheduleCollection` format
-- **Future Integration**: `CaseManager.Cases` can be converted to `CaseRequest` objects for optimization
+- Data models: `Operator`, `Procedure`, and `gui.models.ProspectiveCase`
+- Schedules: `conduction.DailySchedule` for optimised and simulated states
+- Visualisation: `conduction.visualizeDailySchedule` (schedule axes renderer)
+- Sessions: `scripts/+conduction/+session/*` for save/load serde
 
 ## Development Notes
 
-- Built using programmatic MATLAB GUI components (no .mlapp file needed)
-- Follows MVC pattern: GUI (View) → CaseManager (Controller) → ProspectiveCase (Model)
-- Extensible design for adding optimization integration
-- Event-driven updates using callback system
+- Built using programmatic MATLAB UI components (no .mlapp file)
+- App shell delegates to controllers and `+app` view helpers
+- Helper‑built UI uses function handle callbacks (not `createCallbackFcn`)
+- Time Control: NOW drag ends call `ScheduleRenderer.updateCaseStatusesByTime`
+  - Simulated statuses applied to `ProspectiveCase.CaseStatus`
+  - Completed cases remain in main list; `getCompletedCases()` is the archive for real completion
+
+See also: `docs/ProspectiveSchedulerApp-Refactor-Plan.md`, `docs/TimeControl-Design.md`.

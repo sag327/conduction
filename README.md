@@ -119,3 +119,25 @@ head(summaryTable)
 - **Dark-mode readability** – All embedded axes (schedule and analyse tabs) adopt a black background with light labels; if you embed visuals elsewhere, reuse the provided plotting helpers.
 
 For additional examples or questions, open an issue or contact the maintainers.
+
+## Testing and Developer Notes
+
+### Run Save/Load Tests in CLI MATLAB
+
+```bash
+/Applications/MATLAB_R2025a.app/bin/matlab -batch "cd('$(pwd)'); addpath(genpath('tests')); results = runtests('tests/save_load'); disp(results); exit(~all([results.Passed]));"
+```
+
+### Architecture At A Glance
+
+- App shell: `scripts/+conduction/+gui/ProspectiveSchedulerApp.m`
+- Controllers: `scripts/+conduction/+gui/+controllers/` (renderer, optimization, drawer, testing, duration, case status)
+- View helpers: `scripts/+conduction/+gui/+app/` (tab layouts, drawer UI, testing panel, available labs, analytics tab)
+- Session serde: `scripts/+conduction/+session/`
+
+Design notes:
+- Helper-built UI binds callbacks using function handles (not `createCallbackFcn`) so builders can live outside the app class.
+- Time Control uses a NOW line; drag end triggers `ScheduleRenderer.updateCaseStatusesByTime` and re-renders with `app.SimulatedSchedule`.
+- Completed archive vs simulated status: `CaseManager.getCompletedCases()` is persistent; simulated completion is reflected via `ProspectiveCase.CaseStatus == "completed"`.
+
+See also: `docs/Architecture-Overview.md`, `docs/TimeControl-Design.md`.

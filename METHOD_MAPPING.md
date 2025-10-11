@@ -174,3 +174,7 @@ These methods remain in the main app as they are either:
 5. **Property Access:** Controllers access app properties directly through the passed app instance.
 
 6. **No Circular Dependencies:** Controllers don't depend on each other directly, only through the app instance.
+
+7. **Helper Callbacks:** UI created in `+app` helper functions binds callbacks via function handles (e.g., `@(src,evt) app.X(evt)`) rather than `createCallbackFcn` to avoid access restrictions outside the app class.
+
+8. **Time Control Status Update:** `ScheduleRenderer.updateCaseStatusesByTime` relies on `caseID` (string) and `procStartTime/EndTime` fields in `DailySchedule.labAssignments()`. It no longer requires numeric IDs.
