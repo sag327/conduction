@@ -200,7 +200,7 @@ end
 function caseTimelines = buildCaseTimelines(dailySchedule, includeTurnover)
     labAssignments = dailySchedule.labAssignments();
     caseTimelines = repmat(struct( ...
-        'labIndex', [], 'caseId', string.empty, 'operatorName', string.empty, ...
+        'labIndex', [], 'caseId', string.empty, 'caseNumber', NaN, 'operatorName', string.empty, ...
         'setupStart', NaN, 'procStart', NaN, 'procEnd', NaN, 'postDuration', NaN, ...
         'turnoverDuration', NaN, 'date', NaT, 'postEnd', NaN, 'turnoverEnd', NaN, ...
         'scheduleEnd', NaN), 0, 1);
@@ -230,6 +230,7 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
     caseTimeline = struct();
     caseTimeline.labIndex = labIdx;
     caseTimeline.caseId = resolveCaseId(caseItem, sequenceId);
+    caseTimeline.caseNumber = resolveCaseNumber(caseItem, sequenceId);  % DUAL-ID: Extract case number
     caseTimeline.operatorName = resolveOperatorName(caseItem);
     caseTimeline.admissionStatus = resolveAdmissionStatus(caseItem);
     caseTimeline.caseStatus = resolveCaseStatus(caseItem);  % REALTIME-SCHEDULING
@@ -508,7 +509,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
-            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseId, entry.operatorName, entry.admissionStatus), ...
+            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
@@ -903,11 +904,19 @@ function label = hourLabel(hourValue)
     end
 end
 
-function label = composeCaseLabel(caseId, operatorName, admissionStatus)
+function label = composeCaseLabel(caseNumber, operatorName, admissionStatus)
+    % DUAL-ID: Use case number for display (simple integer like "1", "2", "3")
     info = parseOperatorName(operatorName);
     lastName = char(info.lastName);
     if isempty(lastName)
         lastName = 'Unknown';
+    end
+
+    % Format case number as simple integer string
+    if isnumeric(caseNumber) && ~isnan(caseNumber)
+        caseNumStr = sprintf('%d', round(caseNumber));
+    else
+        caseNumStr = '?';
     end
 
     % Add admission status suffix
@@ -918,9 +927,9 @@ function label = composeCaseLabel(caseId, operatorName, admissionStatus)
         else
             suffix = ' (OP)';
         end
-        label = sprintf('%s%s\n%s', char(caseId), suffix, lastName);
+        label = sprintf('%s%s\n%s', caseNumStr, suffix, lastName);
     else
-        label = sprintf('%s\n%s', char(caseId), lastName);
+        label = sprintf('%s\n%s', caseNumStr, lastName);
     end
 end
 
@@ -1213,6 +1222,27 @@ function caseId = resolveCaseId(caseItem, fallbackIndex)
         end
     end
     caseId = string(sprintf('Case %d', fallbackIndex));
+end
+
+function caseNumber = resolveCaseNumber(caseItem, fallbackIndex)
+    % DUAL-ID: Extract user-facing case number for display
+    candidates = {'caseNumber', 'CaseNumber', 'case_number'};
+    for idx = 1:numel(candidates)
+        name = candidates{idx};
+        if isstruct(caseItem) && isfield(caseItem, name)
+            candidate = caseItem.(name);
+        elseif isobject(caseItem) && isprop(caseItem, name)
+            candidate = caseItem.(name);
+        else
+            continue;
+        end
+        if isnumeric(candidate) && ~isnan(candidate)
+            caseNumber = double(candidate);
+            return;
+        end
+    end
+    % Fallback: use sequence ID if no case number found
+    caseNumber = fallbackIndex;
 end
 
 function operatorName = resolveOperatorName(caseItem)

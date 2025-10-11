@@ -16,6 +16,9 @@ classdef CaseManager < handle
         % REALTIME-SCHEDULING: Status tracking and completed case archive
         CompletedCases conduction.gui.models.ProspectiveCase  % Archive of completed cases
         CurrentTimeMinutes double = NaN  % Current time in minutes from midnight
+
+        % DUAL-ID: Counter for sequential case numbering
+        NextCaseNumber double = 1  % Session-scoped counter, starts at 1
     end
 
     properties (Dependent)
@@ -663,6 +666,65 @@ classdef CaseManager < handle
             obj.notifyChange();
         end
 
+        function counter = getNextCaseNumber(obj)
+            %GETNEXTCASENUMBER Get the current case number counter value
+            %   Used for saving state
+            counter = obj.NextCaseNumber;
+        end
+
+        function setNextCaseNumber(obj, value)
+            %SETNEXTCASENUMBER Set the case number counter
+            %   Used when restoring state from saved session
+            %   Includes safety validation to prevent duplicates
+            arguments
+                obj
+                value (1,1) double {mustBePositive, mustBeInteger}
+            end
+
+            obj.NextCaseNumber = value;
+            obj.validateAndSyncCaseNumbers();
+        end
+
+        function validateAndSyncCaseNumbers(obj)
+            %VALIDATEANDSYNCCASENUMBERS Ensure NextCaseNumber is properly synced
+            %   Safety check: If NextCaseNumber <= max(existing CaseNumbers),
+            %   reset to max + 1 to prevent duplicate assignments
+            %   Also assigns case numbers to any cases missing them (legacy migration)
+
+            if isempty(obj.Cases)
+                return;
+            end
+
+            % Check for cases without CaseNumber and assign them
+            caseNumbers = [obj.Cases.CaseNumber];
+            needsNumber = isnan(caseNumbers);
+
+            if any(needsNumber)
+                % Legacy migration: assign sequential numbers to cases without them
+                fprintf('Migrating %d cases without case numbers...\n', sum(needsNumber));
+                for idx = find(needsNumber)
+                    obj.Cases(idx).CaseNumber = obj.NextCaseNumber;
+                    obj.NextCaseNumber = obj.NextCaseNumber + 1;
+                end
+                % Refresh the list after assignment
+                caseNumbers = [obj.Cases.CaseNumber];
+            end
+
+            % Safety check: ensure counter is ahead of all existing numbers
+            maxCaseNumber = max(caseNumbers);
+            if obj.NextCaseNumber <= maxCaseNumber
+                obj.NextCaseNumber = maxCaseNumber + 1;
+                fprintf('Case number counter adjusted to %d (was behind max case number)\n', ...
+                    obj.NextCaseNumber);
+            end
+
+            % Check for duplicates (shouldn't happen, but validate)
+            if numel(unique(caseNumbers)) < numel(caseNumbers)
+                warning('CaseManager:DuplicateCaseNumbers', ...
+                    'Duplicate case numbers detected. This may indicate data corruption.');
+            end
+        end
+
         function [casesStruct, metadata] = buildOptimizationCases(obj, labIds, defaults)
             arguments
                 obj
@@ -685,6 +747,7 @@ classdef CaseManager < handle
 
             template = struct( ...
                 'caseID', '', ...
+                'caseNumber', NaN, ...  % DUAL-ID: User-facing case number for display
                 'operator', '', ...
                 'procedure', '', ...
                 'setupTime', 0, ...
@@ -708,6 +771,8 @@ classdef CaseManager < handle
 
                 % PERSISTENT-ID: Use persistent CaseId instead of array index
                 casesStruct(idx).caseID = char(caseObj.CaseId);
+                % DUAL-ID: Include case number for display
+                casesStruct(idx).caseNumber = caseObj.CaseNumber;
                 casesStruct(idx).operator = char(caseObj.OperatorName);
                 casesStruct(idx).procedure = char(caseObj.ProcedureName);
                 casesStruct(idx).setupTime = defaults.SetupMinutes;
@@ -814,6 +879,10 @@ classdef CaseManager < handle
 
             % PERSISTENT-ID: Assign unique persistent ID to new case
             caseObj.CaseId = conduction.gui.models.ProspectiveCase.generateUniqueCaseId();
+
+            % DUAL-ID: Assign sequential case number for display
+            caseObj.CaseNumber = obj.NextCaseNumber;
+            obj.NextCaseNumber = obj.NextCaseNumber + 1;
 
             if ~obj.isKnownOperator(operatorName)
                 caseObj.IsCustomOperator = true;

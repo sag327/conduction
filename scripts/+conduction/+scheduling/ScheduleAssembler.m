@@ -179,6 +179,10 @@ classdef ScheduleAssembler
             if isfield(rawCase, 'date')
                 caseInfo.date = rawCase.date;
             end
+            % DUAL-ID: Preserve case number for display
+            if isfield(rawCase, 'caseNumber')
+                caseInfo.caseNumber = rawCase.caseNumber;
+            end
         end
     end
 end

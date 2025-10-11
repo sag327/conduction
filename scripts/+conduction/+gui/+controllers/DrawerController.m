@@ -214,7 +214,15 @@ classdef DrawerController < handle
                     end
                     if strcmpi(entryId, caseId)
                         details.CaseId = entryId;
-                        details.DisplayCase = entryId;
+
+                        % DUAL-ID: Try to get case number for display
+                        caseNumber = obj.extractNumericField(entry, {'caseNumber', 'CaseNumber'});
+                        if ~isnan(caseNumber)
+                            details.DisplayCase = sprintf('Case #%d', round(caseNumber));
+                        else
+                            details.DisplayCase = entryId;  % Fallback to ID if no number
+                        end
+
                         details.Procedure = obj.extractCaseField(entry, {'procedure', 'procedureName', 'Procedure'});
                         details.Operator = obj.extractCaseField(entry, {'operator', 'Operator', 'physician'});
 

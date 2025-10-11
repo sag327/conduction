@@ -7,6 +7,11 @@ classdef ProspectiveCase < handle
         % Format: "case_YYYYMMDD_HHMMSS_XXX" (timestamp + counter for uniqueness)
         CaseId string = ""
 
+        % DUAL-ID: User-facing sequential case number for display
+        % Simple integer (1, 2, 3...) shown in table, schedule, and drawer
+        % Persistent across sessions, gaps allowed after deletion
+        CaseNumber double = NaN
+
         OperatorName string
         OperatorId string
         ProcedureName string

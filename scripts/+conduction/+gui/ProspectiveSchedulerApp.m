@@ -1849,8 +1849,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
                 tableData{i, 1} = statusIcon;
 
-                % Case number
-                tableData{i, 2} = i;
+                % DUAL-ID: Display case number (not array index)
+                tableData{i, 2} = caseObj.CaseNumber;
                 tableData{i, 3} = char(caseObj.OperatorName);
                 tableData{i, 4} = char(caseObj.ProcedureName);
                 tableData{i, 5} = round(caseObj.EstimatedDurationMinutes);
@@ -1938,6 +1938,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     caseObj = app.CaseManager.getCase(i);
                     caseObj.IsLocked = restoredCases(i).IsLocked;
 
+                    % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
+                    if isfield(restoredCases(i), 'CaseId') && strlength(restoredCases(i).CaseId) > 0
+                        caseObj.CaseId = restoredCases(i).CaseId;
+                    end
+                    if isfield(restoredCases(i), 'CaseNumber') && ~isnan(restoredCases(i).CaseNumber)
+                        caseObj.CaseNumber = restoredCases(i).CaseNumber;
+                    end
+
                     % Reset case status to "pending" - session loads fresh
                     caseObj.CaseStatus = "pending";
 
@@ -1946,6 +1954,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     caseObj.ActualProcStartTime = NaN;
                     caseObj.ActualProcEndTime = NaN;
                     caseObj.ActualEndTime = NaN;
+                end
+
+                % DUAL-ID: Restore case numbering counter and validate
+                if isfield(sessionData, 'nextCaseNumber')
+                    app.CaseManager.setNextCaseNumber(sessionData.nextCaseNumber);
+                else
+                    % Legacy session without counter - validate and sync
+                    app.CaseManager.validateAndSyncCaseNumbers();
                 end
             end
 
@@ -2112,6 +2128,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 sessionData.simulatedSchedule = struct();
             end
+
+            % DUAL-ID: Save case numbering counter
+            sessionData.nextCaseNumber = app.CaseManager.getNextCaseNumber();
 
             % Optimization state
             sessionData.optimizationOutcome = app.OptimizationOutcome;
