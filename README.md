@@ -140,4 +140,4 @@ Design notes:
 - Time Control uses a NOW line; drag end triggers `ScheduleRenderer.updateCaseStatusesByTime` and re-renders with `app.SimulatedSchedule`.
 - Completed archive vs simulated status: `CaseManager.getCompletedCases()` is persistent; simulated completion is reflected via `ProspectiveCase.CaseStatus == "completed"`.
 
-See also: `docs/Architecture-Overview.md`, `docs/TimeControl-Design.md`.
+See also: `docs/Architecture-Overview.md`, `docs/TimeControl-Design.md`, `docs/Developer-Quickstart.md`.
