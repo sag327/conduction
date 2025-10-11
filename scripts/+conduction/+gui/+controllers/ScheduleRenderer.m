@@ -324,10 +324,10 @@ classdef ScheduleRenderer < handle
 
                     procStartTime = coerceScalarNumeric(procStartTimeRaw);
                     procEndTime = coerceScalarNumeric(procEndTimeRaw);
-                    caseIdNumeric = coerceScalarNumeric(caseIdRaw);
                     caseIdStr = coerceStringIdentifier(caseIdRaw);
 
-                    if any(isnan([procStartTime, procEndTime, caseIdNumeric])) || strlength(caseIdStr) == 0
+                    % Only require valid timing and a non-empty string case ID
+                    if any(isnan([procStartTime, procEndTime])) || strlength(caseIdStr) == 0
                         continue;
                     end
 
