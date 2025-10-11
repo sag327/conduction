@@ -205,7 +205,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     % Component initialization
-    methods (Access = private)
+    methods (Access = public)
 
         function setupUI(app)
 
