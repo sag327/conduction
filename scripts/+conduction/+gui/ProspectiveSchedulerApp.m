@@ -654,7 +654,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     % Callbacks that handle component events
-    methods (Access = private)
+    methods (Access = public)
 
         function CasesTableSelectionChanged(app, event)
             % Highlight selected case on schedule when table row is clicked
