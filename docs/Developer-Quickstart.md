@@ -57,3 +57,13 @@ File Pointers
 - Sessions: scripts/+conduction/+session/*.m
 - Tests: tests/save_load/*.m
 
+Tracing an Optimization Run
+- Button press: ProspectiveSchedulerApp.OptimizationRunButtonPushed -> app.OptimizationController.executeOptimization(app)
+- Case prep: CaseManager.buildOptimizationCases (applies defaults; returns cases struct + metadata)
+- Locked constraints: DrawerController.extractLockedCaseAssignments -> OptimizationController.buildLockedCaseConstraints
+- Options build: OptimizationController.buildSchedulingOptions (reads app.Opts and available labs)
+- Execute: conduction.optimizeDailySchedule(casesStruct, scheduleOptions)
+  - Preprocess: conduction.scheduling.SchedulingPreprocessor.prepareDataset(...)
+- Render: ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata)
+- Drawer/KPI refresh: within ScheduleRenderer and AnalyticsRenderer
+- Errors: OptimizationController catches, logs context (option snapshot, locks, case count) and shows uialert
