@@ -111,6 +111,67 @@ classdef DailySchedule
                 legacyCases(idx).date = conduction.DailySchedule.fieldOr(src, 'date', obj.Date);
             end
         end
+
+        function newSchedule = removeCasesByIds(obj, caseIdsToRemove)
+            %REMOVECASESBYIDS Remove cases with specified IDs from schedule
+            %   Returns a new DailySchedule with the specified cases filtered out.
+            %   Follows immutable pattern - original schedule is not modified.
+            %
+            %   Arguments:
+            %       caseIdsToRemove - Scalar, array, or cell array of case IDs to remove
+            %
+            %   Returns:
+            %       newSchedule - New DailySchedule instance without specified cases
+            %
+            %   Example:
+            %       updatedSchedule = schedule.removeCasesByIds(2);
+            %       updatedSchedule = schedule.removeCasesByIds([1, 3, 5]);
+            arguments
+                obj
+                caseIdsToRemove % Can be scalar, array, or cell array of IDs
+            end
+
+            % Ensure caseIdsToRemove is a cell array for consistent comparison
+            if ~iscell(caseIdsToRemove)
+                if isscalar(caseIdsToRemove)
+                    caseIdsToRemove = {caseIdsToRemove};
+                else
+                    caseIdsToRemove = num2cell(caseIdsToRemove);
+                end
+            end
+
+            % Get current assignments (will be modified)
+            labAssignments = obj.LabAssignments;
+
+            % Filter out specified cases from each lab
+            for labIdx = 1:numel(labAssignments)
+                if isempty(labAssignments{labIdx})
+                    continue;
+                end
+
+                cases = labAssignments{labIdx};
+                keepMask = true(size(cases));
+
+                % Check each case to see if it should be removed
+                for cIdx = 1:numel(cases)
+                    caseId = cases(cIdx).caseID;
+
+                    % Check if this case ID matches any in the removal list
+                    for removeIdx = 1:numel(caseIdsToRemove)
+                        if isequal(caseId, caseIdsToRemove{removeIdx})
+                            keepMask(cIdx) = false;
+                            break;
+                        end
+                    end
+                end
+
+                % Apply the filter
+                labAssignments{labIdx} = cases(keepMask);
+            end
+
+            % Create new schedule with filtered assignments
+            newSchedule = conduction.DailySchedule(obj.Date, obj.Labs, labAssignments, obj.ScheduleMetrics);
+        end
     end
 
     methods (Static)

@@ -1253,6 +1253,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.OptimizedSchedule)
                 conduction.gui.app.redrawSchedule(app);
             end
+
+            % Update drawer if it's open
+            if ~isempty(app.SelectedCaseId) && strlength(app.SelectedCaseId) > 0
+                app.DrawerCurrentCaseId = app.SelectedCaseId;
+                if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, app.SelectedCaseId);
+                end
+            end
         end
 
         function DatePickerValueChanged(app, event)

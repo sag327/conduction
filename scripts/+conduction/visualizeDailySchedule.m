@@ -21,6 +21,13 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
     [dailySchedule, remaining] = resolveDailySchedule(scheduleInput, varargin{:});
     opts = parseOptions(remaining{:});
 
+    % Initialize operator colors early (needed for early returns)
+    if ~isempty(opts.OperatorColors)
+        operatorColors = opts.OperatorColors;
+    else
+        operatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    end
+
     labAssignments = dailySchedule.labAssignments();
     if isempty(labAssignments) || all(cellfun(@isempty, labAssignments))
         fprintf('No schedule data to visualize.\n');
@@ -42,13 +49,6 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     operatorNames = string({caseTimelines.operatorName});
     uniqueOperators = unique(operatorNames, 'stable');
-
-    % Use provided operator colors if available, otherwise create new map
-    if ~isempty(opts.OperatorColors)
-        operatorColors = opts.OperatorColors;
-    else
-        operatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
-    end
 
     % Assign colors to any new operators not already in the map
     if ~isempty(uniqueOperators)
