@@ -67,3 +67,13 @@ Tracing an Optimization Run
 - Render: ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata)
 - Drawer/KPI refresh: within ScheduleRenderer and AnalyticsRenderer
 - Errors: OptimizationController catches, logs context (option snapshot, locks, case count) and shows uialert
+
+Where Solver Messages Appear in the Drawer
+- Source: `app.OptimizationOutcome` (structure returned by `conduction.optimizeDailySchedule`)
+- Drawer build path:
+  - `DrawerController.populateDrawer(app, caseId)` populates text fields
+  - It calls `DrawerController.gatherSolverMessages(app)`
+    - Reads `app.OptimizationOutcome` and aggregates messages
+    - Uses `DrawerController.extractMessagesFromOutcome(outcome, label)` for run/phase summaries
+  - `OptimizationController.updateDrawerOptimizationSection(app)` keeps the drawer’s optimization section in sync after runs
+- To debug: var‑dump `app.OptimizationOutcome` and inspect phases/exit flags before/after calling `populateDrawer`
