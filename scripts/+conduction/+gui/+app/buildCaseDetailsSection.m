@@ -16,7 +16,7 @@ function buildCaseDetailsSection(app, leftGrid)
     app.OperatorDropDown.Items = {'Loading...'};
     app.OperatorDropDown.Layout.Row = 11;
     app.OperatorDropDown.Layout.Column = [2 4];
-    app.OperatorDropDown.ValueChangedFcn = createCallbackFcn(app, @OperatorDropDownValueChanged, true);
+    app.OperatorDropDown.ValueChangedFcn = @(src, event) app.OperatorDropDownValueChanged(event);
 
     app.ProcedureLabel = uilabel(leftGrid);
     app.ProcedureLabel.Text = 'Procedure:';
@@ -27,5 +27,5 @@ function buildCaseDetailsSection(app, leftGrid)
     app.ProcedureDropDown.Items = {'Loading...'};
     app.ProcedureDropDown.Layout.Row = 12;
     app.ProcedureDropDown.Layout.Column = [2 4];
-    app.ProcedureDropDown.ValueChangedFcn = createCallbackFcn(app, @ProcedureDropDownValueChanged, true);
+    app.ProcedureDropDown.ValueChangedFcn = @(src, event) app.ProcedureDropDownValueChanged(event);
 end

@@ -16,19 +16,19 @@ function buildCaseManagementSection(app, casesGrid)
     app.CasesTable.Layout.Row = 2;
     app.CasesTable.Layout.Column = [1 2];
     app.CasesTable.SelectionType = 'row';
-    app.CasesTable.SelectionChangedFcn = createCallbackFcn(app, @CasesTableSelectionChanged, true);
+    app.CasesTable.SelectionChangedFcn = @(src, event) app.CasesTableSelectionChanged(event);
 
     app.RemoveSelectedButton = uibutton(casesGrid, 'push');
     app.RemoveSelectedButton.Text = 'Remove Selected';
     app.RemoveSelectedButton.Layout.Row = 3;
     app.RemoveSelectedButton.Layout.Column = 1;
     app.RemoveSelectedButton.Enable = 'off';
-    app.RemoveSelectedButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveSelectedButtonPushed, true);
+    app.RemoveSelectedButton.ButtonPushedFcn = @(src, event) app.RemoveSelectedButtonPushed(event);
 
     app.ClearAllButton = uibutton(casesGrid, 'push');
     app.ClearAllButton.Text = 'Clear All';
     app.ClearAllButton.Layout.Row = 3;
     app.ClearAllButton.Layout.Column = 2;
     app.ClearAllButton.Enable = 'off';
-    app.ClearAllButton.ButtonPushedFcn = createCallbackFcn(app, @ClearAllButtonPushed, true);
+    app.ClearAllButton.ButtonPushedFcn = @(src, event) app.ClearAllButtonPushed(event);
 end

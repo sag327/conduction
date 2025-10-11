@@ -16,7 +16,7 @@ function buildConstraintSection(app, leftGrid)
     app.AddConstraintButton.Text = '+ Add constraint';
     app.AddConstraintButton.Layout.Row = 20;
     app.AddConstraintButton.Layout.Column = [1 2];
-    app.AddConstraintButton.ButtonPushedFcn = createCallbackFcn(app, @AddConstraintButtonPushed, true);
+    app.AddConstraintButton.ButtonPushedFcn = @(src, event) app.AddConstraintButtonPushed(event);
 
     app.ConstraintPanel = uipanel(leftGrid);
     app.ConstraintPanel.Layout.Row = 21;
@@ -52,6 +52,6 @@ function buildConstraintSection(app, leftGrid)
     app.AddCaseButton.Text = 'Add Case';
     app.AddCaseButton.Layout.Row = 23;
     app.AddCaseButton.Layout.Column = [1 4];
-    app.AddCaseButton.ButtonPushedFcn = createCallbackFcn(app, @AddCaseButtonPushed, true);
+    app.AddCaseButton.ButtonPushedFcn = @(src, event) app.AddCaseButtonPushed(event);
     app.AddCaseButton.FontSize = 16;
 end

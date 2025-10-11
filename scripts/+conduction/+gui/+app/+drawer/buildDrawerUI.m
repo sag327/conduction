@@ -35,7 +35,7 @@ function buildDrawerUI(app)
     app.DrawerHandleButton.FontWeight = 'normal';
     app.DrawerHandleButton.BackgroundColor = [0.2 0.2 0.2];
     app.DrawerHandleButton.FontColor = [0.6 0.6 0.6];
-    app.DrawerHandleButton.ButtonPushedFcn = createCallbackFcn(app, @DrawerHandleButtonPushed, true);
+    app.DrawerHandleButton.ButtonPushedFcn = @(src, event) app.DrawerHandleButtonPushed(event);
     app.DrawerHandleButton.Tooltip = {'Show Inspector'};
 
     contentPanel = uipanel(app.DrawerLayout);
@@ -72,7 +72,7 @@ function buildDrawerUI(app)
     app.DrawerLockToggle.FontColor = [1 0 0];
     app.DrawerLockToggle.Layout.Row = 3;
     app.DrawerLockToggle.Layout.Column = 1;
-    app.DrawerLockToggle.ValueChangedFcn = createCallbackFcn(app, @DrawerLockToggleChanged, true);
+    app.DrawerLockToggle.ValueChangedFcn = @(src, event) app.DrawerLockToggleChanged(event);
 
     app.DrawerInspectorGrid = uigridlayout(contentGrid);
     app.DrawerInspectorGrid.Layout.Row = 4;

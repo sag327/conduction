@@ -317,7 +317,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.gui.app.buildCaseDetailsSection(app, addGrid);
             conduction.gui.app.buildDurationSection(app, addGrid);
             conduction.gui.app.buildConstraintSection(app, addGrid);
-            app.buildOptimizationSection(addGrid);
 
             app.TestPanel = uipanel(app.MiddleLayout);
             app.TestPanel.Layout.Row = 2;
@@ -460,6 +459,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.gui.app.availableLabs.checkboxChanged(app, checkbox);
         end
 
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
         function initializeOptimizationDefaults(app)
             % Initialize default optimization options if not already set
             app.Opts = struct( ...
@@ -473,11 +477,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'metric', "operatorIdle", ...
                 'labs', 6);
         end
-
-    end
-
-    % App creation and deletion
-    methods (Access = public)
 
         function buildAvailableLabCheckboxes(app)
             if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)

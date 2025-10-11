@@ -36,21 +36,21 @@ function buildTestingPanel(app)
     app.TestingDateDropDown.Enable = 'off';
     app.TestingDateDropDown.Layout.Row = 2;
     app.TestingDateDropDown.Layout.Column = 2;
-    app.TestingDateDropDown.ValueChangedFcn = createCallbackFcn(app, @TestingDateDropDownValueChanged, true);
+    app.TestingDateDropDown.ValueChangedFcn = @(src, event) app.TestingDateDropDownValueChanged(event);
 
     app.TestingRunButton = uibutton(app.TestPanelLayout, 'push');
     app.TestingRunButton.Text = 'Run Test Day';
     app.TestingRunButton.Enable = 'off';
     app.TestingRunButton.Layout.Row = 3;
     app.TestingRunButton.Layout.Column = 1;
-    app.TestingRunButton.ButtonPushedFcn = createCallbackFcn(app, @TestingRunButtonPushed, true);
+    app.TestingRunButton.ButtonPushedFcn = @(src, event) app.TestingRunButtonPushed(event);
 
     app.TestingExitButton = uibutton(app.TestPanelLayout, 'push');
     app.TestingExitButton.Text = 'Exit Testing Mode';
     app.TestingExitButton.Enable = 'off';
     app.TestingExitButton.Layout.Row = 3;
     app.TestingExitButton.Layout.Column = 2;
-    app.TestingExitButton.ButtonPushedFcn = createCallbackFcn(app, @TestingExitButtonPushed, true);
+    app.TestingExitButton.ButtonPushedFcn = @(src, event) app.TestingExitButtonPushed(event);
 
     app.TestingInfoLabel = uilabel(app.TestPanelLayout);
     app.TestingInfoLabel.Text = 'Testing mode disabled.';
