@@ -77,3 +77,13 @@ Where Solver Messages Appear in the Drawer
     - Uses `DrawerController.extractMessagesFromOutcome(outcome, label)` for run/phase summaries
   - `OptimizationController.updateDrawerOptimizationSection(app)` keeps the drawer’s optimization section in sync after runs
 - To debug: var‑dump `app.OptimizationOutcome` and inspect phases/exit flags before/after calling `populateDrawer`
+
+OptimizationOutcome Structure (Typical)
+- Top‑level fields (may vary with solver paths):
+  - `objectiveValue` (double): final objective value
+  - `exitflag` (numeric or string): solver exit summary
+  - `output` (struct or string): solver message text and metadata
+  - Optional staged results: `phase1`, `phase2` (each a struct with the same fields: `objectiveValue`, `exitflag`, `output`)
+
+Notes
+- DrawerController uses these fields to build readable lines; any additional fields you add to `OptimizationOutcome` will be ignored unless `extractMessagesFromOutcome` is extended.
