@@ -731,7 +731,7 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
             % Overlap if intervals intersect (hours)
             if ~(entryEndHour <= oStartHour || entryStartHour >= oEndHour)
                 % Apply lateral shift to reveal underlying case
-                offset = 0.225;  % 25% less than previous 0.3 shift
+                offset = 0.1125;  % 50% less than previous offset
                 xPosEff = xPos + offset;
                 barWidthEff = barWidth;
                 return;
