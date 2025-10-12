@@ -1135,9 +1135,17 @@ classdef ScheduleRenderer < handle
                 for i = 1:numel(fieldName)
                     candidate = fieldName{i};
                     val = conduction.gui.controllers.ScheduleRenderer.getFieldValue(structOrObj, candidate, NaN);
-                    if ~(isnumeric(val) && isnan(val)) && ~isempty(val)
-                        value = val;
-                        return;
+                    % Accept the first non-empty value that is not wholly NaN
+                    if ~isempty(val)
+                        if isnumeric(val)
+                            if ~all(isnan(val(:)))
+                                value = val;
+                                return;
+                            end
+                        else
+                            value = val;
+                            return;
+                        end
                     end
                 end
                 value = defaultValue;
