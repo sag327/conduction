@@ -447,36 +447,33 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             end
         end
 
-        % CASE-LOCKING: Draw single red outline around entire case if locked
-        if isLocked && ~isnan(setupStartHour) && ~isnan(postEndHour)
-            % Calculate the full case span from setup start to post end
-            caseStartHour = setupStartHour;
-            caseEndHour = postEndHour;
-            caseTotalDuration = caseEndHour - caseStartHour;
-
-            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
-            % Draw outline rectangle (no fill, just red border)
-            outlineRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
-                'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
-            % Make outline non-interactive so clicks pass through to case segments
-            outlineRect.PickableParts = 'none';
-        end
-
-        % Draw white outline for selected case (if not locked - locked takes precedence)
+        % CASE-LOCKING + SELECTION: Draw both outlines when applicable
         isSelected = (strlength(selectedCaseId) > 0) && (string(entry.caseId) == selectedCaseId);
-        if isSelected && ~isLocked && ~isnan(setupStartHour) && ~isnan(postEndHour)
+        if (~isnan(setupStartHour)) && (~isnan(postEndHour))
             % Calculate the full case span from setup start to post end
             caseStartHour = setupStartHour;
             caseEndHour = postEndHour;
             caseTotalDuration = caseEndHour - caseStartHour;
 
             [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
-            % Draw white outline rectangle (no fill, just white border)
-            selectionOutlineColor = [1, 1, 1];  % White color for selection outline
-            selectionRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
-                'FaceColor', 'none', 'EdgeColor', selectionOutlineColor, 'LineWidth', 3);
-            % Make outline non-interactive so clicks pass through to case segments
-            selectionRect.PickableParts = 'none';
+
+            % Draw white selection outline first (full size) if selected
+            if isSelected
+                selectionOutlineColor = [1, 1, 1];
+                selectionRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
+                    'FaceColor', 'none', 'EdgeColor', selectionOutlineColor, 'LineWidth', 3);
+                selectionRect.PickableParts = 'none';
+            end
+
+            % Draw red locked outline slightly smaller (inset) if locked
+            if isLocked
+                insetX = 0.02;  % Slight horizontal inset (lab units)
+                lockedX = xPosEff - barWidthEff/2 + insetX;
+                lockedW = max(0, barWidthEff - 2*insetX);
+                outlineRect = rectangle(ax, 'Position', [lockedX, caseStartHour, lockedW, caseTotalDuration], ...
+                    'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
+                outlineRect.PickableParts = 'none';
+            end
         end
 
         % Draw left edge colored bar for admission status
