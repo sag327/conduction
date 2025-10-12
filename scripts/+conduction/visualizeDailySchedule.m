@@ -372,6 +372,10 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         ax.ButtonDownFcn = @(~, ~) backgroundClickedCallback();
     end
 
+    if ~(isfield(opts, 'DebugShowCaseIds') && opts.DebugShowCaseIds)
+        delete(findobj(ax, 'Tag', 'CaseIdDebug'));
+    end
+
     addHourGrid(ax, startHour, endHour);
 
     grayColor = [0.7, 0.7, 0.7];
@@ -450,8 +454,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             caseEndHour = postEndHour;
             caseTotalDuration = caseEndHour - caseStartHour;
 
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
             % Draw outline rectangle (no fill, just red border)
-            outlineRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+            outlineRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
                 'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
             % Make outline non-interactive so clicks pass through to case segments
             outlineRect.PickableParts = 'none';
@@ -465,9 +470,10 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             caseEndHour = postEndHour;
             caseTotalDuration = caseEndHour - caseStartHour;
 
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
             % Draw white outline rectangle (no fill, just white border)
             selectionOutlineColor = [1, 1, 1];  % White color for selection outline
-            selectionRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+            selectionRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
                 'FaceColor', 'none', 'EdgeColor', selectionOutlineColor, 'LineWidth', 3);
             % Make outline non-interactive so clicks pass through to case segments
             selectionRect.PickableParts = 'none';
@@ -507,13 +513,15 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 case 'in_progress'
                     % Yellow dashed border for in-progress cases
                     statusColor = [1, 0.8, 0];  % Yellow
-                    statusRect = rectangle(ax, 'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                    [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+                    statusRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
                         'FaceColor', 'none', 'EdgeColor', statusColor, 'LineWidth', 2, 'LineStyle', '--');
                     statusRect.PickableParts = 'none';
 
                 case 'completed'
                     % Green checkmark overlay for completed cases (top right corner)
-                    checkX = xPos + barWidth/2 - 0.1;  % Right edge, slightly inset
+                    [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+                    checkX = xPosEff + barWidthEff/2 - 0.1;  % Right edge, slightly inset
                     checkY = caseStartHour + 0.05;  % Top edge, slightly inset
                     checkText = text(ax, checkX, checkY, '✓', ...
                         'FontSize', 36, 'Color', [0, 1, 0], 'FontWeight', 'bold', ...
@@ -529,7 +537,8 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if opts.ShowLabels && ~isnan(procStartHour) && ~isnan(procEndHour)
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
-            labelHandle = text(ax, xPos, labelY, composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
+            [xPosEff, ~] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+            labelHandle = text(ax, xPosEff, labelY, composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
@@ -722,9 +731,9 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
             % Overlap if intervals intersect (hours)
             if ~(entryEndHour <= oStartHour || entryStartHour >= oEndHour)
                 % Apply lateral shift to reveal underlying case
-                offset = 0.3;
+                offset = 0.225;  % 25% less than previous 0.3 shift
                 xPosEff = xPos + offset;
-                barWidthEff = max(0.5, barWidth - offset);
+                barWidthEff = barWidth;
                 return;
             end
         end

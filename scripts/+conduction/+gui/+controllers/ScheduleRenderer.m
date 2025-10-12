@@ -176,13 +176,21 @@ classdef ScheduleRenderer < handle
 
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
             if isempty(caseBlocks)
-                fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
-                try, obj.updateCaseDragDebugLabel(app, 'CaseDrag: 0 overlays'); catch, end
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
+                end
+                if app.DebugShowCaseIds
+                    try, obj.updateCaseDragDebugLabel(app, 'CaseDrag: 0 overlays'); catch, end
+                end
                 return;
             end
 
-            fprintf('[CaseDrag] Binding drag to %d CaseBlock overlays.\n', numel(caseBlocks));
-            try, obj.updateCaseDragDebugLabel(app, sprintf('CaseDrag: %d overlays', numel(caseBlocks))); catch, end
+            if app.DebugShowCaseIds
+                fprintf('[CaseDrag] Binding drag to %d CaseBlock overlays.\n', numel(caseBlocks));
+            end
+            if app.DebugShowCaseIds
+                try, obj.updateCaseDragDebugLabel(app, sprintf('CaseDrag: %d overlays', numel(caseBlocks))); catch, end
+            end
             for idx = 1:numel(caseBlocks)
                 blockHandle = caseBlocks(idx);
                 if ~isgraphics(blockHandle)
@@ -200,13 +208,17 @@ classdef ScheduleRenderer < handle
             end
             try
                 ud = get(rectHandle, 'UserData');
-                if isstruct(ud) && isfield(ud, 'caseId')
-                    fprintf('[CaseDrag] MouseDown on caseId=%s\n', string(ud.caseId));
-                else
-                    fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
+                if app.DebugShowCaseIds
+                    if isstruct(ud) && isfield(ud, 'caseId')
+                        fprintf('[CaseDrag] MouseDown on caseId=%s\n', string(ud.caseId));
+                    else
+                        fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
+                    end
                 end
             catch
-                fprintf('[CaseDrag] MouseDown: unable to read UserData.\n');
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] MouseDown: unable to read UserData.\n');
+                end
             end
             obj.startDragCase(app, rectHandle);
         end
@@ -222,13 +234,17 @@ classdef ScheduleRenderer < handle
             caseId = string(ud.caseId);
 
             if app.IsOptimizationRunning || app.IsTimeControlActive
-                fprintf('[CaseDrag] Drag blocked (OptimizationRunning=%d, TimeControlActive=%d).\n', app.IsOptimizationRunning, app.IsTimeControlActive);
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Drag blocked (OptimizationRunning=%d, TimeControlActive=%d).\n', app.IsOptimizationRunning, app.IsTimeControlActive);
+                end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
 
             if ~obj.isCaseBlockDraggable(app, caseId)
-                fprintf('[CaseDrag] Case %s is not draggable (status not pending).\n', caseId);
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Case %s is not draggable (status not pending).\n', caseId);
+                end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -348,7 +364,9 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
-                fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
+                end
                 return;
             end
 
@@ -362,7 +380,9 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.showCaseDragWarning(app, 'Selected lab is not available.');
-                fprintf('[CaseDrag] Drop refused: lab %d not available.\n', targetLabId);
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Drop refused: lab %d not available.\n', targetLabId);
+                end
                 return;
             end
 
@@ -378,13 +398,17 @@ classdef ScheduleRenderer < handle
                 app.OptimizationController.markOptimizationDirty(app);
                 app.markDirty();
                 app.updateCasesTable();
-                fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
+                end
             else
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 if isprop(drag.rectHandle, 'FaceAlpha')
                     drag.rectHandle.FaceAlpha = 0;
                 end
-                fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
+                end
             end
 
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
@@ -982,25 +1006,37 @@ classdef ScheduleRenderer < handle
             end
 
             targetCases = newAssignments{targetLabIndex};
-            startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
-            startTimes(~isfinite(startTimes)) = inf;
+            [targetCases, movedCase] = obj.alignStructFieldsForConcat(targetCases, movedCase);
 
-            insertPos = find(startTimes > newSetupStartMinutes, 1, 'first');
-            if isempty(insertPos)
-                targetCases = [targetCases; movedCase];
+            if isempty(targetCases)
+                targetCases = movedCase;
             else
-                targetCases = [targetCases(1:insertPos-1); movedCase; targetCases(insertPos:end)];
+                targetCases = targetCases(:);
+                startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
+                startTimes(~isfinite(startTimes)) = inf;
+
+                insertPos = find(startTimes > newSetupStartMinutes, 1, 'first');
+                if isempty(insertPos)
+                    targetCases = [targetCases; movedCase];
+                else
+                    targetCases = [targetCases(1:insertPos-1); movedCase; targetCases(insertPos:end)];
+                end
             end
 
-            newAssignments{targetLabIndex} = targetCases;
+            newAssignments{targetLabIndex} = targetCases(:);
             assignments = newAssignments;
 
             afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
             afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
             afterGlobalIds = obj.collectCaseIds(assignments);
 
-            if obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds)
-                warning('ScheduleRenderer:CaseMoveReverted', 'Move for case %s reverted due to integrity check failure.', caseId);
+            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, app.DebugShowCaseIds);
+            if hasAnomaly
+                warnMsg = sprintf('Move for case %s reverted due to integrity check failure.', caseId);
+                if strlength(anomalyDetails) > 0
+                    warnMsg = sprintf('%s\n%s', warnMsg, char(anomalyDetails));
+                end
+                warning('ScheduleRenderer:CaseMoveReverted', warnMsg);
                 app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, originalAssignments, metrics);
                 scheduleWasUpdated = false;
                 return;
@@ -1035,8 +1071,13 @@ classdef ScheduleRenderer < handle
             ids = arrayfun(@(s) string(obj.getFieldValue(s, {'caseID','caseId'}, "")), data, 'UniformOutput', true);
         end
 
-        function anomaly = debugHasAnomalies(obj, beforeGlobalIds, afterGlobalIds, movedId, sourceLabIdx, targetLabIdx, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds)
+        function [anomaly, detailMsg] = debugHasAnomalies(obj, beforeGlobalIds, afterGlobalIds, movedId, sourceLabIdx, targetLabIdx, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, logDetails)
+            if nargin < 11
+                logDetails = false;
+            end
+
             anomaly = false;
+            detailMsg = "";
 
             missing = setdiff(beforeGlobalIds, afterGlobalIds, 'stable');
             extra = setdiff(afterGlobalIds, beforeGlobalIds, 'stable');
@@ -1047,30 +1088,36 @@ classdef ScheduleRenderer < handle
             end
 
             anomaly = true;
-            fprintf('\n[CaseDrag][WARN] Integrity check failed for move of %s\n', movedId);
+            lines = strings(0,1);
+            lines(end+1,1) = sprintf('[CaseDrag][WARN] Integrity check failed for move of %s', movedId);
             if ~isempty(missing)
-                fprintf('  Missing IDs: %s\n', strjoin(missing, ', '));
+                lines(end+1,1) = sprintf('  Missing IDs: %s', strjoin(missing, ', '));
             end
             if ~isempty(extra)
-                fprintf('  Extra IDs: %s\n', strjoin(extra, ', '));
+                lines(end+1,1) = sprintf('  Extra IDs: %s', strjoin(extra, ', '));
             end
             if ~isempty(dupIds)
-                fprintf('  Duplicate IDs: %s\n', strjoin(dupIds, ', '));
+                lines(end+1,1) = sprintf('  Duplicate IDs: %s', strjoin(dupIds, ', '));
             end
 
-            obj.logLabCaseIds('Source (before)', sourceLabIdx, beforeSourceIds);
-            obj.logLabCaseIds('Source (after)', sourceLabIdx, afterSourceIds);
-            obj.logLabCaseIds('Target (before)', targetLabIdx, beforeTargetIds);
-            obj.logLabCaseIds('Target (after)', targetLabIdx, afterTargetIds);
+            lines(end+1,1) = obj.formatLabCaseIds('Source (before)', sourceLabIdx, beforeSourceIds);
+            lines(end+1,1) = obj.formatLabCaseIds('Source (after)', sourceLabIdx, afterSourceIds);
+            lines(end+1,1) = obj.formatLabCaseIds('Target (before)', targetLabIdx, beforeTargetIds);
+            lines(end+1,1) = obj.formatLabCaseIds('Target (after)', targetLabIdx, afterTargetIds);
+
+            detailMsg = strjoin(lines, newline);
+            if logDetails
+                fprintf('\n%s\n', char(detailMsg));
+            end
         end
 
-        function logLabCaseIds(~, label, labIdx, ids)
+        function message = formatLabCaseIds(~, label, labIdx, ids)
             if isempty(ids)
                 idsStr = '(none)';
             else
                 idsStr = strjoin(ids, ', ');
             end
-            fprintf('  %s Lab %d: %s\n', label, labIdx, idsStr);
+            message = sprintf('  %s Lab %d: %s', label, labIdx, idsStr);
         end
 
         function dupIds = findDuplicates(~, ids)
@@ -1151,6 +1198,70 @@ classdef ScheduleRenderer < handle
                     caseStruct.(fieldName) = caseStruct.(fieldName) + deltaMinutes;
                 end
             end
+        end
+
+        function [casesOut, movedCaseOut] = alignStructFieldsForConcat(obj, casesIn, movedCaseIn)
+            %ALIGNSTRUCTFIELDSFORCONCAT Ensure case arrays share fields before concatenation
+            if nargin < 3
+                movedCaseIn = struct();
+            end
+
+            movedCaseOut = movedCaseIn;
+            if isempty(casesIn)
+                if isempty(fieldnames(movedCaseOut))
+                    casesOut = struct([]);
+                    return;
+                end
+
+                fieldOrder = fieldnames(movedCaseOut);
+                casesOut = obj.createEmptyStructWithFields(fieldOrder);
+                return;
+            end
+
+            existingFields = fieldnames(casesIn);
+            newFields = fieldnames(movedCaseOut);
+            allFields = unique([existingFields(:); newFields(:)], 'stable');
+
+            casesOut = obj.ensureStructHasFields(casesIn, allFields);
+            movedCaseOut = obj.ensureStructHasFields(movedCaseOut, allFields);
+
+            casesOut = orderfields(casesOut, allFields);
+            movedCaseOut = orderfields(movedCaseOut, allFields);
+        end
+
+        function s = ensureStructHasFields(~, s, fieldList)
+            if isempty(fieldList)
+                return;
+            end
+
+            if isempty(s)
+                template = cell(1, numel(fieldList));
+                [template{:}] = deal([]);
+                s = cell2struct(template, fieldList, 2);
+                s = s([]);
+                return;
+            end
+
+            for idx = 1:numel(fieldList)
+                fieldName = fieldList{idx};
+                if ~isfield(s, fieldName)
+                    for elementIdx = 1:numel(s)
+                        s(elementIdx).(fieldName) = [];
+                    end
+                end
+            end
+        end
+
+        function s = createEmptyStructWithFields(~, fieldList)
+            if isempty(fieldList)
+                s = struct([]);
+                return;
+            end
+
+            template = cell(1, numel(fieldList));
+            [template{:}] = deal([]);
+            s = cell2struct(template, fieldList, 2);
+            s = s([]);
         end
 
         function showCaseDragWarning(~, app, message)
