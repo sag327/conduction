@@ -531,7 +531,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 'FaceColor', [1 1 1], 'FaceAlpha', 0, 'EdgeColor', 'none', ...
                 'LineWidth', 0.1, 'Tag', 'CaseBlock', 'HitTest', 'on');
             if isprop(interactionRect, 'PickableParts')
-                interactionRect.PickableParts = 'visible';
+                interactionRect.PickableParts = 'all';
             end
             attachCaseClick(interactionRect, entry, caseClickedCallback);
         end
@@ -619,7 +619,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         rectHandle.Tag = 'CaseBlock';
         rectHandle.HitTest = 'on';
         if isprop(rectHandle, 'PickableParts')
-            rectHandle.PickableParts = 'visible';
+            rectHandle.PickableParts = 'all';
         end
         rectHandle.ButtonDownFcn = @(src, ~) dispatchCaseClick(src);
     end
