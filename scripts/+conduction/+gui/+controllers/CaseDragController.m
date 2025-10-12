@@ -13,10 +13,19 @@ classdef CaseDragController < handle
         AppHandle conduction.gui.ProspectiveSchedulerApp = conduction.gui.ProspectiveSchedulerApp.empty
         LastRegistryUpdate datetime = NaT
 
-        % Prepared for future throttling logic (Phase 3)
+        % Motion throttling state
         LastMotionTimer uint64 = uint64(0)
         MotionThrottleSeconds double = 0.016  % ~60 Hz default
         ActiveDrag struct = struct()
+
+        % Soft highlight behaviour
+        SoftSelectOnMouseDown logical = true
+        DragStartMovementThresholdPx double = 4
+        SoftHighlightRect = gobjects(0, 1)
+        SoftHighlightAxes = gobjects(0, 1)
+        SoftHighlightColor double = [1 1 1]
+        SoftHighlightLineWidth double = 2.5
+        SoftHighlightLastPosition double = [NaN NaN NaN NaN]
     end
 
     methods
@@ -82,6 +91,7 @@ classdef CaseDragController < handle
 
         function clearRegistry(obj)
             %CLEARREGISTRY Remove all tracked case block metadata.
+            obj.hideSoftHighlight();
             obj.CaseIds = string.empty(0, 1);
             obj.RectHandles = gobjects(0, 1);
             obj.UserDataCells = cell(0, 1);
@@ -95,6 +105,78 @@ classdef CaseDragController < handle
         function ids = listCaseIds(obj)
             %LISTCASEIDS Return all registered case IDs.
             ids = obj.CaseIds;
+        end
+
+        function showSoftHighlight(obj, axesHandle, rectHandle)
+            %SHOWSOFTHIGHLIGHT Draw lightweight outline to provide immediate feedback.
+            if ~obj.SoftSelectOnMouseDown
+                return;
+            end
+            if nargin < 3 || isempty(axesHandle) || isempty(rectHandle)
+                return;
+            end
+            if ~(isgraphics(axesHandle) && isgraphics(rectHandle))
+                return;
+            end
+
+            pos = get(rectHandle, 'Position');
+            if numel(pos) ~= 4 || any(~isfinite(pos))
+                return;
+            end
+
+            if isempty(obj.SoftHighlightRect) || ~isgraphics(obj.SoftHighlightRect)
+                obj.SoftHighlightRect = rectangle(axesHandle, ...
+                    'Position', pos, ...
+                    'EdgeColor', obj.SoftHighlightColor, ...
+                    'LineWidth', obj.SoftHighlightLineWidth, ...
+                    'FaceColor', 'none', ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'Clipping', 'on', ...
+                    'Tag', 'CaseSoftHighlight');
+            else
+                if obj.SoftHighlightRect.Parent ~= axesHandle
+                    set(obj.SoftHighlightRect, 'Parent', axesHandle);
+                end
+                set(obj.SoftHighlightRect, 'Position', pos, 'Visible', 'on');
+            end
+
+            obj.SoftHighlightAxes = axesHandle;
+            obj.SoftHighlightLastPosition = pos;
+            try
+                uistack(obj.SoftHighlightRect, 'top');
+            catch
+                % ignore stacking issues
+            end
+        end
+
+        function moveSoftHighlight(obj, newPosition)
+            %MOVESOFTHIGHLIGHT Reposition overlay during drag motion.
+            if ~obj.SoftSelectOnMouseDown
+                return;
+            end
+            if isempty(obj.SoftHighlightRect) || ~isgraphics(obj.SoftHighlightRect)
+                return;
+            end
+            if numel(newPosition) ~= 4 || any(~isfinite(newPosition))
+                return;
+            end
+            if isequal(obj.SoftHighlightLastPosition, newPosition)
+                return;
+            end
+
+            set(obj.SoftHighlightRect, 'Position', newPosition, 'Visible', 'on');
+            obj.SoftHighlightLastPosition = newPosition;
+        end
+
+        function hideSoftHighlight(obj)
+            %HIDESOFTHIGHLIGHT Remove temporary overlay when interaction ends.
+            if ~isempty(obj.SoftHighlightRect) && isgraphics(obj.SoftHighlightRect)
+                delete(obj.SoftHighlightRect);
+            end
+            obj.SoftHighlightRect = gobjects(0, 1);
+            obj.SoftHighlightAxes = gobjects(0, 1);
+            obj.SoftHighlightLastPosition = [NaN NaN NaN NaN];
         end
 
         function tf = hasCase(obj, caseId)

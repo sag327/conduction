@@ -174,6 +174,10 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            if ~isempty(app.CaseDragController)
+                app.CaseDragController.hideSoftHighlight();
+            end
+
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
             if isempty(caseBlocks)
                 if app.DebugShowCaseIds
@@ -229,6 +233,7 @@ classdef ScheduleRenderer < handle
                 caseEntry = struct();
             end
 
+            dragController = app.CaseDragController;
             ud = struct();
             caseId = "";
 
@@ -252,6 +257,9 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
                 end
+                if ~isempty(dragController)
+                    dragController.hideSoftHighlight();
+                end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -260,9 +268,16 @@ classdef ScheduleRenderer < handle
                 fprintf('[CaseDrag] MouseDown on caseId=%s\n', caseId);
             end
 
+            if ~isempty(dragController)
+                dragController.showSoftHighlight(app.ScheduleAxes, rectHandle);
+            end
+
             if app.IsOptimizationRunning || app.IsTimeControlActive
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Drag blocked (OptimizationRunning=%d, TimeControlActive=%d).\n', app.IsOptimizationRunning, app.IsTimeControlActive);
+                end
+                if ~isempty(dragController)
+                    dragController.hideSoftHighlight();
                 end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
@@ -271,6 +286,9 @@ classdef ScheduleRenderer < handle
             if ~obj.isCaseBlockDraggable(app, caseId)
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Case %s is not draggable (status not pending).\n', caseId);
+                end
+                if ~isempty(dragController)
+                    dragController.hideSoftHighlight();
                 end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
@@ -311,8 +329,8 @@ classdef ScheduleRenderer < handle
                 rectHandle.FaceAlpha = 0.1;
             end
 
-            if ~isempty(app.CaseDragController)
-                app.CaseDragController.setActiveDrag(drag);
+            if ~isempty(dragController)
+                dragController.setActiveDrag(drag);
             end
 
             app.UIFigure.Pointer = 'hand';
@@ -356,6 +374,7 @@ classdef ScheduleRenderer < handle
             newPosition = [newLeft, newStartHour, drag.rectWidth, drag.rectHeight];
 
             set(drag.rectHandle, 'Position', newPosition);
+            dragController.moveSoftHighlight(newPosition);
 
             movedInTime = abs(newStartMinutes - drag.originalSetupStart) >= snapMinutes / 2;
             movedInLab = newLabIndex ~= drag.originalLabIndex;
@@ -370,7 +389,13 @@ classdef ScheduleRenderer < handle
         function endDragCase(obj, app)
             %ENDDRAGCASE Finalize drag operation
             dragController = app.CaseDragController;
-            if isempty(dragController) || ~dragController.hasActiveDrag()
+            if isempty(dragController)
+                return;
+            end
+
+            dragController.hideSoftHighlight();
+
+            if ~dragController.hasActiveDrag()
                 return;
             end
 
