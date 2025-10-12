@@ -211,6 +211,13 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % Select case immediately for visual feedback
+            try
+                app.onScheduleBlockClicked(caseId);
+            catch
+                % Ignore selection errors during drag setup
+            end
+
             drag.rectHandle = rectHandle;
             drag.caseId = caseId;
             drag.originalLabIndex = double(ud.labIndex);
@@ -350,6 +357,7 @@ classdef ScheduleRenderer < handle
             if scheduleWasUpdated
                 app.OptimizationController.markOptimizationDirty(app);
                 app.markDirty();
+                app.updateCasesTable();
             else
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 if isprop(drag.rectHandle, 'FaceAlpha')
