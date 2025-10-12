@@ -370,14 +370,6 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         entry = caseTimelines(idx);
         xPos = entry.labIndex;
         barWidth = 0.8;
-        try
-            if isfield(opts, 'NarrowCaseId') && strlength(string(opts.NarrowCaseId)) > 0
-                if string(entry.caseId) == string(opts.NarrowCaseId)
-                    barWidth = 0.55; % draw narrower to reveal underlying blocks
-                end
-            end
-        catch
-        end
 
         % CASE-LOCKING: Check if this case is locked
         isLocked = ismember(string(entry.caseId), lockedCaseIds);
@@ -388,13 +380,16 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         postEndHour = entry.postEnd / 60;
         turnoverEndHour = entry.turnoverEnd / 60;
 
-        % Draw all segments with normal borders
+        % Draw all segments with normal borders (apply lateral offset if needed)
+        % Compute base times used for overlap detection
         if ~isnan(setupStartHour) && ~isnan(procStartHour)
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
-            rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
-                'HitTest', 'off', 'PickableParts', 'none');
+                % Overlap-based lateral offset for last dragged case
+                [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+                rectangle(ax, 'Position', [xPosEff - barWidthEff/2, setupStartHour, barWidthEff, setupDuration], ...
+                    'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
+                    'HitTest', 'off', 'PickableParts', 'none');
             end
         end
 
@@ -409,7 +404,8 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             else
                 opColor = [0.5, 0.5, 0.5];
             end
-            rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+            rectangle(ax, 'Position', [xPosEff - barWidthEff/2, procStartHour, barWidthEff, procDuration], ...
                 'FaceColor', opColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 1, ...
                 'HitTest', 'off', 'PickableParts', 'none');
         end
@@ -417,16 +413,18 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if ~isnan(procEndHour) && ~isnan(postEndHour)
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
-            rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+            rectangle(ax, 'Position', [xPosEff - barWidthEff/2, procEndHour, barWidthEff, postDuration], ...
                 'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
                 'HitTest', 'off', 'PickableParts', 'none');
-            end
+        end
         end
 
         if opts.ShowTurnover && ~isnan(postEndHour) && ~isnan(turnoverEndHour)
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
-            rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+            rectangle(ax, 'Position', [xPosEff - barWidthEff/2, postEndHour, barWidthEff, turnoverDuration], ...
                 'FaceColor', turnoverColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
                 'HitTest', 'off', 'PickableParts', 'none');
             end
@@ -479,7 +477,8 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
             % Draw left edge bar (5px wide)
             edgeBarWidth = 0.05;  % Slightly narrower than full bar
-            edgeBarX = xPos - barWidth/2;
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+            edgeBarX = xPosEff - barWidthEff/2;
             rectangle(ax, 'Position', [edgeBarX, caseStartHour, edgeBarWidth, caseTotalDuration], ...
                 'FaceColor', admissionColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', 'none', ...
                 'HitTest', 'off', 'PickableParts', 'none');
@@ -535,8 +534,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             caseEndHour = postEndHour;
             caseTotalDuration = max(caseEndHour - caseStartHour, eps);
 
+            [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
             interactionRect = rectangle(ax, ...
-                'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
                 'FaceColor', [1 1 1], 'FaceAlpha', 0, 'EdgeColor', 'none', ...
                 'LineWidth', 0.1, 'Tag', 'CaseBlock', 'HitTest', 'on');
             if isprop(interactionRect, 'PickableParts')
@@ -657,6 +657,51 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         catch ME
             warning('visualizeDailySchedule:CaseClickFailed', 'Case click handler failed: %s', ME.message);
         end
+    end
+end
+
+function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth)
+    xPosEff = xPos;
+    barWidthEff = barWidth;
+    try
+        if ~isfield(opts, 'NarrowCaseId')
+            return;
+        end
+        narrowId = string(opts.NarrowCaseId);
+        if strlength(narrowId) == 0 || string(entry.caseId) ~= narrowId
+            return;
+        end
+        % Detect overlap within same lab and time interval
+        if isnan(setupStartHour) || isnan(turnoverEndHour)
+            return;
+        end
+        for k = 1:numel(caseTimelines)
+            other = caseTimelines(k);
+            if string(other.caseId) == narrowId
+                continue;
+            end
+            if other.labIndex ~= entry.labIndex
+                continue;
+            end
+            oStart = other.setupStart;
+            oEnd = other.turnoverEnd;
+            if isnan(oStart) || isnan(oEnd)
+                oStart = other.procStart; oEnd = other.postEnd;
+            end
+            if isnan(oStart) || isnan(oEnd)
+                continue;
+            end
+            % Overlap if intervals intersect
+            if ~(turnoverEndHour <= (oStart/60) || setupStartHour >= (oEnd/60))
+                % Apply lateral shift to reveal underlying case
+                offset = 0.2;
+                xPosEff = xPos + offset;
+                barWidthEff = max(0.5, barWidth - offset);
+                return;
+            end
+        end
+    catch
+        % ignore any errors and leave defaults
     end
 end
 

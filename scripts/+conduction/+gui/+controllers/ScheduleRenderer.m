@@ -284,7 +284,6 @@ classdef ScheduleRenderer < handle
             app.UIFigure.Pointer = 'hand';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
             app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endDragCase(app);
-            fprintf('[CaseDrag] Drag started for caseId=%s (origLab=%d, origStart=%g).\n', caseId, drag.originalLabIndex, drag.originalSetupStart);
         end
 
         function updateDragCase(obj, app)
