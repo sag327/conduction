@@ -9,6 +9,7 @@ Status: planning for Phase 1–3. Current working branch: `feat/dynamic-case-dur
 - On-canvas: allow resizing a case’s procedure duration by dragging the bottom edge of the procedure segment (procStart → procEnd). Setup and post remain unchanged.
 - Drawer: allow editing setup, procedure, post, and turnover durations with instant feedback on the schedule.
 - Drawer: expose an explicit “Reset to Baseline Duration” control so users can revert to the original estimates; re-optimization must preserve any edited duration until the reset is used.
+- Drawer: introduce separate lock toggles for time, duration, and lab so users can independently control whether the case’s start time, procedure duration, and assigned lab remain fixed during re-optimization.
 - Overlap detection/integrity: reuse the same logic as case dragging; if a change would create invalid state, revert and alert.
 - Preserve persistent IDs and case numbers; labels remain stable across re-optimization.
 
@@ -61,6 +62,11 @@ UI & Data Flow
 - Apply using the same pipeline as Phase 1 (`applyCaseResize`) to ensure overlap/integrity and locking behavior.
 - Update `ProspectiveCase.EstimatedDurationMinutes` and any stored per-case duration fields used for optimization.
 - Drawer should also provide a “Reset to Baseline Duration” action that restores the original duration values and unlocks the case if appropriate.
+- Drawer should show independent lock controls (checkboxes or toggles) for:
+  - Lock case time (existing behavior)
+  - Lock case duration (new)
+  - Lock case lab (existing behavior)
+  Each lock should persist across schedule renders and clearly indicate which aspects are fixed before re-optimization.
 
 Headless Tests (new)
 - `tests/schedule/test_drawer_duration_apply.m`
@@ -72,6 +78,7 @@ Manual Tests
 - Edit each duration field; verify immediate schedule update and stable labels.
 - Edit procedure time across multiple cases and labs; re-optimize and verify locked windows preserved.
 - Use the “Reset to Baseline Duration” control to revert to the original estimate; confirm the schedule refreshes accordingly and re-optimization respects the restored duration.
+- Toggle each lock (time, duration, lab) individually; confirm the drawer reflects the state, the schedule enforces the locked aspects, and re-optimization respects the combination (e.g., duration locked but lab unlocked).
 
 ---
 
