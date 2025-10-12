@@ -321,6 +321,18 @@ function labLabels = resolveLabLabels(~, expectedLabs)
 end
 
 function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, operatorColors, opts)
+    % Reorder to draw last-dragged (NarrowCaseId) after others so underlying stays visible
+    try
+        if isfield(opts, 'NarrowCaseId') && strlength(string(opts.NarrowCaseId)) > 0
+            narrowId = string(opts.NarrowCaseId);
+            mask = string({caseTimelines.caseId}) == narrowId;
+            if any(mask)
+                caseTimelines = [caseTimelines(~mask), caseTimelines(mask)]; %#ok<AGROW>
+            end
+        end
+    catch
+        % ignore reordering errors
+    end
     numLabs = numel(labLabels);
 
     caseClickedCallback = [];

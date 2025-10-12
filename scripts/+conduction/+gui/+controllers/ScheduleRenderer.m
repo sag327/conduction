@@ -104,12 +104,6 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
-            % Debug: report overlays post-render
-            try
-                cbs = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
-                fprintf('[CaseDrag] Post-render, CaseBlock overlays: %d\n', numel(cbs));
-            catch
-            end
 
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
