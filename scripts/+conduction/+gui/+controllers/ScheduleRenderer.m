@@ -55,6 +55,8 @@ classdef ScheduleRenderer < handle
                 obj.enableNowLineDrag(app);
             end
 
+            obj.enableCaseDrag(app);
+
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
@@ -157,6 +159,206 @@ classdef ScheduleRenderer < handle
             handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
                 set(handleMarker, 'ButtonDownFcn', []);
+            end
+        end
+
+        function enableCaseDrag(obj, app)
+            %ENABLECASED Drag overlay rectangles for case repositioning
+            if isempty(app) || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+
+            caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
+            if isempty(caseBlocks)
+                return;
+            end
+
+            for idx = 1:numel(caseBlocks)
+                blockHandle = caseBlocks(idx);
+                if ~isgraphics(blockHandle)
+                    continue;
+                end
+                set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
+            end
+        end
+
+        function onCaseBlockMouseDown(obj, app, rectHandle)
+            %ONCASEBLOCKMOUSEDOWN Entry point for case drag or click
+            if ~isgraphics(rectHandle)
+                return;
+            end
+
+            obj.startDragCase(app, rectHandle);
+        end
+
+        function startDragCase(obj, app, rectHandle)
+            %STARTDRAGCASE Begin dragging a case overlay
+            ud = get(rectHandle, 'UserData');
+            if ~isstruct(ud) || ~isfield(ud, 'caseId')
+                obj.invokeCaseBlockClick(app, rectHandle);
+                return;
+            end
+
+            caseId = string(ud.caseId);
+
+            if app.IsOptimizationRunning || app.IsTimeControlActive
+                obj.invokeCaseBlockClick(app, rectHandle);
+                return;
+            end
+
+            if ~obj.isCaseBlockDraggable(app, caseId)
+                obj.invokeCaseBlockClick(app, rectHandle);
+                return;
+            end
+
+            drag.rectHandle = rectHandle;
+            drag.caseId = caseId;
+            drag.originalLabIndex = double(ud.labIndex);
+
+            originalSetupStart = ud.setupStart;
+            if isnan(originalSetupStart) && isfield(ud, 'procStart')
+                originalSetupStart = ud.procStart;
+            end
+            if isnan(originalSetupStart)
+                originalSetupStart = 0;
+            end
+
+            drag.originalSetupStart = originalSetupStart;
+            drag.targetLabIndex = drag.originalLabIndex;
+            drag.targetStartMinutes = drag.originalSetupStart;
+            drag.rectWidth = rectHandle.Position(3);
+            drag.rectHeight = rectHandle.Position(4);
+            drag.originalPosition = rectHandle.Position;
+            drag.snapMinutes = 5;
+            drag.hasMoved = false;
+            drag.caseClickedFcn = [];
+            if isfield(ud, 'caseClickedFcn')
+                drag.caseClickedFcn = ud.caseClickedFcn;
+            end
+            drag.availableLabIds = app.AvailableLabIds;
+
+            currentPoint = get(app.ScheduleAxes, 'CurrentPoint');
+            drag.startPoint = currentPoint(1, 1:2);
+
+            if isprop(rectHandle, 'FaceAlpha') && rectHandle.FaceAlpha == 0
+                rectHandle.FaceAlpha = 0.1;
+            end
+
+            userData = app.UIFigure.UserData;
+            if ~isstruct(userData)
+                userData = struct();
+            end
+            userData.dragCase = drag;
+            app.UIFigure.UserData = userData;
+
+            app.UIFigure.Pointer = 'hand';
+            app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
+            app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endDragCase(app);
+        end
+
+        function updateDragCase(obj, app)
+            %UPDATEDRAGCASE Update overlay during drag motion
+            if ~isstruct(app.UIFigure.UserData) || ~isfield(app.UIFigure.UserData, 'dragCase')
+                return;
+            end
+
+            drag = app.UIFigure.UserData.dragCase;
+            if isempty(drag) || ~isgraphics(drag.rectHandle)
+                return;
+            end
+
+            currentPoint = get(app.ScheduleAxes, 'CurrentPoint');
+            currentPoint = currentPoint(1, 1:2);
+
+            numLabs = numel(app.LabIds);
+            newLabIndex = round(currentPoint(1));
+            newLabIndex = max(1, min(numLabs, newLabIndex));
+
+            durationHours = drag.rectHeight;
+            yLimits = ylim(app.ScheduleAxes);
+            newStartHour = currentPoint(2);
+            newStartHour = max(yLimits(1), min(yLimits(2) - durationHours, newStartHour));
+
+            snapMinutes = max(1, drag.snapMinutes);
+            newStartMinutes = round((newStartHour * 60) / snapMinutes) * snapMinutes;
+            newStartHour = newStartMinutes / 60;
+
+            newLeft = newLabIndex - drag.rectWidth / 2;
+            newPosition = [newLeft, newStartHour, drag.rectWidth, drag.rectHeight];
+
+            set(drag.rectHandle, 'Position', newPosition);
+
+            movedInTime = abs(newStartMinutes - drag.originalSetupStart) >= snapMinutes / 2;
+            movedInLab = newLabIndex ~= drag.originalLabIndex;
+            drag.hasMoved = drag.hasMoved || movedInTime || movedInLab;
+            drag.targetLabIndex = newLabIndex;
+            drag.targetStartMinutes = newStartMinutes;
+
+            app.UIFigure.UserData.dragCase = drag;
+        end
+
+        function endDragCase(obj, app)
+            %ENDDRAGCASE Finalize drag operation
+            if ~isstruct(app.UIFigure.UserData) || ~isfield(app.UIFigure.UserData, 'dragCase')
+                return;
+            end
+
+            drag = app.UIFigure.UserData.dragCase;
+
+            app.UIFigure.WindowButtonMotionFcn = [];
+            app.UIFigure.WindowButtonUpFcn = [];
+            app.UIFigure.Pointer = 'arrow';
+
+            userData = app.UIFigure.UserData;
+            userData = rmfield(userData, 'dragCase');
+            app.UIFigure.UserData = userData;
+
+            if ~isgraphics(drag.rectHandle)
+                return;
+            end
+
+            if ~drag.hasMoved
+                set(drag.rectHandle, 'Position', drag.originalPosition);
+                if isprop(drag.rectHandle, 'FaceAlpha')
+                    drag.rectHandle.FaceAlpha = 0;
+                end
+                obj.invokeCaseBlockClick(app, drag.rectHandle);
+                return;
+            end
+
+            numLabs = numel(app.LabIds);
+            targetLabIndex = max(1, min(numLabs, drag.targetLabIndex));
+            targetLabId = app.LabIds(targetLabIndex);
+
+            if ~isempty(drag.availableLabIds) && ~ismember(targetLabId, drag.availableLabIds)
+                set(drag.rectHandle, 'Position', drag.originalPosition);
+                if isprop(drag.rectHandle, 'FaceAlpha')
+                    drag.rectHandle.FaceAlpha = 0;
+                end
+                obj.showCaseDragWarning(app, 'Selected lab is not available.');
+                return;
+            end
+
+            newSetupStartMinutes = drag.targetStartMinutes;
+            if isnan(newSetupStartMinutes)
+                set(drag.rectHandle, 'Position', drag.originalPosition);
+                obj.invokeCaseBlockClick(app, drag.rectHandle);
+                return;
+            end
+
+            scheduleWasUpdated = obj.applyCaseMove(app, drag.caseId, targetLabIndex, newSetupStartMinutes);
+            if scheduleWasUpdated
+                app.OptimizationController.markOptimizationDirty(app);
+                app.markDirty();
+            else
+                set(drag.rectHandle, 'Position', drag.originalPosition);
+                if isprop(drag.rectHandle, 'FaceAlpha')
+                    drag.rectHandle.FaceAlpha = 0;
+                end
+            end
+
+            if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
+                drag.rectHandle.FaceAlpha = 0;
             end
         end
 
@@ -661,6 +863,156 @@ classdef ScheduleRenderer < handle
             end
         end
 
+    end
+
+    methods (Access = private)
+
+        function scheduleWasUpdated = applyCaseMove(obj, app, caseId, targetLabIndex, newSetupStartMinutes)
+            scheduleWasUpdated = false;
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+            metrics = app.OptimizedSchedule.metrics();
+
+            found = false;
+            for labIdx = 1:numel(assignments)
+                cases = assignments{labIdx};
+                if isempty(cases)
+                    continue;
+                end
+                for caseIdx = 1:numel(cases)
+                    caseStruct = cases(caseIdx);
+                    existingCaseId = string(obj.getFieldValue(caseStruct, 'caseID', ""));
+                    if strlength(existingCaseId) == 0
+                        existingCaseId = string(obj.getFieldValue(caseStruct, 'caseId', ""));
+                    end
+                    if existingCaseId == caseId
+                        found = true;
+                        originalStart = obj.getFieldValue(caseStruct, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'}, obj.getFieldValue(caseStruct, 'procStartTime', NaN));
+                        if isnan(originalStart)
+                            originalStart = newSetupStartMinutes;
+                        end
+                        deltaMinutes = newSetupStartMinutes - originalStart;
+                        caseStruct = obj.shiftCaseTimes(caseStruct, deltaMinutes);
+                        if isfield(caseStruct, 'lab')
+                            caseStruct.lab = targetLabIndex;
+                        end
+                        if isfield(caseStruct, 'labIndex')
+                            caseStruct.labIndex = targetLabIndex;
+                        end
+
+                        cases(caseIdx) = [];
+                        assignments{labIdx} = cases;
+
+                        targetCases = assignments{targetLabIndex};
+                        targetCases(end+1, 1) = caseStruct; %#ok<AGROW>
+                        startTimes = arrayfun(@(s) obj.getFieldValue(s, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime', 'procStartTime'}, NaN), targetCases);
+                        [~, order] = sort(startTimes, 'ascend', 'MissingPlacement', 'last');
+                        assignments{targetLabIndex} = targetCases(order);
+
+                        scheduleWasUpdated = true;
+                        break;
+                    end
+                end
+                if found
+                    break;
+                end
+            end
+
+            if ~found
+                warning('ScheduleRenderer:CaseMoveFailed', 'Failed to locate case %s for drag operation.', caseId);
+                return;
+            end
+
+            newSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
+            app.OptimizedSchedule = newSchedule;
+
+            if ~ismember(caseId, app.LockedCaseIds)
+                app.LockedCaseIds(end+1, 1) = caseId;
+                app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
+            end
+        end
+
+        function tf = isCaseBlockDraggable(~, app, caseId)
+            tf = false;
+            if isempty(caseId)
+                return;
+            end
+
+            if app.IsOptimizationRunning || app.IsTimeControlActive
+                return;
+            end
+
+            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+            if isempty(caseObj)
+                return;
+            end
+
+            tf = caseObj.isPending();
+        end
+
+        function invokeCaseBlockClick(~, app, rectHandle)
+            if isempty(rectHandle) || ~isgraphics(rectHandle)
+                return;
+            end
+
+            userData = get(rectHandle, 'UserData');
+            callback = [];
+            caseId = "";
+
+            if isstruct(userData)
+                if isfield(userData, 'caseClickedFcn')
+                    callback = userData.caseClickedFcn;
+                end
+                if isfield(userData, 'caseId')
+                    caseId = string(userData.caseId);
+                end
+            end
+
+            if isempty(callback)
+                if strlength(caseId) > 0
+                    app.onScheduleBlockClicked(caseId);
+                end
+                return;
+            end
+
+            try
+                callback(caseId);
+            catch ME
+                warning('ScheduleRenderer:CaseClickFailed', 'Case click handler failed: %s', ME.message);
+            end
+        end
+
+        function caseStruct = shiftCaseTimes(~, caseStruct, deltaMinutes)
+            if deltaMinutes == 0
+                return;
+            end
+
+            fieldsToShift = {
+                'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime', ...
+                'procStartTime', 'procedureStartTime', 'procEndTime', 'procedureEndTime', ...
+                'postStartTime', 'postEndTime', 'turnoverStartTime', 'turnoverEnd', ...
+                'endTime', 'caseEndTime', 'scheduleEnd'
+            };
+
+            for idx = 1:numel(fieldsToShift)
+                fieldName = fieldsToShift{idx};
+                if isfield(caseStruct, fieldName) && ~isempty(caseStruct.(fieldName))
+                    caseStruct.(fieldName) = caseStruct.(fieldName) + deltaMinutes;
+                end
+            end
+        end
+
+        function showCaseDragWarning(~, app, message)
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            uialert(app.UIFigure, message, 'Case Drag', 'Icon', 'warning');
+        end
     end
 
     methods (Static, Access = public)

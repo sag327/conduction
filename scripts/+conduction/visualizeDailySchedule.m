@@ -383,9 +383,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         if ~isnan(setupStartHour) && ~isnan(procStartHour)
             setupDuration = procStartHour - setupStartHour;
             if setupDuration > 0
-                setupRect = rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
-                    'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
-                attachCaseClick(setupRect, entry, caseClickedCallback);
+            rectangle(ax, 'Position', [xPos - barWidth/2, setupStartHour, barWidth, setupDuration], ...
+                'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
+                'HitTest', 'off', 'PickableParts', 'none');
             end
         end
 
@@ -400,26 +400,26 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             else
                 opColor = [0.5, 0.5, 0.5];
             end
-            procRect = rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
-                'FaceColor', opColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 1);
-            attachCaseClick(procRect, entry, caseClickedCallback);
+            rectangle(ax, 'Position', [xPos - barWidth/2, procStartHour, barWidth, procDuration], ...
+                'FaceColor', opColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 1, ...
+                'HitTest', 'off', 'PickableParts', 'none');
         end
 
         if ~isnan(procEndHour) && ~isnan(postEndHour)
             postDuration = postEndHour - procEndHour;
             if postDuration > 0
-                postRect = rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
-                    'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
-                attachCaseClick(postRect, entry, caseClickedCallback);
+            rectangle(ax, 'Position', [xPos - barWidth/2, procEndHour, barWidth, postDuration], ...
+                'FaceColor', grayColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
+                'HitTest', 'off', 'PickableParts', 'none');
             end
         end
 
         if opts.ShowTurnover && ~isnan(postEndHour) && ~isnan(turnoverEndHour)
             turnoverDuration = turnoverEndHour - postEndHour;
             if turnoverDuration > 0
-                turnoverRect = rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
-                    'FaceColor', turnoverColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5);
-                attachCaseClick(turnoverRect, entry, caseClickedCallback);
+            rectangle(ax, 'Position', [xPos - barWidth/2, postEndHour, barWidth, turnoverDuration], ...
+                'FaceColor', turnoverColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', edgeColor, 'LineWidth', 0.5, ...
+                'HitTest', 'off', 'PickableParts', 'none');
             end
         end
 
@@ -471,10 +471,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             % Draw left edge bar (5px wide)
             edgeBarWidth = 0.05;  % Slightly narrower than full bar
             edgeBarX = xPos - barWidth/2;
-            admissionBar = rectangle(ax, 'Position', [edgeBarX, caseStartHour, edgeBarWidth, caseTotalDuration], ...
-                'FaceColor', admissionColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', 'none');
-            % Make bar non-interactive so clicks pass through to case segments
-            admissionBar.PickableParts = 'none';
+            rectangle(ax, 'Position', [edgeBarX, caseStartHour, edgeBarWidth, caseTotalDuration], ...
+                'FaceColor', admissionColor, 'FaceAlpha', fadeAlpha, 'EdgeColor', 'none', ...
+                'HitTest', 'off', 'PickableParts', 'none');
         end
 
         % REALTIME-SCHEDULING: Draw status indicator overlay
@@ -519,6 +518,22 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             if isprop(labelHandle, 'PickableParts')
                 labelHandle.PickableParts = 'none';
             end
+        end
+
+        % Transparent overlay for interaction (drag/click)
+        if ~isnan(setupStartHour) && ~isnan(postEndHour)
+            caseStartHour = setupStartHour;
+            caseEndHour = postEndHour;
+            caseTotalDuration = max(caseEndHour - caseStartHour, eps);
+
+            interactionRect = rectangle(ax, ...
+                'Position', [xPos - barWidth/2, caseStartHour, barWidth, caseTotalDuration], ...
+                'FaceColor', [1 1 1], 'FaceAlpha', 0, 'EdgeColor', 'none', ...
+                'LineWidth', 0.1, 'Tag', 'CaseBlock', 'HitTest', 'on');
+            if isprop(interactionRect, 'PickableParts')
+                interactionRect.PickableParts = 'visible';
+            end
+            attachCaseClick(interactionRect, entry, caseClickedCallback);
         end
     end
 
@@ -586,23 +601,50 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     applyAxisTextStyle(ax);
 
     function attachCaseClick(rectHandle, caseEntry, callback)
-        if isempty(callback) || isempty(rectHandle) || ~isgraphics(rectHandle)
+        if isempty(rectHandle) || ~isgraphics(rectHandle)
             return;
         end
-        rectHandle.UserData = struct('caseId', caseEntry.caseId, 'labIndex', caseEntry.labIndex);
+
+        interactionData = struct( ...
+            'caseId', string(caseEntry.caseId), ...
+            'labIndex', caseEntry.labIndex, ...
+            'setupStart', caseEntry.setupStart, ...
+            'procStart', caseEntry.procStart, ...
+            'procEnd', caseEntry.procEnd, ...
+            'postEnd', caseEntry.postEnd, ...
+            'turnoverEnd', caseEntry.turnoverEnd, ...
+            'caseClickedFcn', callback);
+
+        rectHandle.UserData = interactionData;
+        rectHandle.Tag = 'CaseBlock';
         rectHandle.HitTest = 'on';
         if isprop(rectHandle, 'PickableParts')
             rectHandle.PickableParts = 'visible';
         end
-        rectHandle.ButtonDownFcn = @(~, ~) dispatchCaseClick(callback, caseEntry.caseId);
+        rectHandle.ButtonDownFcn = @(src, ~) dispatchCaseClick(src);
     end
 
-    function dispatchCaseClick(callback, caseId)
+    function dispatchCaseClick(rectHandle)
+        if isempty(rectHandle) || ~isgraphics(rectHandle)
+            return;
+        end
+
+        userData = get(rectHandle, 'UserData');
+        if ~isstruct(userData) || ~isfield(userData, 'caseId')
+            return;
+        end
+
+        callback = [];
+        if isfield(userData, 'caseClickedFcn')
+            callback = userData.caseClickedFcn;
+        end
+
         if isempty(callback)
             return;
         end
+
         try
-            callback(string(caseId));
+            callback(string(userData.caseId));
         catch ME
             warning('visualizeDailySchedule:CaseClickFailed', 'Case click handler failed: %s', ME.message);
         end
@@ -657,7 +699,7 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour,
     text(ax, xLimits(2) - 0.1, max(yLimits) - 0.2, summaryText, ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
         'FontSize', 10, 'Color', labelColor, ...
-        'BackgroundColor', summaryBg, 'Margin', 4); 
+        'BackgroundColor', summaryBg, 'Margin', 4);
 
     sixPMHour = 18;
     if sixPMHour >= startHour && sixPMHour <= endHour
