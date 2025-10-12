@@ -148,6 +148,13 @@ classdef CaseDragController < handle
             catch
                 % ignore stacking issues
             end
+
+            % Force a graphics flush so the highlight appears immediately.
+            try
+                drawnow limitrate nocallbacks;
+            catch
+                % drawnow may be unsupported in select contexts; ignore
+            end
         end
 
         function moveSoftHighlight(obj, newPosition)
