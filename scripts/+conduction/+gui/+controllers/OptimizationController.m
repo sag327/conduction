@@ -670,7 +670,16 @@ classdef OptimizationController < handle
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
-                'date', NaT);
+                'date', NaT, ...
+                'assignedLab', [], ...
+                'startTime', NaN);
+
+            % Ensure existing cases share the template fields
+            if isempty(casesStruct)
+                casesStruct = repmat(template, 0, 1);
+            else
+                casesStruct = obj.addMissingFieldsToStruct(casesStruct, fieldnames(template), template);
+            end
 
             % Extract existing case IDs for duplicate detection
             existingIds = {};
@@ -729,6 +738,10 @@ classdef OptimizationController < handle
                 newCase.admissionStatus = char(string(obj.getFieldOr(locked, 'admissionStatus', defaults.AdmissionStatus)));
                 newCase.caseStatus = char(string(obj.getFieldOr(locked, 'caseStatus', '')));  % REALTIME-SCHEDULING
                 newCase.date = obj.getFieldOr(locked, 'date', NaT);
+                newCase.assignedLab = obj.getFieldOr(locked, 'assignedLab', []);
+                newCase.startTime = obj.getFieldOr(locked, 'startTime', NaN);
+
+                [casesStruct, newCase] = obj.alignCaseStructFields(casesStruct, newCase, template);
 
                 % Add or replace in casesStruct
                 if isDuplicate
@@ -736,11 +749,7 @@ classdef OptimizationController < handle
                     casesStruct(duplicateIdx) = newCase;
                 else
                     % Add new locked case
-                    if isempty(casesStruct)
-                        casesStruct = newCase;
-                    else
-                        casesStruct(end+1) = newCase; %#ok<AGROW>
-                    end
+                    casesStruct(end+1) = newCase; %#ok<AGROW>
                     existingIds{end+1} = caseId; %#ok<AGROW>
                 end
             end
@@ -753,6 +762,48 @@ classdef OptimizationController < handle
             else
                 value = defaultValue;
             end
+        end
+
+        function structArray = addMissingFieldsToStruct(~, structArray, fieldNames, template)
+            if isempty(structArray)
+                return;
+            end
+
+            if nargin < 4
+                template = struct();
+            end
+
+            for i = 1:numel(fieldNames)
+                fieldName = fieldNames{i};
+                if ~isfield(structArray, fieldName)
+                    defaultValue = [];
+                    if isfield(template, fieldName)
+                        defaultValue = template.(fieldName);
+                    end
+                    for idx = 1:numel(structArray)
+                        structArray(idx).(fieldName) = defaultValue;
+                    end
+                end
+            end
+        end
+
+        function [casesOut, newCaseOut] = alignCaseStructFields(obj, casesIn, newCaseIn, template)
+            if isempty(casesIn)
+                newCaseOut = obj.addMissingFieldsToStruct(newCaseIn, fieldnames(template), template);
+                casesOut = casesIn;
+                return;
+            end
+
+            templateFields = fieldnames(template);
+            existingFields = fieldnames(casesIn);
+            newFields = fieldnames(newCaseIn);
+            allFields = unique([existingFields(:); newFields(:); templateFields(:)], 'stable');
+
+            casesOut = obj.addMissingFieldsToStruct(casesIn, allFields, template);
+            newCaseOut = obj.addMissingFieldsToStruct(newCaseIn, allFields, template);
+
+            casesOut = orderfields(casesOut, allFields);
+            newCaseOut = orderfields(newCaseOut, allFields);
         end
 
         function busyWindows = extractLockedCaseBusyWindows(~, lockedAssignments)

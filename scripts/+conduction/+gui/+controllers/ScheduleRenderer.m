@@ -261,6 +261,7 @@ classdef ScheduleRenderer < handle
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
+                obj.restoreSelectionOverlay(app);
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -281,6 +282,7 @@ classdef ScheduleRenderer < handle
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
+                obj.restoreSelectionOverlay(app);
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -292,6 +294,7 @@ classdef ScheduleRenderer < handle
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
+                obj.restoreSelectionOverlay(app);
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -398,6 +401,7 @@ classdef ScheduleRenderer < handle
             dragController.hideSoftHighlight();
 
             if ~dragController.hasActiveDrag()
+                obj.restoreSelectionOverlay(app);
                 return;
             end
 
@@ -421,6 +425,7 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
                 end
+                obj.restoreSelectionOverlay(app);
                 return;
             end
 
@@ -437,6 +442,7 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Drop refused: lab %d not available.\n', targetLabId);
                 end
+                obj.restoreSelectionOverlay(app);
                 return;
             end
 
@@ -444,6 +450,7 @@ classdef ScheduleRenderer < handle
             if isnan(newSetupStartMinutes)
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
+                obj.restoreSelectionOverlay(app);
                 return;
             end
 
@@ -468,6 +475,8 @@ classdef ScheduleRenderer < handle
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
                 drag.rectHandle.FaceAlpha = 0;
             end
+
+            obj.restoreSelectionOverlay(app);
         end
 
         function updateCaseDragDebugLabel(~, app, textValue)
@@ -1047,6 +1056,13 @@ classdef ScheduleRenderer < handle
                     movedCase = obj.shiftCaseTimes(movedCase, deltaMinutes);
                     if isfield(movedCase, 'lab'), movedCase.lab = targetLabIndex; end
                     if isfield(movedCase, 'labIndex'), movedCase.labIndex = targetLabIndex; end
+                    movedCase.assignedLab = targetLabIndex;
+                    movedCase.startTime = newSetupStartMinutes;
+                    if ~isfield(movedCase, 'setupStartTime') || isempty(movedCase.setupStartTime)
+                        movedCase.setupStartTime = newSetupStartMinutes;
+                    else
+                        movedCase.setupStartTime = newSetupStartMinutes;
+                    end
 
                     casesArr(matchMask) = [];
                     newAssignments{labIdx} = casesArr;
@@ -1078,7 +1094,7 @@ classdef ScheduleRenderer < handle
             end
 
             newAssignments{targetLabIndex} = targetCases(:);
-            assignments = newAssignments;
+            assignments = obj.normalizeLabAssignments(newAssignments);
 
             afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
             afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
@@ -1325,6 +1341,18 @@ classdef ScheduleRenderer < handle
             uialert(app.UIFigure, message, 'Case Drag', 'Icon', 'warning');
         end
 
+        function restoreSelectionOverlay(~, app)
+            if isempty(app) || isempty(app.CaseDragController)
+                return;
+            end
+
+            if strlength(app.SelectedCaseId) > 0
+                app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
+            else
+                app.CaseDragController.hideSelectionOverlay(true);
+            end
+        end
+
         function value = extractField(~, source, fieldName, defaultValue)
             if nargin < 4
                 defaultValue = [];
@@ -1332,6 +1360,51 @@ classdef ScheduleRenderer < handle
             value = defaultValue;
             if isstruct(source) && isfield(source, fieldName)
                 value = source.(fieldName);
+            end
+        end
+
+        function assignmentsOut = normalizeLabAssignments(obj, assignmentsIn)
+            assignmentsOut = assignmentsIn;
+            allFields = {};
+
+            % Gather union of fields across all labs
+            for labIdx = 1:numel(assignmentsIn)
+                labCases = assignmentsIn{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                labCases = labCases(:);
+                fn = fieldnames(labCases);
+                if isempty(allFields)
+                    allFields = fn;
+                else
+                    allFields = union(allFields, fn, 'stable');
+                end
+            end
+
+            if isempty(allFields)
+                return;
+            end
+
+            for labIdx = 1:numel(assignmentsIn)
+                labCases = assignmentsIn{labIdx};
+                if isempty(labCases)
+                    assignmentsOut{labIdx} = labCases;
+                    continue;
+                end
+
+                labCases = labCases(:);
+                labCases = obj.ensureStructHasFields(labCases, allFields);
+
+                if ismember('assignedLab', allFields)
+                    for caseIdx = 1:numel(labCases)
+                        if ~isfield(labCases(caseIdx), 'assignedLab') || isempty(labCases(caseIdx).assignedLab)
+                            labCases(caseIdx).assignedLab = labIdx;
+                        end
+                    end
+                end
+
+                assignmentsOut{labIdx} = labCases;
             end
         end
     end
