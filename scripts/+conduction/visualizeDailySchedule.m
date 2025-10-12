@@ -151,6 +151,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
+    addParameter(p, 'NarrowCaseId', "", @(x) isstring(x) || ischar(x));  % DRAG: case ID to draw narrowly to reveal underlying
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -369,6 +370,14 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         entry = caseTimelines(idx);
         xPos = entry.labIndex;
         barWidth = 0.8;
+        try
+            if isfield(opts, 'NarrowCaseId') && strlength(string(opts.NarrowCaseId)) > 0
+                if string(entry.caseId) == string(opts.NarrowCaseId)
+                    barWidth = 0.55; % draw narrower to reveal underlying blocks
+                end
+            end
+        catch
+        end
 
         % CASE-LOCKING: Check if this case is locked
         isLocked = ismember(string(entry.caseId), lockedCaseIds);

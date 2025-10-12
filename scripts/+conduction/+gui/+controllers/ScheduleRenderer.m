@@ -99,7 +99,8 @@ classdef ScheduleRenderer < handle
                 'SelectedCaseId', app.SelectedCaseId, ...
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
-                'CurrentTimeMinutes', currentTime);  % REALTIME-SCHEDULING
+                'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
+                'NarrowCaseId', char(app.LastDraggedCaseId));
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
@@ -993,6 +994,7 @@ classdef ScheduleRenderer < handle
 
             newSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.OptimizedSchedule = newSchedule;
+            app.LastDraggedCaseId = caseId;
 
             if ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1, 1) = caseId;
