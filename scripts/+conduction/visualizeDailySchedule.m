@@ -1369,7 +1369,7 @@ function caseNumber = resolveCaseNumber(caseItem, fallbackIndex)
         else
             continue;
         end
-        if isnumeric(candidate) && ~isnan(candidate)
+        if isnumeric(candidate) && isscalar(candidate) && ~isnan(candidate)
             caseNumber = double(candidate);
             return;
         end
