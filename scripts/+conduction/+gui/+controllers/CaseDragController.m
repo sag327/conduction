@@ -26,6 +26,7 @@ classdef CaseDragController < handle
         SoftHighlightColor double = [1 1 1]
         SoftHighlightLineWidth double = 2.5
         SoftHighlightLastPosition double = [NaN NaN NaN NaN]
+        DebugTiming logical = false
     end
 
     methods
@@ -124,6 +125,12 @@ classdef CaseDragController < handle
                 return;
             end
 
+            ticOverall = [];
+            if obj.debugTimingEnabled()
+                ticOverall = tic;
+                fprintf('[SoftHighlight] start\n');
+            end
+
             if isempty(obj.SoftHighlightRect) || ~isgraphics(obj.SoftHighlightRect)
                 obj.SoftHighlightRect = rectangle(axesHandle, ...
                     'Position', pos, ...
@@ -134,6 +141,9 @@ classdef CaseDragController < handle
                     'PickableParts', 'none', ...
                     'Clipping', 'on', ...
                     'Tag', 'CaseSoftHighlight');
+                if obj.debugTimingEnabled()
+                    fprintf('[SoftHighlight] rectangle created in %.4f ms\n', toc(ticOverall)*1e3);
+                end
             else
                 if obj.SoftHighlightRect.Parent ~= axesHandle
                     set(obj.SoftHighlightRect, 'Parent', axesHandle);
@@ -149,11 +159,20 @@ classdef CaseDragController < handle
                 % ignore stacking issues
             end
 
-            % Force a graphics flush so the highlight appears immediately.
-            try
+            if obj.debugTimingEnabled()
+                ticFlush = tic;
                 drawnow limitrate nocallbacks;
-            catch
-                % drawnow may be unsupported in select contexts; ignore
+                fprintf('[SoftHighlight] drawnow took %.4f ms\n', toc(ticFlush)*1e3);
+            else
+                try
+                    drawnow limitrate nocallbacks;
+                catch
+                    % drawnow may be unsupported in select contexts; ignore
+                end
+            end
+
+            if obj.debugTimingEnabled()
+                fprintf('[SoftHighlight] total %.4f ms\n', toc(ticOverall)*1e3);
             end
         end
 
@@ -174,6 +193,12 @@ classdef CaseDragController < handle
 
             set(obj.SoftHighlightRect, 'Position', newPosition, 'Visible', 'on');
             obj.SoftHighlightLastPosition = newPosition;
+
+            try
+                drawnow limitrate nocallbacks;
+            catch
+                % drawnow may be unsupported in select contexts; ignore
+            end
         end
 
         function hideSoftHighlight(obj)
@@ -299,12 +324,19 @@ classdef CaseDragController < handle
         function clearActiveDrag(obj)
             %CLEARACTIVEDRAG Reset drag state metadata.
             obj.ActiveDrag = struct();
-            obj.LastMotionTimer = NaN;
+            obj.LastMotionTimer = uint64(0);
         end
 
         function tf = hasActiveDrag(obj)
             %HASACTIVEDRAG True when a drag state is currently tracked.
             tf = ~isempty(fieldnames(obj.ActiveDrag));
+        end
+
+        function enableTimingDebug(obj, tf)
+            if nargin < 2
+                tf = true;
+            end
+            obj.DebugTiming = logical(tf);
         end
     end
 
@@ -335,6 +367,18 @@ classdef CaseDragController < handle
                 handleId = uint64(randi(intmax('uint32'))); %#ok<RANDI>
             end
             key = sprintf('h%016x', handleId);
+        end
+
+        function tf = debugTimingEnabled(obj)
+            tf = obj.DebugTiming;
+            persistent envFlag
+            if tf
+                return;
+            end
+            if isempty(envFlag)
+                envFlag = ~isempty(getenv('SOFTHIGHLIGHT_DEBUG'));
+            end
+            tf = envFlag;
         end
 
     end
