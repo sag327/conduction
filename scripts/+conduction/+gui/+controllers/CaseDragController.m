@@ -17,6 +17,7 @@ classdef CaseDragController < handle
         LastMotionTimer uint64 = uint64(0)
         MotionThrottleSeconds double = 0.016  % ~60 Hz default
         ActiveDrag struct = struct()
+        ActiveResize struct = struct()
 
         % Soft highlight behaviour
         SoftSelectOnMouseDown logical = true
@@ -34,6 +35,7 @@ classdef CaseDragController < handle
         SelectionLineWidth double = 3
         SelectionLastPosition double = [NaN NaN NaN NaN]
         SelectionCaseId string = ""
+        SelectionGrip = gobjects(0, 1)
     end
 
     methods
@@ -113,6 +115,7 @@ classdef CaseDragController < handle
             obj.LastMotionTimer = uint64(0);
             obj.AppHandle = conduction.gui.ProspectiveSchedulerApp.empty;
             obj.ActiveDrag = struct();
+            obj.ActiveResize = struct();
         end
 
         function ids = listCaseIds(obj)
@@ -255,6 +258,9 @@ classdef CaseDragController < handle
                 return;
             end
 
+            isLocked = obj.isCaseLocked(caseId);
+            timeControlActive = obj.isTimeControlActive();
+
             rectHandle = entry.rectHandle;
             axesHandle = ancestor(rectHandle, 'axes');
             if isempty(axesHandle) || ~isgraphics(axesHandle)
@@ -289,10 +295,73 @@ classdef CaseDragController < handle
                 set(obj.SelectionRect, 'Position', selPos, 'Visible', 'on');
             end
 
+            % Create/update resize grip when case is selectable
+            % Only show resize grip when case is editable (not locked, not time control)
+            canResize = ~isLocked && ~timeControlActive;
+            if ~canResize
+                if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
+                    set(obj.SelectionGrip, 'Visible', 'off');
+                end
+                obj.SelectionAxes = axesHandle;
+                obj.SelectionLastPosition = selPos;
+                try
+                    uistack(obj.SelectionRect, 'top');
+                catch
+                    % ignore stacking issues
+                end
+                success = true;
+                return;
+            end
+
+            gripWidth = selPos(3) * 0.6;
+            gripX = selPos(1) + (selPos(3) - gripWidth)/2;
+            [~, gripHeightHours] = obj.pointsToDataOffsets(axesHandle, 6);
+            if ~isfinite(gripHeightHours) || gripHeightHours <= 0
+                gripHeightHours = selPos(4) * 0.06;
+            end
+            gripHeightHours = min(gripHeightHours, selPos(4)/2);
+            gripY = selPos(2) + selPos(4) - gripHeightHours;
+
+            if isempty(obj.SelectionGrip) || ~isgraphics(obj.SelectionGrip)
+                obj.SelectionGrip = rectangle(axesHandle, ...
+                    'Position', [gripX, gripY, gripWidth, gripHeightHours], ...
+                    'FaceColor', [1 1 1], 'FaceAlpha', 0.6, ...
+                    'EdgeColor', [1 1 1], 'LineWidth', 1.5, ...
+                    'HitTest', 'on', 'PickableParts', 'all', ...
+                    'Clipping', 'on', 'Tag', 'CaseResizeHandle');
+            else
+                if obj.SelectionGrip.Parent ~= axesHandle
+                    set(obj.SelectionGrip, 'Parent', axesHandle);
+                end
+                set(obj.SelectionGrip, 'Position', [gripX, gripY, gripWidth, gripHeightHours], 'Visible', 'on');
+            end
+
+            if ~isempty(obj.AppHandle) && isprop(obj.AppHandle, 'ScheduleRenderer')
+                set(obj.SelectionGrip, 'ButtonDownFcn', @(src, ~) obj.AppHandle.ScheduleRenderer.onCaseResizeMouseDown(obj.AppHandle, src));
+            end
+
+            postDuration = obj.safeDifference(obj.extractFieldFromStruct(entry.userData, 'postEnd'), obj.extractFieldFromStruct(entry.userData, 'procEnd'));
+            if isnan(postDuration), postDuration = 0; end
+            turnoverDuration = obj.safeDifference(obj.extractFieldFromStruct(entry.userData, 'turnoverEnd'), obj.extractFieldFromStruct(entry.userData, 'postEnd'));
+            if isnan(turnoverDuration), turnoverDuration = 0; end
+
+            gripData = struct( ...
+                'caseId', caseId, ...
+                'labIndex', obj.extractFieldFromStruct(entry.userData, 'labIndex'), ...
+                'snapMinutes', 5, ...
+                'handleHeightHours', gripHeightHours, ...
+                'procStart', obj.extractFieldFromStruct(entry.userData, 'procStart'), ...
+                'procEnd', obj.extractFieldFromStruct(entry.userData, 'procEnd'), ...
+                'setupStart', obj.extractFieldFromStruct(entry.userData, 'setupStart'), ...
+                'postDuration', postDuration, ...
+                'turnoverDuration', turnoverDuration, ...
+                'caseRect', rectHandle);
+            obj.SelectionGrip.UserData = gripData;
+
             obj.SelectionAxes = axesHandle;
             obj.SelectionLastPosition = selPos;
             try
-                uistack(obj.SelectionRect, 'top');
+                uistack(obj.SelectionRect, 'top'); uistack(obj.SelectionGrip, 'top');
             catch
                 % ignore stacking issues
             end
@@ -435,6 +504,26 @@ classdef CaseDragController < handle
             tf = ~isempty(fieldnames(obj.ActiveDrag));
         end
 
+        function setActiveResize(obj, resizeState)
+            if nargin < 2
+                resizeState = struct();
+            end
+            obj.ActiveResize = resizeState;
+        end
+
+        function resize = getActiveResize(obj)
+            resize = obj.ActiveResize;
+        end
+
+        function clearActiveResize(obj)
+            obj.ActiveResize = struct();
+            obj.LastMotionTimer = uint64(0);
+        end
+
+        function tf = hasActiveResize(obj)
+            tf = ~isempty(fieldnames(obj.ActiveResize));
+        end
+
         function enableTimingDebug(obj, tf)
             if nargin < 2
                 tf = true;
@@ -469,6 +558,41 @@ classdef CaseDragController < handle
 
             dxLabs = (px / axPixW) * xRange;
             dyHours = (px / axPixH) * yRange;
+        end
+
+        function value = extractFieldFromStruct(~, s, fieldName)
+            value = NaN;
+            if isstruct(s) && isfield(s, fieldName)
+                value = s.(fieldName);
+            end
+        end
+
+        function diffValue = safeDifference(~, a, b)
+            if isnan(a) || isnan(b)
+                diffValue = NaN;
+            else
+                diffValue = a - b;
+            end
+        end
+
+        function tf = isCaseLocked(obj, caseId)
+            tf = false;
+            if isempty(obj.AppHandle)
+                return;
+            end
+            if isprop(obj.AppHandle, 'LockedCaseIds')
+                tf = ismember(caseId, obj.AppHandle.LockedCaseIds);
+            end
+        end
+
+        function tf = isTimeControlActive(obj)
+            tf = false;
+            if isempty(obj.AppHandle)
+                return;
+            end
+            if isprop(obj.AppHandle, 'IsTimeControlActive')
+                tf = obj.AppHandle.IsTimeControlActive;
+            end
         end
         function entry = buildEntry(obj, idx)
             entry = struct( ...

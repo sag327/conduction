@@ -8,6 +8,7 @@ Status: planning for Phase 1–3. Current working branch: `feat/dynamic-case-dur
 
 - On-canvas: allow resizing a case’s procedure duration by dragging the bottom edge of the procedure segment (procStart → procEnd). Setup and post remain unchanged.
 - Drawer: allow editing setup, procedure, post, and turnover durations with instant feedback on the schedule.
+- Drawer: expose an explicit “Reset to Baseline Duration” control so users can revert to the original estimates; re-optimization must preserve any edited duration until the reset is used.
 - Overlap detection/integrity: reuse the same logic as case dragging; if a change would create invalid state, revert and alert.
 - Preserve persistent IDs and case numbers; labels remain stable across re-optimization.
 
@@ -59,6 +60,7 @@ UI & Data Flow
 - On change: validate inputs, recompute `procEndTime = procStartTime + procTime`, keep setup/post values as edited.
 - Apply using the same pipeline as Phase 1 (`applyCaseResize`) to ensure overlap/integrity and locking behavior.
 - Update `ProspectiveCase.EstimatedDurationMinutes` and any stored per-case duration fields used for optimization.
+- Drawer should also provide a “Reset to Baseline Duration” action that restores the original duration values and unlocks the case if appropriate.
 
 Headless Tests (new)
 - `tests/schedule/test_drawer_duration_apply.m`
@@ -69,6 +71,7 @@ Headless Tests (new)
 Manual Tests
 - Edit each duration field; verify immediate schedule update and stable labels.
 - Edit procedure time across multiple cases and labs; re-optimize and verify locked windows preserved.
+- Use the “Reset to Baseline Duration” control to revert to the original estimate; confirm the schedule refreshes accordingly and re-optimization respects the restored duration.
 
 ---
 
@@ -118,4 +121,3 @@ CLI Templates
 - GUI event interop (drag vs resize) — mitigate by clear handle tagging and isolated callbacks.
 - Struct shape drift — continue to normalize lab assignments after every mutation.
 - Label drift — post-opt caseNumber annotation kept on both optimized and simulated schedules.
-
