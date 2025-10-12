@@ -457,22 +457,25 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
             [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
 
-            % Draw white selection outline first (full size) if selected
-            if isSelected
-                selectionOutlineColor = [1, 1, 1];
-                selectionRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
-                    'FaceColor', 'none', 'EdgeColor', selectionOutlineColor, 'LineWidth', 3);
-                selectionRect.PickableParts = 'none';
+            % Draw red locked outline at the exact case bounds if locked
+            if isLocked
+                lockedRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
+                    'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3, 'Clipping', 'on');
+                lockedRect.PickableParts = 'none';
             end
 
-            % Draw red locked outline slightly smaller (inset) if locked
-            if isLocked
-                insetX = 0.02;  % Slight horizontal inset (lab units)
-                lockedX = xPosEff - barWidthEff/2 + insetX;
-                lockedW = max(0, barWidthEff - 2*insetX);
-                outlineRect = rectangle(ax, 'Position', [lockedX, caseStartHour, lockedW, caseTotalDuration], ...
-                    'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3);
-                outlineRect.PickableParts = 'none';
+            % Draw white selection outline slightly larger if selected
+            if isSelected
+                growX = 0.03;       % expand half-width in lab units (both sides)
+                growY = 0.05;       % expand half-height in hours (both top/bottom)
+                selX = (xPosEff - barWidthEff/2) - growX;
+                selW = barWidthEff + 2*growX;
+                selY = caseStartHour - growY;
+                selH = caseTotalDuration + 2*growY;
+
+                selectionRect = rectangle(ax, 'Position', [selX, selY, selW, selH], ...
+                    'FaceColor', 'none', 'EdgeColor', [1 1 1], 'LineWidth', 3, 'Clipping', 'on');
+                selectionRect.PickableParts = 'none';
             end
         end
 
