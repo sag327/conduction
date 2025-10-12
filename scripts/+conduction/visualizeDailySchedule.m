@@ -464,10 +464,11 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 lockedRect.PickableParts = 'none';
             end
 
-            % Draw white selection outline slightly larger if selected
+            % Draw white selection outline slightly larger by the lock line thickness (no overlap)
             if isSelected
-                growX = 0.03;       % expand half-width in lab units (both sides)
-                growY = 0.05;       % expand half-height in hours (both top/bottom)
+                lockLineWidthPts = 3;  % Must match locked outline width above
+                [growX, growY] = pointsToDataOffsets(ax, lockLineWidthPts);
+
                 selX = (xPosEff - barWidthEff/2) - growX;
                 selW = barWidthEff + 2*growX;
                 selY = caseStartHour - growY;
@@ -800,6 +801,37 @@ function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour,
             'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
             'FontSize', 10, 'FontWeight', 'bold', 'Color', 'red');
     end
+end
+
+function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
+    %POINTSTODATAOFFSETS Convert a line width (points) to data offsets in x/y
+    %   dxLabs in lab index units (x-axis), dyHours in hours (y-axis)
+    if nargin < 2 || isempty(points)
+        points = 1;
+    end
+    % Fallback DPI
+    dpi = 96;
+    try
+        dpi = get(0, 'ScreenPixelsPerInch');
+    catch
+    end
+    px = (points / 72) * dpi;  % points -> pixels
+
+    % Get axes pixel size
+    origUnits = ax.Units;
+    ax.Units = 'pixels';
+    pos = ax.Position;
+    ax.Units = origUnits;
+    axPixW = max(1, pos(3));
+    axPixH = max(1, pos(4));
+
+    xLim = xlim(ax);
+    yLim = ylim(ax);
+    xRange = abs(diff(xLim));
+    yRange = abs(diff(yLim));
+
+    dxLabs = (px / axPixW) * xRange;
+    dyHours = (px / axPixH) * yRange;
 end
 
 function summaryBg = chooseSummaryBackground(labelColor)
