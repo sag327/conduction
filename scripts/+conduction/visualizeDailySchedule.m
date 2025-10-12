@@ -152,6 +152,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
     addParameter(p, 'NarrowCaseId', "", @(x) isstring(x) || ischar(x));  % DRAG: case ID to draw narrowly to reveal underlying
+    addParameter(p, 'DebugShowCaseIds', false, @(x) islogical(x) || isnumeric(x));
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -555,6 +556,14 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 interactionRect.PickableParts = 'all';
             end
             attachCaseClick(interactionRect, entry, caseClickedCallback);
+
+            if isfield(opts, 'DebugShowCaseIds') && opts.DebugShowCaseIds
+                debugLabel = text(ax, xPosEff, caseStartHour + caseTotalDuration/2, char(entry.caseId), ...
+                    'Color', [0.7 0.7 0.7], 'FontSize', 7, 'HorizontalAlignment', 'center', ...
+                    'VerticalAlignment', 'middle', 'Tag', 'CaseIdDebug');
+                debugLabel.HitTest = 'off';
+                if isprop(debugLabel, 'PickableParts'), debugLabel.PickableParts = 'none'; end
+            end
         end
     end
 
@@ -683,10 +692,16 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
         if strlength(narrowId) == 0 || string(entry.caseId) ~= narrowId
             return;
         end
-        % Detect overlap within same lab and time interval
-        if isnan(setupStartHour) || isnan(turnoverEndHour)
+        % Determine entry time window (hours), robust to missing fields
+        entryStarts = [setupStartHour, entry.procStart/60];
+        entryEnds = [turnoverEndHour, entry.postEnd/60, entry.procEnd/60];
+        entryStarts = entryStarts(~isnan(entryStarts));
+        entryEnds = entryEnds(~isnan(entryEnds));
+        if isempty(entryStarts) || isempty(entryEnds)
             return;
         end
+        entryStartHour = min(entryStarts);
+        entryEndHour = max(entryEnds);
         for k = 1:numel(caseTimelines)
             other = caseTimelines(k);
             if string(other.caseId) == narrowId
@@ -695,18 +710,19 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
             if other.labIndex ~= entry.labIndex
                 continue;
             end
-            oStart = other.setupStart;
-            oEnd = other.turnoverEnd;
-            if isnan(oStart) || isnan(oEnd)
-                oStart = other.procStart; oEnd = other.postEnd;
-            end
-            if isnan(oStart) || isnan(oEnd)
+            oStarts = [other.setupStart, other.procStart];
+            oEnds = [other.turnoverEnd, other.postEnd, other.procEnd];
+            oStarts = oStarts(~isnan(oStarts));
+            oEnds = oEnds(~isnan(oEnds));
+            if isempty(oStarts) || isempty(oEnds)
                 continue;
             end
-            % Overlap if intervals intersect
-            if ~(turnoverEndHour <= (oStart/60) || setupStartHour >= (oEnd/60))
+            oStartHour = min(oStarts)/60;
+            oEndHour = max(oEnds)/60;
+            % Overlap if intervals intersect (hours)
+            if ~(entryEndHour <= oStartHour || entryStartHour >= oEndHour)
                 % Apply lateral shift to reveal underlying case
-                offset = 0.2;
+                offset = 0.3;
                 xPosEff = xPos + offset;
                 barWidthEff = max(0.5, barWidth - offset);
                 return;

@@ -184,6 +184,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AutoSaveTimer timer = timer.empty  % SAVE/LOAD: Auto-save timer object (Stage 8)
         AutoSaveMaxFiles double = 5  % SAVE/LOAD: Maximum number of auto-save files to keep (Stage 8)
         LastDraggedCaseId string = ""  % DRAG: last case moved by drag-and-drop to render narrowly when overlapped
+        DebugShowCaseIds logical = true  % DEBUG: show case IDs on schedule for diagnostics
     end
 
     properties (Access = private)

@@ -100,7 +100,8 @@ classdef ScheduleRenderer < handle
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
-                'NarrowCaseId', char(app.LastDraggedCaseId));
+                'NarrowCaseId', char(app.LastDraggedCaseId), ...
+                'DebugShowCaseIds', app.DebugShowCaseIds);
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
@@ -932,67 +933,146 @@ classdef ScheduleRenderer < handle
             end
 
             assignments = app.OptimizedSchedule.labAssignments();
+            originalAssignments = assignments;
             labs = app.OptimizedSchedule.Labs;
             metrics = app.OptimizedSchedule.metrics();
 
-            found = false;
+            beforeGlobalIds = obj.collectCaseIds(assignments);
+
+            sourceLabIdx = NaN;
+            movedCase = struct();
+            beforeSourceIds = string.empty(0,1);
+            beforeTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
+
             for labIdx = 1:numel(assignments)
-                cases = assignments{labIdx};
-                if isempty(cases)
+                casesArr = assignments{labIdx};
+                if isempty(casesArr)
                     continue;
                 end
-                for caseIdx = 1:numel(cases)
-                    caseStruct = cases(caseIdx);
-                    existingCaseId = string(obj.getFieldValue(caseStruct, 'caseID', ""));
-                    if strlength(existingCaseId) == 0
-                        existingCaseId = string(obj.getFieldValue(caseStruct, 'caseId', ""));
+                ids = obj.collectCaseIds(casesArr);
+                matchMask = (ids == caseId);
+                if any(matchMask)
+                    sourceLabIdx = labIdx;
+                    beforeSourceIds = ids;
+                    movedCase = casesArr(find(matchMask, 1, 'first'));
+
+                    originalStart = obj.getCaseStartMinutes(movedCase);
+                    if isnan(originalStart)
+                        originalStart = newSetupStartMinutes;
                     end
-                    if existingCaseId == caseId
-                        found = true;
-                        originalStart = obj.getFieldValue(caseStruct, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'}, obj.getFieldValue(caseStruct, 'procStartTime', NaN));
-                        if isnan(originalStart)
-                            originalStart = newSetupStartMinutes;
-                        end
-                        deltaMinutes = newSetupStartMinutes - originalStart;
-                        caseStruct = obj.shiftCaseTimes(caseStruct, deltaMinutes);
-                        if isfield(caseStruct, 'lab')
-                            caseStruct.lab = targetLabIndex;
-                        end
-                        if isfield(caseStruct, 'labIndex')
-                            caseStruct.labIndex = targetLabIndex;
-                        end
-
-                        cases(caseIdx) = [];
-                        assignments{labIdx} = cases;
-
-                        targetCases = assignments{targetLabIndex};
-                        targetCases(end+1, 1) = caseStruct; %#ok<AGROW>
-                        startTimes = arrayfun(@(s) obj.getFieldValue(s, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime', 'procStartTime'}, NaN), targetCases);
-                        [~, order] = sort(startTimes, 'ascend', 'MissingPlacement', 'last');
-                        assignments{targetLabIndex} = targetCases(order);
-
-                        scheduleWasUpdated = true;
-                        break;
+                    deltaMinutes = newSetupStartMinutes - originalStart;
+                    if isnan(deltaMinutes)
+                        deltaMinutes = 0;
                     end
-                end
-                if found
+                    movedCase = obj.shiftCaseTimes(movedCase, deltaMinutes);
+                    if isfield(movedCase, 'lab'), movedCase.lab = targetLabIndex; end
+                    if isfield(movedCase, 'labIndex'), movedCase.labIndex = targetLabIndex; end
+
+                    casesArr(matchMask) = [];
+                    assignments{labIdx} = casesArr;
                     break;
                 end
             end
 
-            if ~found
+            if isnan(sourceLabIdx) || isempty(movedCase)
                 warning('ScheduleRenderer:CaseMoveFailed', 'Failed to locate case %s for drag operation.', caseId);
                 return;
             end
 
-            newSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
-            app.OptimizedSchedule = newSchedule;
+            targetCases = assignments{targetLabIndex};
+            targetCases(end+1, 1) = movedCase; %#ok<AGROW>
+            startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
+            startTimes(~isfinite(startTimes)) = inf;
+            [~, order] = sort(startTimes, 'ascend');
+            targetCases = targetCases(order);
+            assignments{targetLabIndex} = targetCases;
+
+            afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
+            afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
+            afterGlobalIds = obj.collectCaseIds(assignments);
+
+            if obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds)
+                warning('ScheduleRenderer:CaseMoveReverted', 'Move for case %s reverted due to integrity check failure.', caseId);
+                app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, originalAssignments, metrics);
+                scheduleWasUpdated = false;
+                return;
+            end
+
+            scheduleWasUpdated = true;
+            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.LastDraggedCaseId = caseId;
 
             if ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1, 1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
+        end
+
+        function ids = collectCaseIds(obj, data)
+            %COLLECTCASEIDS Helper to collect case IDs from arrays or cell arrays
+            if isempty(data)
+                ids = string.empty(0,1);
+                return;
+            end
+
+            if iscell(data)
+                ids = string.empty(0,1);
+                for i = 1:numel(data)
+                    ids = [ids; obj.collectCaseIds(data{i})]; %#ok<AGROW>
+                end
+                return;
+            end
+
+            data = data(:);
+            ids = arrayfun(@(s) string(obj.getFieldValue(s, {'caseID','caseId'}, "")), data, 'UniformOutput', true);
+        end
+
+        function anomaly = debugHasAnomalies(obj, beforeGlobalIds, afterGlobalIds, movedId, sourceLabIdx, targetLabIdx, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds)
+            anomaly = false;
+
+            missing = setdiff(beforeGlobalIds, afterGlobalIds, 'stable');
+            extra = setdiff(afterGlobalIds, beforeGlobalIds, 'stable');
+            dupIds = obj.findDuplicates(afterGlobalIds);
+
+            if isempty(missing) && isempty(extra) && isempty(dupIds)
+                return;
+            end
+
+            anomaly = true;
+            fprintf('\n[CaseDrag][WARN] Integrity check failed for move of %s\n', movedId);
+            if ~isempty(missing)
+                fprintf('  Missing IDs: %s\n', strjoin(missing, ', '));
+            end
+            if ~isempty(extra)
+                fprintf('  Extra IDs: %s\n', strjoin(extra, ', '));
+            end
+            if ~isempty(dupIds)
+                fprintf('  Duplicate IDs: %s\n', strjoin(dupIds, ', '));
+            end
+
+            obj.logLabCaseIds('Source (before)', sourceLabIdx, beforeSourceIds);
+            obj.logLabCaseIds('Source (after)', sourceLabIdx, afterSourceIds);
+            obj.logLabCaseIds('Target (before)', targetLabIdx, beforeTargetIds);
+            obj.logLabCaseIds('Target (after)', targetLabIdx, afterTargetIds);
+        end
+
+        function logLabCaseIds(~, label, labIdx, ids)
+            if isempty(ids)
+                idsStr = '(none)';
+            else
+                idsStr = strjoin(ids, ', ');
+            end
+            fprintf('  %s Lab %d: %s\n', label, labIdx, idsStr);
+        end
+
+        function dupIds = findDuplicates(~, ids)
+            if isempty(ids)
+                dupIds = string.empty(0,1);
+                return;
+            end
+            [uniqueIds, ~, idx] = unique(ids, 'stable');
+            counts = accumarray(idx, 1);
+            dupIds = uniqueIds(counts > 1);
         end
 
         function tf = isCaseBlockDraggable(~, app, caseId)
@@ -1154,6 +1234,30 @@ classdef ScheduleRenderer < handle
                 value = structOrObj.(fieldName);
             else
                 value = defaultValue;
+            end
+        end
+
+        function minutes = getCaseStartMinutes(caseStruct)
+            %GETCASESTARTMINUTES Robust extraction of a case's start-time minutes
+            minutes = NaN;
+            try
+                candidates = {'startTime','setupStartTime','scheduleStartTime','caseStartTime','procStartTime'};
+                for i = 1:numel(candidates)
+                    fn = candidates{i};
+                    if isstruct(caseStruct) && isfield(caseStruct, fn)
+                        val = caseStruct.(fn);
+                    elseif isobject(caseStruct) && isprop(caseStruct, fn)
+                        val = caseStruct.(fn);
+                    else
+                        val = [];
+                    end
+                    if ~isempty(val) && isnumeric(val) && ~all(isnan(val(:)))
+                        minutes = double(val(1));
+                        return;
+                    end
+                end
+            catch
+                minutes = NaN;
             end
         end
 
