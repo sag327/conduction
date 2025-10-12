@@ -211,12 +211,8 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            % Select case immediately for visual feedback
-            try
-                app.onScheduleBlockClicked(caseId);
-            catch
-                % Ignore selection errors during drag setup
-            end
+            % Do NOT re-render during mousedown; it would destroy the overlay and cancel drag
+            % If needed, we can soft-select without redraw later
 
             drag.rectHandle = rectHandle;
             drag.caseId = caseId;
