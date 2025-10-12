@@ -96,7 +96,7 @@ classdef ScheduleRenderer < handle
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
                 'BackgroundClickedFcn', @() app.onScheduleBackgroundClicked(), ...
                 'LockedCaseIds', app.LockedCaseIds, ...
-                'SelectedCaseId', app.SelectedCaseId, ...
+                'SelectedCaseId', "", ...
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
@@ -184,6 +184,7 @@ classdef ScheduleRenderer < handle
                     fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
                 end
                 if ~isempty(app.CaseDragController)
+                    app.CaseDragController.hideSelectionOverlay(false);
                     app.CaseDragController.clearRegistry();
                 end
                 if app.DebugShowCaseIds
@@ -269,6 +270,7 @@ classdef ScheduleRenderer < handle
             end
 
             if ~isempty(dragController)
+                dragController.hideSelectionOverlay(false);
                 dragController.showSoftHighlight(app.ScheduleAxes, rectHandle);
             end
 

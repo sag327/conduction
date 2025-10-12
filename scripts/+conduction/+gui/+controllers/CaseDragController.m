@@ -27,6 +27,13 @@ classdef CaseDragController < handle
         SoftHighlightLineWidth double = 2.5
         SoftHighlightLastPosition double = [NaN NaN NaN NaN]
         DebugTiming logical = false
+
+        SelectionRect = gobjects(0, 1)
+        SelectionAxes = gobjects(0, 1)
+        SelectionColor double = [1 1 1]
+        SelectionLineWidth double = 3
+        SelectionLastPosition double = [NaN NaN NaN NaN]
+        SelectionCaseId string = ""
     end
 
     methods
@@ -88,11 +95,16 @@ classdef CaseDragController < handle
             obj.UserDataCells = userDataCells;
             obj.HandleIndex = obj.buildHandleIndex(rectHandles);
             obj.LastRegistryUpdate = datetime('now');
+
+            if strlength(obj.SelectionCaseId) > 0
+                obj.showSelectionOverlay(obj.SelectionCaseId);
+            end
         end
 
         function clearRegistry(obj)
             %CLEARREGISTRY Remove all tracked case block metadata.
             obj.hideSoftHighlight();
+            obj.hideSelectionOverlay(false);
             obj.CaseIds = string.empty(0, 1);
             obj.RectHandles = gobjects(0, 1);
             obj.UserDataCells = cell(0, 1);
@@ -199,6 +211,86 @@ classdef CaseDragController < handle
             catch
                 % drawnow may be unsupported in select contexts; ignore
             end
+        end
+
+        function hideSelectionOverlay(obj, clearCaseId)
+            %HIDESELECTIONOVERLAY Remove persistent selection overlay.
+            if nargin < 2
+                clearCaseId = false;
+            end
+            if ~isempty(obj.SelectionRect) && isgraphics(obj.SelectionRect)
+                delete(obj.SelectionRect);
+            end
+            obj.SelectionRect = gobjects(0, 1);
+            obj.SelectionAxes = gobjects(0, 1);
+            obj.SelectionLastPosition = [NaN NaN NaN NaN];
+            if clearCaseId
+                obj.SelectionCaseId = "";
+            end
+        end
+
+        function success = showSelectionOverlay(obj, caseId)
+            %SHOWSELECTIONOVERLAY Draw persistent selection outline without full redraw.
+            success = false;
+            if nargin < 2
+                caseId = obj.SelectionCaseId;
+            end
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                obj.hideSelectionOverlay(true);
+                return;
+            end
+
+            obj.SelectionCaseId = caseId;
+            [entry, ~] = obj.findCaseById(caseId);
+            if isempty(entry) || ~isfield(entry, 'rectHandle') || ~isgraphics(entry.rectHandle)
+                obj.hideSelectionOverlay(false);
+                return;
+            end
+
+            rectHandle = entry.rectHandle;
+            axesHandle = ancestor(rectHandle, 'axes');
+            if isempty(axesHandle) || ~isgraphics(axesHandle)
+                obj.hideSelectionOverlay(false);
+                return;
+            end
+
+            pos = get(rectHandle, 'Position');
+            if numel(pos) ~= 4 || any(~isfinite(pos))
+                return;
+            end
+
+            if isempty(obj.SelectionRect) || ~isgraphics(obj.SelectionRect)
+                obj.SelectionRect = rectangle(axesHandle, ...
+                    'Position', pos, ...
+                    'EdgeColor', obj.SelectionColor, ...
+                    'LineWidth', obj.SelectionLineWidth, ...
+                    'FaceColor', 'none', ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'Clipping', 'on', ...
+                    'Tag', 'CaseSelectionOverlay');
+            else
+                if obj.SelectionRect.Parent ~= axesHandle
+                    set(obj.SelectionRect, 'Parent', axesHandle);
+                end
+                set(obj.SelectionRect, 'Position', pos, 'Visible', 'on');
+            end
+
+            obj.SelectionAxes = axesHandle;
+            obj.SelectionLastPosition = pos;
+            try
+                uistack(obj.SelectionRect, 'top');
+            catch
+                % ignore stacking issues
+            end
+            try
+                drawnow limitrate nocallbacks;
+            catch
+                % ignore draw timing errors
+            end
+            success = true;
         end
 
         function hideSoftHighlight(obj)

@@ -600,8 +600,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CasesTable.Selection = caseIndex;
             end
 
-            % Re-render schedule to show selection
-            if ~isempty(app.OptimizedSchedule)
+            % Update selection overlay without forcing a full redraw
+            overlayApplied = false;
+            if ~isempty(app.CaseDragController)
+                overlayApplied = app.CaseDragController.showSelectionOverlay(caseId);
+            end
+
+            % Fallback for scenarios where overlay could not be drawn
+            if ~overlayApplied && ~isempty(app.OptimizedSchedule)
                 conduction.gui.app.redrawSchedule(app);
             end
 
@@ -628,8 +634,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Clear table selection
                 app.CasesTable.Selection = [];
 
-                % Re-render schedule to clear selection highlight
-                if ~isempty(app.OptimizedSchedule)
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.hideSelectionOverlay(true);
+                elseif ~isempty(app.OptimizedSchedule)
                     conduction.gui.app.redrawSchedule(app);
                 end
             end
@@ -678,9 +685,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            % Re-render schedule to show/clear selection highlight
-            if ~isempty(app.OptimizedSchedule)
-                conduction.gui.app.redrawSchedule(app);
+            if strlength(app.SelectedCaseId) > 0
+                overlayApplied = false;
+                if ~isempty(app.CaseDragController)
+                    overlayApplied = app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
+                end
+                if ~overlayApplied && ~isempty(app.OptimizedSchedule)
+                    conduction.gui.app.redrawSchedule(app);
+                end
+            else
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.hideSelectionOverlay(true);
+                elseif ~isempty(app.OptimizedSchedule)
+                    conduction.gui.app.redrawSchedule(app);
+                end
             end
 
             % Update drawer if it's open
