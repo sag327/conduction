@@ -137,6 +137,12 @@ classdef CaseDragController < handle
                 return;
             end
 
+            % Expand soft highlight outward by the lock line thickness so it never
+            % overlaps a red locked outline when both are present.
+            lockLinePts = 3;  % match lock outline width
+            [growX, growY] = obj.pointsToDataOffsets(axesHandle, lockLinePts);
+            posDraw = [pos(1)-growX, pos(2)-growY, pos(3)+2*growX, pos(4)+2*growY];
+
             ticOverall = [];
             if obj.debugTimingEnabled()
                 ticOverall = tic;
@@ -145,7 +151,7 @@ classdef CaseDragController < handle
 
             if isempty(obj.SoftHighlightRect) || ~isgraphics(obj.SoftHighlightRect)
                 obj.SoftHighlightRect = rectangle(axesHandle, ...
-                    'Position', pos, ...
+                    'Position', posDraw, ...
                     'EdgeColor', obj.SoftHighlightColor, ...
                     'LineWidth', obj.SoftHighlightLineWidth, ...
                     'FaceColor', 'none', ...
@@ -160,11 +166,11 @@ classdef CaseDragController < handle
                 if obj.SoftHighlightRect.Parent ~= axesHandle
                     set(obj.SoftHighlightRect, 'Parent', axesHandle);
                 end
-                set(obj.SoftHighlightRect, 'Position', pos, 'Visible', 'on');
+                set(obj.SoftHighlightRect, 'Position', posDraw, 'Visible', 'on');
             end
 
             obj.SoftHighlightAxes = axesHandle;
-            obj.SoftHighlightLastPosition = pos;
+            obj.SoftHighlightLastPosition = posDraw;
             try
                 uistack(obj.SoftHighlightRect, 'top');
             catch
