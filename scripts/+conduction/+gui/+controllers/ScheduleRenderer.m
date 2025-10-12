@@ -944,11 +944,13 @@ classdef ScheduleRenderer < handle
             beforeSourceIds = string.empty(0,1);
             beforeTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
 
+            newAssignments = assignments;
             for labIdx = 1:numel(assignments)
                 casesArr = assignments{labIdx};
                 if isempty(casesArr)
                     continue;
                 end
+                casesArr = casesArr(:);
                 ids = obj.collectCaseIds(casesArr);
                 matchMask = (ids == caseId);
                 if any(matchMask)
@@ -969,7 +971,7 @@ classdef ScheduleRenderer < handle
                     if isfield(movedCase, 'labIndex'), movedCase.labIndex = targetLabIndex; end
 
                     casesArr(matchMask) = [];
-                    assignments{labIdx} = casesArr;
+                    newAssignments{labIdx} = casesArr;
                     break;
                 end
             end
@@ -979,13 +981,19 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            targetCases = assignments{targetLabIndex};
-            targetCases(end+1, 1) = movedCase; %#ok<AGROW>
+            targetCases = newAssignments{targetLabIndex};
             startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
             startTimes(~isfinite(startTimes)) = inf;
-            [~, order] = sort(startTimes, 'ascend');
-            targetCases = targetCases(order);
-            assignments{targetLabIndex} = targetCases;
+
+            insertPos = find(startTimes > newSetupStartMinutes, 1, 'first');
+            if isempty(insertPos)
+                targetCases = [targetCases; movedCase];
+            else
+                targetCases = [targetCases(1:insertPos-1); movedCase; targetCases(insertPos:end)];
+            end
+
+            newAssignments{targetLabIndex} = targetCases;
+            assignments = newAssignments;
 
             afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
             afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
