@@ -92,6 +92,13 @@ classdef OptimizationController < handle
 
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
 
+                % DUAL-ID: Re-annotate caseNumber on schedule cases using persistent CaseIds
+                try
+                    dailySchedule = app.OptimizationController.annotateCaseNumbersOnSchedule(app, dailySchedule);
+                catch
+                    % Non-fatal: proceed without annotation if anything goes wrong
+                end
+
                 app.OptimizedSchedule = dailySchedule;
                 app.OptimizationOutcome = outcome;
                 app.IsOptimizationDirty = false;
@@ -105,6 +112,11 @@ classdef OptimizationController < handle
                         scheduleForRender = dailySchedule;
                     else
                         simulated = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
+                        % Ensure simulated schedule retains caseNumber annotations
+                        try
+                            simulated = app.OptimizationController.annotateCaseNumbersOnSchedule(app, simulated);
+                        catch
+                        end
                         app.SimulatedSchedule = simulated;
                         scheduleForRender = simulated;
                     end
@@ -941,5 +953,42 @@ classdef OptimizationController < handle
             dailySchedule = conduction.DailySchedule(dailySchedule.Date, dailySchedule.Labs, labAssignments, dailySchedule.metrics());
         end
 
+        function dailySchedule = annotateCaseNumbersOnSchedule(~, app, dailySchedule)
+            %ANNOTATECASENUMBERSONSCHEDULE Ensure schedule cases include persistent caseNumber for labels
+            if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
+                return;
+            end
+
+            labAssignments = dailySchedule.labAssignments();
+            changed = false;
+            for labIdx = 1:numel(labAssignments)
+                cases = labAssignments{labIdx};
+                if isempty(cases)
+                    continue;
+                end
+                cases = cases(:);
+                for cIdx = 1:numel(cases)
+                    if ~isfield(cases(cIdx), 'caseNumber') || isempty(cases(cIdx).caseNumber) || ~isscalar(cases(cIdx).caseNumber)
+                        cid = "";
+                        if isfield(cases(cIdx), 'caseID')
+                            cid = string(cases(cIdx).caseID);
+                        elseif isfield(cases(cIdx), 'caseId')
+                            cid = string(cases(cIdx).caseId);
+                        end
+                        if strlength(cid) > 0
+                            [caseObj, ~] = app.CaseManager.findCaseById(cid);
+                            if ~isempty(caseObj) && ~isnan(caseObj.CaseNumber)
+                                cases(cIdx).caseNumber = caseObj.CaseNumber;
+                                changed = true;
+                            end
+                        end
+                    end
+                end
+                labAssignments{labIdx} = cases;
+            end
+            if changed
+                dailySchedule = conduction.DailySchedule(dailySchedule.Date, dailySchedule.Labs, labAssignments, dailySchedule.metrics());
+            end
+        end
     end
 end
