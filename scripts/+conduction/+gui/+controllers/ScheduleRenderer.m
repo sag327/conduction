@@ -103,6 +103,13 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
+            % Debug: report overlays post-render
+            try
+                cbs = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
+                fprintf('[CaseDrag] Post-render, CaseBlock overlays: %d\n', numel(cbs));
+            catch
+            end
+
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
             app.AnalyticsRenderer.updateKPIBar(app, dailySchedule);
@@ -120,6 +127,9 @@ classdef ScheduleRenderer < handle
                 app.AnalyticsRenderer.drawFlipMetrics(app, app.FlipAxes);
                 app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
             end
+
+            % Bind drag after everything is drawn
+            obj.enableCaseDrag(app);
         end
 
         % REALTIME-SCHEDULING: NOW Line Drag Functionality
@@ -170,15 +180,20 @@ classdef ScheduleRenderer < handle
 
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
             if isempty(caseBlocks)
+                fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
+                try, obj.updateCaseDragDebugLabel(app, 'CaseDrag: 0 overlays'); catch, end
                 return;
             end
 
+            fprintf('[CaseDrag] Binding drag to %d CaseBlock overlays.\n', numel(caseBlocks));
+            try, obj.updateCaseDragDebugLabel(app, sprintf('CaseDrag: %d overlays', numel(caseBlocks))); catch, end
             for idx = 1:numel(caseBlocks)
                 blockHandle = caseBlocks(idx);
                 if ~isgraphics(blockHandle)
                     continue;
                 end
                 set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
+                try, uistack(blockHandle, 'top'); catch, end
             end
         end
 
@@ -187,7 +202,16 @@ classdef ScheduleRenderer < handle
             if ~isgraphics(rectHandle)
                 return;
             end
-
+            try
+                ud = get(rectHandle, 'UserData');
+                if isstruct(ud) && isfield(ud, 'caseId')
+                    fprintf('[CaseDrag] MouseDown on caseId=%s\n', string(ud.caseId));
+                else
+                    fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
+                end
+            catch
+                fprintf('[CaseDrag] MouseDown: unable to read UserData.\n');
+            end
             obj.startDragCase(app, rectHandle);
         end
 
@@ -202,11 +226,13 @@ classdef ScheduleRenderer < handle
             caseId = string(ud.caseId);
 
             if app.IsOptimizationRunning || app.IsTimeControlActive
+                fprintf('[CaseDrag] Drag blocked (OptimizationRunning=%d, TimeControlActive=%d).\n', app.IsOptimizationRunning, app.IsTimeControlActive);
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
 
             if ~obj.isCaseBlockDraggable(app, caseId)
+                fprintf('[CaseDrag] Case %s is not draggable (status not pending).\n', caseId);
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
@@ -257,6 +283,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.Pointer = 'hand';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
             app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endDragCase(app);
+            fprintf('[CaseDrag] Drag started for caseId=%s (origLab=%d, origStart=%g).\n', caseId, drag.originalLabIndex, drag.originalSetupStart);
         end
 
         function updateDragCase(obj, app)
@@ -326,6 +353,7 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
+                fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
                 return;
             end
 
@@ -339,6 +367,7 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.showCaseDragWarning(app, 'Selected lab is not available.');
+                fprintf('[CaseDrag] Drop refused: lab %d not available.\n', targetLabId);
                 return;
             end
 
@@ -354,15 +383,45 @@ classdef ScheduleRenderer < handle
                 app.OptimizationController.markOptimizationDirty(app);
                 app.markDirty();
                 app.updateCasesTable();
+                fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
             else
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 if isprop(drag.rectHandle, 'FaceAlpha')
                     drag.rectHandle.FaceAlpha = 0;
                 end
+                fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
             end
 
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
                 drag.rectHandle.FaceAlpha = 0;
+            end
+        end
+
+        function updateCaseDragDebugLabel(~, app, textValue)
+            try
+                ax = app.ScheduleAxes;
+                if isempty(ax) || ~isvalid(ax)
+                    return;
+                end
+                existing = findobj(ax, 'Tag', 'CaseDragDebug');
+                xLimits = xlim(ax); yLimits = ylim(ax);
+                posX = xLimits(2) - 0.1; posY = yLimits(2) - 0.2;
+                if isempty(existing)
+                    t = text(ax, posX, posY, textValue, 'Tag', 'CaseDragDebug');
+                    t.HorizontalAlignment = 'right';
+                    t.VerticalAlignment = 'top';
+                    t.FontSize = 8;
+                    t.Color = [0.8 0.8 0.8];
+                    t.BackgroundColor = [0.2 0.2 0.2];
+                    t.Margin = 3;
+                    t.HitTest = 'off';
+                    if isprop(t, 'PickableParts'), t.PickableParts = 'none'; end
+                else
+                    existing.String = textValue;
+                    existing.Position(1:2) = [posX, posY];
+                end
+            catch
+                % swallow debug errors
             end
         end
 
@@ -1065,6 +1124,27 @@ classdef ScheduleRenderer < handle
 
         function value = getFieldValue(structOrObj, fieldName, defaultValue)
             %GETFIELDVALUE Safely extract field value from struct or object
+            %   Accepts a single field name (char/string) or a cell array of
+            %   candidate names (first match wins).
+            if nargin < 3
+                defaultValue = [];
+            end
+
+            % If a list of candidate names is provided, return first match
+            if iscell(fieldName)
+                for i = 1:numel(fieldName)
+                    candidate = fieldName{i};
+                    val = conduction.gui.controllers.ScheduleRenderer.getFieldValue(structOrObj, candidate, NaN);
+                    if ~(isnumeric(val) && isnan(val)) && ~isempty(val)
+                        value = val;
+                        return;
+                    end
+                end
+                value = defaultValue;
+                return;
+            end
+
+            % Single field path
             if isstruct(structOrObj) && isfield(structOrObj, fieldName)
                 value = structOrObj.(fieldName);
             elseif isobject(structOrObj) && isprop(structOrObj, fieldName)
