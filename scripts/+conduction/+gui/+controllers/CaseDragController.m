@@ -261,9 +261,14 @@ classdef CaseDragController < handle
                 return;
             end
 
+            % Expand selection rectangle outward by lock line thickness to avoid overlap
+            lockLinePts = 3;  % Must match lock outline in visualizeDailySchedule
+            [growX, growY] = obj.pointsToDataOffsets(axesHandle, lockLinePts);
+            selPos = [pos(1)-growX, pos(2)-growY, pos(3)+2*growX, pos(4)+2*growY];
+
             if isempty(obj.SelectionRect) || ~isgraphics(obj.SelectionRect)
                 obj.SelectionRect = rectangle(axesHandle, ...
-                    'Position', pos, ...
+                    'Position', selPos, ...
                     'EdgeColor', obj.SelectionColor, ...
                     'LineWidth', obj.SelectionLineWidth, ...
                     'FaceColor', 'none', ...
@@ -275,11 +280,11 @@ classdef CaseDragController < handle
                 if obj.SelectionRect.Parent ~= axesHandle
                     set(obj.SelectionRect, 'Parent', axesHandle);
                 end
-                set(obj.SelectionRect, 'Position', pos, 'Visible', 'on');
+                set(obj.SelectionRect, 'Position', selPos, 'Visible', 'on');
             end
 
             obj.SelectionAxes = axesHandle;
-            obj.SelectionLastPosition = pos;
+            obj.SelectionLastPosition = selPos;
             try
                 uistack(obj.SelectionRect, 'top');
             catch
@@ -433,6 +438,32 @@ classdef CaseDragController < handle
     end
 
     methods (Access = private)
+        function [dxLabs, dyHours] = pointsToDataOffsets(~, ax, points)
+            if nargin < 3 || isempty(points)
+                points = 1;
+            end
+            % Points to pixels
+            dpi = 96;
+            try
+                dpi = get(0, 'ScreenPixelsPerInch');
+            catch
+            end
+            px = (points / 72) * dpi;
+
+            % Axes pixel size
+            origUnits = ax.Units;
+            ax.Units = 'pixels';
+            pos = ax.Position;
+            ax.Units = origUnits;
+            axPixW = max(1, pos(3));
+            axPixH = max(1, pos(4));
+
+            xLim = xlim(ax); yLim = ylim(ax);
+            xRange = abs(diff(xLim)); yRange = abs(diff(yLim));
+
+            dxLabs = (px / axPixW) * xRange;
+            dyHours = (px / axPixH) * yRange;
+        end
         function entry = buildEntry(obj, idx)
             entry = struct( ...
                 'caseId', obj.CaseIds(idx), ...
