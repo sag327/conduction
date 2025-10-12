@@ -179,6 +179,9 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
                 end
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.clearRegistry();
+                end
                 if app.DebugShowCaseIds
                     try, obj.updateCaseDragDebugLabel(app, 'CaseDrag: 0 overlays'); catch, end
                 end
@@ -190,6 +193,10 @@ classdef ScheduleRenderer < handle
             end
             if app.DebugShowCaseIds
                 try, obj.updateCaseDragDebugLabel(app, sprintf('CaseDrag: %d overlays', numel(caseBlocks))); catch, end
+            end
+
+            if ~isempty(app.CaseDragController)
+                app.CaseDragController.registerCaseBlocks(app, caseBlocks);
             end
             for idx = 1:numel(caseBlocks)
                 blockHandle = caseBlocks(idx);
@@ -206,32 +213,52 @@ classdef ScheduleRenderer < handle
             if ~isgraphics(rectHandle)
                 return;
             end
-            try
-                ud = get(rectHandle, 'UserData');
-                if app.DebugShowCaseIds
-                    if isstruct(ud) && isfield(ud, 'caseId')
-                        fprintf('[CaseDrag] MouseDown on caseId=%s\n', string(ud.caseId));
-                    else
-                        fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
-                    end
-                end
-            catch
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] MouseDown: unable to read UserData.\n');
+            caseEntry = struct();
+            if ~isempty(app.CaseDragController)
+                [resolvedEntry, ~] = app.CaseDragController.findCaseByHandle(rectHandle);
+                if ~isempty(resolvedEntry)
+                    caseEntry = resolvedEntry;
                 end
             end
-            obj.startDragCase(app, rectHandle);
+            obj.startDragCase(app, rectHandle, caseEntry);
         end
 
-        function startDragCase(obj, app, rectHandle)
+        function startDragCase(obj, app, rectHandle, caseEntry)
             %STARTDRAGCASE Begin dragging a case overlay
-            ud = get(rectHandle, 'UserData');
-            if ~isstruct(ud) || ~isfield(ud, 'caseId')
+            if nargin < 4
+                caseEntry = struct();
+            end
+
+            ud = struct();
+            caseId = "";
+
+            if ~isempty(caseEntry)
+                if isfield(caseEntry, 'userData') && isstruct(caseEntry.userData)
+                    ud = caseEntry.userData;
+                end
+                if isfield(caseEntry, 'caseId')
+                    caseId = string(caseEntry.caseId);
+                end
+            end
+
+            if isempty(fieldnames(ud))
+                ud = get(rectHandle, 'UserData');
+            end
+            if strlength(caseId) == 0 && isstruct(ud) && isfield(ud, 'caseId')
+                caseId = string(ud.caseId);
+            end
+
+            if ~isstruct(ud) || ~isfield(ud, 'caseId') || strlength(caseId) == 0
+                if app.DebugShowCaseIds
+                    fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
+                end
                 obj.invokeCaseBlockClick(app, rectHandle);
                 return;
             end
 
-            caseId = string(ud.caseId);
+            if app.DebugShowCaseIds
+                fprintf('[CaseDrag] MouseDown on caseId=%s\n', caseId);
+            end
 
             if app.IsOptimizationRunning || app.IsTimeControlActive
                 if app.DebugShowCaseIds
@@ -250,15 +277,14 @@ classdef ScheduleRenderer < handle
             end
 
             % Do NOT re-render during mousedown; it would destroy the overlay and cancel drag
-            % If needed, we can soft-select without redraw later
 
             drag.rectHandle = rectHandle;
             drag.caseId = caseId;
-            drag.originalLabIndex = double(ud.labIndex);
+            drag.originalLabIndex = double(obj.extractField(ud, 'labIndex', NaN));
 
-            originalSetupStart = ud.setupStart;
-            if isnan(originalSetupStart) && isfield(ud, 'procStart')
-                originalSetupStart = ud.procStart;
+            originalSetupStart = obj.extractField(ud, 'setupStart', NaN);
+            if isnan(originalSetupStart)
+                originalSetupStart = obj.extractField(ud, 'procStart', NaN);
             end
             if isnan(originalSetupStart)
                 originalSetupStart = 0;
@@ -272,25 +298,22 @@ classdef ScheduleRenderer < handle
             drag.originalPosition = rectHandle.Position;
             drag.snapMinutes = 5;
             drag.hasMoved = false;
-            drag.caseClickedFcn = [];
-            if isfield(ud, 'caseClickedFcn')
-                drag.caseClickedFcn = ud.caseClickedFcn;
-            end
+            drag.caseClickedFcn = obj.extractField(ud, 'caseClickedFcn', []);
             drag.availableLabIds = app.AvailableLabIds;
-
-            currentPoint = get(app.ScheduleAxes, 'CurrentPoint');
-            drag.startPoint = currentPoint(1, 1:2);
+            drag.startPoint = get(app.ScheduleAxes, 'CurrentPoint');
+            if ~isempty(drag.startPoint)
+                drag.startPoint = drag.startPoint(1, 1:2);
+            else
+                drag.startPoint = [NaN, NaN];
+            end
 
             if isprop(rectHandle, 'FaceAlpha') && rectHandle.FaceAlpha == 0
                 rectHandle.FaceAlpha = 0.1;
             end
 
-            userData = app.UIFigure.UserData;
-            if ~isstruct(userData)
-                userData = struct();
+            if ~isempty(app.CaseDragController)
+                app.CaseDragController.setActiveDrag(drag);
             end
-            userData.dragCase = drag;
-            app.UIFigure.UserData = userData;
 
             app.UIFigure.Pointer = 'hand';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
@@ -299,12 +322,17 @@ classdef ScheduleRenderer < handle
 
         function updateDragCase(obj, app)
             %UPDATEDRAGCASE Update overlay during drag motion
-            if ~isstruct(app.UIFigure.UserData) || ~isfield(app.UIFigure.UserData, 'dragCase')
+            dragController = app.CaseDragController;
+            if isempty(dragController) || ~dragController.hasActiveDrag()
                 return;
             end
 
-            drag = app.UIFigure.UserData.dragCase;
-            if isempty(drag) || ~isgraphics(drag.rectHandle)
+            drag = dragController.getActiveDrag();
+            if isempty(drag) || ~isfield(drag, 'rectHandle') || ~isgraphics(drag.rectHandle)
+                return;
+            end
+
+            if dragController.shouldThrottleMotion()
                 return;
             end
 
@@ -335,24 +363,23 @@ classdef ScheduleRenderer < handle
             drag.targetLabIndex = newLabIndex;
             drag.targetStartMinutes = newStartMinutes;
 
-            app.UIFigure.UserData.dragCase = drag;
+            dragController.setActiveDrag(drag);
+            dragController.markMotionUpdate();
         end
 
         function endDragCase(obj, app)
             %ENDDRAGCASE Finalize drag operation
-            if ~isstruct(app.UIFigure.UserData) || ~isfield(app.UIFigure.UserData, 'dragCase')
+            dragController = app.CaseDragController;
+            if isempty(dragController) || ~dragController.hasActiveDrag()
                 return;
             end
 
-            drag = app.UIFigure.UserData.dragCase;
+            drag = dragController.getActiveDrag();
 
             app.UIFigure.WindowButtonMotionFcn = [];
             app.UIFigure.WindowButtonUpFcn = [];
             app.UIFigure.Pointer = 'arrow';
-
-            userData = app.UIFigure.UserData;
-            userData = rmfield(userData, 'dragCase');
-            app.UIFigure.UserData = userData;
+            dragController.clearActiveDrag();
 
             if ~isgraphics(drag.rectHandle)
                 return;
@@ -1269,6 +1296,16 @@ classdef ScheduleRenderer < handle
                 return;
             end
             uialert(app.UIFigure, message, 'Case Drag', 'Icon', 'warning');
+        end
+
+        function value = extractField(~, source, fieldName, defaultValue)
+            if nargin < 4
+                defaultValue = [];
+            end
+            value = defaultValue;
+            if isstruct(source) && isfield(source, fieldName)
+                value = source.(fieldName);
+            end
         end
     end
 

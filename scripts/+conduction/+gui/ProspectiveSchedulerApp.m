@@ -147,6 +147,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DurationSelector conduction.gui.controllers.DurationSelector
         TestingModeController conduction.gui.controllers.TestingModeController
         CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
+        CaseDragController conduction.gui.controllers.CaseDragController
 
         TargetDate datetime
         IsCustomOperatorSelected logical = false
@@ -543,6 +544,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
             app.CaseStatusController = conduction.gui.controllers.CaseStatusController();  % REALTIME-SCHEDULING
+            app.CaseDragController = conduction.gui.controllers.CaseDragController();
 
             % Initialize app state
             app.TargetDate = targetDate;
