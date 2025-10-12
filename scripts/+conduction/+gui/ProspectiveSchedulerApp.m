@@ -811,7 +811,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function ClearAllButtonPushed(app, event)
-            % Build message based on whether there are locked cases
+            %#ok<INUSD>
             caseCount = app.CaseManager.CaseCount;
             if caseCount == 0
                 return;
@@ -820,94 +820,148 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Count locked cases
             lockedCount = 0;
             for i = 1:caseCount
-                caseObj = app.CaseManager.getCase(i);
-                if caseObj.IsLocked
+                if app.CaseManager.getCase(i).IsLocked
                     lockedCount = lockedCount + 1;
                 end
             end
 
-            % Build confirmation message
             if lockedCount > 0
-                message = sprintf('Remove all unlocked cases? (%d locked case(s) will be preserved.)', lockedCount);
+                message = sprintf('You have %d locked case(s). What would you like to clear?', lockedCount);
+                options = {'Keep Locked', 'Clear All', 'Cancel'};
             else
                 message = 'Remove all cases?';
+                options = {'Clear All', 'Cancel'};
             end
 
             answer = uiconfirm(app.UIFigure, message, 'Confirm Clear', ...
-                'Options', {'Yes', 'No'}, 'DefaultOption', 'No');
+                'Options', options, 'DefaultOption', 'Cancel', 'CancelOption', 'Cancel');
 
-            if strcmp(answer, 'Yes')
-                % PERSISTENT-ID: Get all case IDs currently in the schedule before deletion
-                scheduleCaseIds = string.empty(0, 1);
-                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                    scheduleCases = app.OptimizedSchedule.cases();
-                    if ~isempty(scheduleCases)
-                        % Use 'UniformOutput', false because caseID is now a string
-                        scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
-                    end
-                end
+            switch answer
+                case 'Keep Locked'
+                    app.clearUnlockedCasesOnly();
+                case 'Clear All'
+                    app.clearAllCasesIncludingLocked();
+                otherwise
+                    % Cancel / dialog closed
+                    return;
+            end
+        end
 
-                % PERSISTENT-ID: Collect persistent IDs of LOCKED cases
-                lockedCaseIds = string.empty(0, 1);
-                for i = 1:caseCount
-                    caseObj = app.CaseManager.getCase(i);
-                    if caseObj.IsLocked
-                        lockedCaseIds(end+1, 1) = caseObj.CaseId;
-                    end
-                end
+        function clearUnlockedCasesOnly(app)
+            caseCount = app.CaseManager.CaseCount;
+            if caseCount == 0
+                return;
+            end
 
-                % Delete unlocked cases from CaseManager (backwards to avoid index shift issues)
-                for i = caseCount:-1:1
-                    caseObj = app.CaseManager.getCase(i);
-                    if ~caseObj.IsLocked
-                        app.CaseManager.removeCase(i);
-                    end
-                end
-
-                % PERSISTENT-ID: Calculate which IDs to remove from schedule
-                % Remove all cases except the ones that are locked
-                scheduleCaseIds = string(scheduleCaseIds);  % Convert to string array
-                caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
-
-                % Remove deleted cases from visualized schedule if it exists
-                scheduleWasUpdated = false;
-                if ~isempty(caseIdsToRemove)
-                    if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                        app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseIdsToRemove);
-                        scheduleWasUpdated = true;
-                    end
-
-                    % Also remove from simulated schedule if time control is active
-                    if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
-                        app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseIdsToRemove);
-                    end
-                end
-
-                % PERSISTENT-ID: Check if DrawerCurrentCaseId is still valid
-                % If the case was deleted, close the drawer
-                if ~isempty(app.DrawerCurrentCaseId) && strlength(app.DrawerCurrentCaseId) > 0
-                    [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
-                    if isempty(caseObj)
-                        % Case was deleted, close drawer
-                        app.DrawerController.closeDrawer(app);
-                        app.DrawerCurrentCaseId = "";
-                    else
-                        % Case still exists, refresh drawer content
-                        if app.DrawerWidth > 28
-                            app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
-                        end
-                    end
-                end
-
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when cases cleared (Stage 7)
-
-                % Re-render the schedule immediately to show removal with fade effect
-                if scheduleWasUpdated
-                    app.OptimizationController.markOptimizationDirty(app);
-                    % Explicitly re-render the updated schedule
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            % Collect schedule IDs before deletion
+            scheduleCaseIds = string.empty(0, 1);
+            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                scheduleCases = app.OptimizedSchedule.cases();
+                if ~isempty(scheduleCases)
+                    scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
                 end
             end
+
+            % Gather locked IDs
+            lockedCaseIds = string.empty(0, 1);
+            for i = 1:caseCount
+                caseObj = app.CaseManager.getCase(i);
+                if caseObj.IsLocked
+                    lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                end
+            end
+
+            % Remove unlocked cases from manager
+            for i = caseCount:-1:1
+                if ~app.CaseManager.getCase(i).IsLocked
+                    app.CaseManager.removeCase(i);
+                end
+            end
+
+            caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
+            scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
+
+            app.ensureDrawerSelectionValid();
+            app.finalizeCaseMutation(scheduleWasUpdated);
+        end
+
+        function clearAllCasesIncludingLocked(app)
+            caseCount = app.CaseManager.CaseCount;
+            if caseCount == 0
+                return;
+            end
+
+            for i = caseCount:-1:1
+                app.CaseManager.removeCase(i);
+            end
+
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.SimulatedSchedule = conduction.DailySchedule.empty;
+            app.OptimizationOutcome = struct();
+            app.IsOptimizationDirty = true;
+            app.OptimizationLastRun = NaT;
+
+            app.LockedCaseIds = string.empty;
+            app.TimeControlLockedCaseIds = string.empty;
+            app.TimeControlBaselineLockedIds = string.empty;
+
+            app.SelectedCaseId = "";
+            app.CasesTable.Selection = [];
+            app.DrawerCurrentCaseId = "";
+            app.DrawerController.closeDrawer(app);
+
+            app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            if app.IsTimeControlActive
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            end
+
+            app.finalizeCaseMutation(false);
+        end
+
+        function scheduleWasUpdated = removeCaseIdsFromSchedules(app, caseIdsToRemove)
+            scheduleWasUpdated = false;
+
+            if isempty(caseIdsToRemove)
+                return;
+            end
+
+            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseIdsToRemove);
+                scheduleWasUpdated = true;
+            end
+
+            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
+                app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseIdsToRemove);
+            end
+        end
+
+        function ensureDrawerSelectionValid(app)
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+
+            [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+            if isempty(caseObj)
+                app.DrawerController.closeDrawer(app);
+                app.DrawerCurrentCaseId = "";
+            else
+                if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, app.DrawerCurrentCaseId);
+                end
+            end
+        end
+
+        function finalizeCaseMutation(app, scheduleWasUpdated)
+            app.OptimizationController.updateOptimizationOptionsSummary(app);
+
+            if scheduleWasUpdated
+                app.OptimizationController.markOptimizationDirty(app);
+            else
+                app.OptimizationController.updateOptimizationStatus(app);
+                app.OptimizationController.updateOptimizationActionAvailability(app);
+            end
+
+            app.markDirty();  % SAVE/LOAD: Mark as dirty when cases cleared (Stage 7)
         end
 
         function LoadDataButtonPushed(app, event)
