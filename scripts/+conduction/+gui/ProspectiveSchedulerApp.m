@@ -421,7 +421,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.ColumnSpacing = 11;
             app.BottomBarLayout.Padding = [0 0 4 12];
 
-            sharedKpiStyle = {'HorizontalAlignment','right'};
+            sharedKpiStyle = {'HorizontalAlignment','right','VerticalAlignment','top'};
 
             app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --', sharedKpiStyle{:});
             app.KPI1.Layout.Column = 2;
