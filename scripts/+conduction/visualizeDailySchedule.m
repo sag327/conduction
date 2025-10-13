@@ -87,22 +87,7 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
 
-    scheduleTitle = composeTitle("", dailySchedule.Date, caseTimelines);
-    titleHandle = title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');
-    try
-        titleHandle.Color = [0.7 0.7 0.7];
-        titleHandle.HorizontalAlignment = 'right';
-        titleHandle.Units = 'normalized';
-        pos = titleHandle.Position;
-        pos(1) = 0.98;
-        pos(2) = min(pos(2), 0.94);
-        if pos(2) < 0.02
-            pos(2) = 0.03;
-        end
-        titleHandle.Position = pos;
-    catch
-        % best effort styling; ignore if title handle properties unavailable
-    end    
+    % Title removed per design update
 
     labelColorSchedule = applyAxisTextStyle(axSchedule);
 
