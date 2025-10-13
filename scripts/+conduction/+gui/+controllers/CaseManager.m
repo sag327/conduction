@@ -686,6 +686,26 @@ classdef CaseManager < handle
             if options.resetExisting
                 obj.Cases = newCases;
             else
+                % Append, ensuring incoming CaseIds are unique vs existing
+                if ~isempty(obj.Cases)
+                    existingIds = arrayfun(@(c) c.CaseId, obj.Cases, 'UniformOutput', false);
+                    existingIds = string(existingIds(:));
+                else
+                    existingIds = string.empty(0,1);
+                end
+
+                for k = 1:numel(newCases)
+                    cid = newCases(k).CaseId;
+                    % If collision, regenerate until unique
+                    safety = 0;
+                    while any(existingIds == cid) && safety < 5
+                        newCases(k).CaseId = conduction.gui.models.ProspectiveCase.generateUniqueCaseId();
+                        cid = newCases(k).CaseId;
+                        safety = safety + 1;
+                    end
+                    existingIds(end+1,1) = cid; %#ok<AGROW>
+                end
+
                 obj.Cases = [obj.Cases, newCases];
             end
 

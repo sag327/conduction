@@ -39,7 +39,7 @@ function buildTestingPanel(app)
     app.TestingDateDropDown.ValueChangedFcn = @(src, event) app.TestingDateDropDownValueChanged(event);
 
     app.TestingRunButton = uibutton(app.TestPanelLayout, 'push');
-    app.TestingRunButton.Text = 'Run Test Day';
+    app.TestingRunButton.Text = 'Add Test Cases';
     app.TestingRunButton.Enable = 'off';
     app.TestingRunButton.Layout.Row = 3;
     app.TestingRunButton.Layout.Column = 1;
