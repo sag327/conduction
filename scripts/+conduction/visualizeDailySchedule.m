@@ -648,15 +648,18 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     end
     labelY = startHour + labelOffsetHours;
     labelColorTop = determineAxisLabelColor(ax);
+    baseFontSize = max(8, get(ax, 'FontSize'));
+    labelFontSize = baseFontSize * 1.75;
     for labIdx = 1:numLabs
         text(ax, labIdx, labelY, labLabels{labIdx}, ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
-            'FontWeight', 'bold', 'Color', labelColorTop, ...
+            'FontWeight', 'bold', 'Color', labelColorTop, 'FontSize', labelFontSize, ...
             'HitTest', 'off', 'PickableParts', 'none', ...
             'Tag', 'LabTopLabel');
     end
 
     formatYAxisTimeTicks(ax, startHour, endHour);
+    set(ax, 'XTick', [], 'Box', 'off');
     applyAxisTextStyle(ax);
 
     function attachCaseClick(rectHandle, caseEntry, callback)
