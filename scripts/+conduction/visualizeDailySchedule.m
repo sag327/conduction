@@ -92,7 +92,6 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     labelColorSchedule = applyAxisTextStyle(axSchedule);
 
-    annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour, labelColorSchedule);
     hold(axSchedule, 'off');
 
     if ~isempty(axOperators)
@@ -746,66 +745,6 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
     end
 end
 
-function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour, labelColor)
-    if nargin < 6 || isempty(labelColor)
-        labelColor = determineAxisLabelColor(ax);
-    end
-    numCases = numel(caseTimelines);
-    numLabs = max([caseTimelines.labIndex]);
-    operatorNames = unique(string({caseTimelines.operatorName}));
-    numOperators = numel(operatorNames);
-
-    startCandidates = [caseTimelines.setupStart];
-    startCandidates = startCandidates(~isnan(startCandidates));
-    endCandidates = [caseTimelines.scheduleEnd];
-    endCandidates = endCandidates(~isnan(endCandidates));
-    if isempty(startCandidates) || isempty(endCandidates)
-        fallbackMakespan = (endHour - startHour) * 60;
-    else
-        fallbackMakespan = max(endCandidates) - min(startCandidates);
-    end
-    makespanHours = fetchMetric(metrics, 'makespan', fallbackMakespan) / 60;
-    meanUtilization = fetchMetric(metrics, 'averageLabOccupancyRatio', NaN) * 100;
-    totalIdleHours = fetchMetric(metrics, 'totalOperatorIdleMinutes', NaN) / 60;
-    totalOvertimeHours = fetchMetric(metrics, 'totalOperatorOvertimeMinutes', NaN) / 60;
-
-    summaryParts = {
-        sprintf('Cases: %d', numCases), ...
-        sprintf('Labs: %d', numLabs), ...
-        sprintf('Operators: %d', numOperators), ...
-        sprintf('Makespan: %.1f hrs', makespanHours)
-    };
-
-    if ~isnan(meanUtilization)
-        summaryParts{end+1} = sprintf('Mean lab occupancy: %.1f%%', meanUtilization); %#ok<AGROW>
-    end
-    if ~isnan(totalIdleHours)
-        summaryParts{end+1} = sprintf('Op idle: %.1f hrs', totalIdleHours); %#ok<AGROW>
-    end
-    if ~isnan(totalOvertimeHours)
-        summaryParts{end+1} = sprintf('Op overtime: %.1f hrs', totalOvertimeHours); %#ok<AGROW>
-    end
-
-    summaryText = strjoin(summaryParts, ' | ');
-
-    xLimits = xlim(ax);
-    yLimits = ylim(ax);
-    summaryBg = chooseSummaryBackground(labelColor);
-    text(ax, xLimits(2) - 0.1, max(yLimits) - 0.2, summaryText, ...
-        'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
-        'FontSize', 10, 'Color', labelColor, ...
-        'BackgroundColor', summaryBg, 'Margin', 4);
-
-    sixPMHour = 18;
-    if sixPMHour >= startHour && sixPMHour <= endHour
-        line(ax, xLimits, [sixPMHour, sixPMHour], ...
-            'Color', 'red', 'LineStyle', '--', 'LineWidth', 2, 'Parent', ax);
-        text(ax, xLimits(2) - 0.1, sixPMHour + 0.1, '6 PM', ...
-            'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
-            'FontSize', 10, 'FontWeight', 'bold', 'Color', 'red');
-    end
-end
-
 function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
     %POINTSTODATAOFFSETS Convert a line width (points) to data offsets in x/y
     %   dxLabs in lab index units (x-axis), dyHours in hours (y-axis)
@@ -835,15 +774,6 @@ function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
 
     dxLabs = (px / axPixW) * xRange;
     dyHours = (px / axPixH) * yRange;
-end
-
-function summaryBg = chooseSummaryBackground(labelColor)
-    if isempty(labelColor)
-        summaryBg = [0 0 0];
-        return;
-    end
-    inverted = 1 - labelColor;
-    summaryBg = labelColor * 0.1 + inverted * 0.9;
 end
 
 function labelColor = applyAxisTextStyle(ax)
