@@ -45,7 +45,7 @@ function buildDrawerUI(app)
     contentPanel.BorderType = 'line';
 
     contentGrid = uigridlayout(contentPanel);
-    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
     contentGrid.ColumnWidth = {'1x'};
     contentGrid.Padding = [16 18 16 18];
     contentGrid.RowSpacing = 12;
@@ -91,15 +91,38 @@ function buildDrawerUI(app)
     createInspectorRow(app, 5, 'Start', 'DrawerStartValueLabel');
     createInspectorRow(app, 6, 'End', 'DrawerEndValueLabel');
 
+    % DURATION-EDITING: Add durations section
+    app.DrawerDurationsTitle = uilabel(contentGrid);
+    app.DrawerDurationsTitle.Text = 'Case Durations (minutes)';
+    app.DrawerDurationsTitle.FontWeight = 'bold';
+    app.DrawerDurationsTitle.FontColor = [0.9 0.9 0.9];
+    app.DrawerDurationsTitle.Layout.Row = 5;
+    app.DrawerDurationsTitle.Layout.Column = 1;
+
+    app.DrawerDurationsGrid = uigridlayout(contentGrid);
+    app.DrawerDurationsGrid.Layout.Row = 6;
+    app.DrawerDurationsGrid.Layout.Column = 1;
+    app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 4);
+    app.DrawerDurationsGrid.ColumnWidth = {90, '1x'};
+    app.DrawerDurationsGrid.RowSpacing = 4;
+    app.DrawerDurationsGrid.ColumnSpacing = 12;
+    app.DrawerDurationsGrid.Padding = [0 0 0 0];
+    app.DrawerDurationsGrid.BackgroundColor = app.Drawer.BackgroundColor;
+
+    createDurationRow(app, 1, 'Setup', 'DrawerSetupSpinner');
+    createDurationRow(app, 2, 'Procedure', 'DrawerProcSpinner');
+    createDurationRow(app, 3, 'Post', 'DrawerPostSpinner');
+    createDurationRow(app, 4, 'Turnover', 'DrawerTurnoverSpinner');
+
     app.DrawerOptimizationTitle = uilabel(contentGrid);
     app.DrawerOptimizationTitle.Text = 'Optimization Details';
     app.DrawerOptimizationTitle.FontWeight = 'bold';
     app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerOptimizationTitle.Layout.Row = 5;
+    app.DrawerOptimizationTitle.Layout.Row = 7;
     app.DrawerOptimizationTitle.Layout.Column = 1;
 
     app.DrawerOptimizationGrid = uigridlayout(contentGrid);
-    app.DrawerOptimizationGrid.Layout.Row = 6;
+    app.DrawerOptimizationGrid.Layout.Row = 8;
     app.DrawerOptimizationGrid.Layout.Column = 1;
     app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
     app.DrawerOptimizationGrid.ColumnWidth = {90, '1x'};
@@ -116,11 +139,11 @@ function buildDrawerUI(app)
     app.DrawerHistogramTitle.Text = 'Historical Durations';
     app.DrawerHistogramTitle.FontWeight = 'bold';
     app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerHistogramTitle.Layout.Row = 7;
+    app.DrawerHistogramTitle.Layout.Row = 9;
     app.DrawerHistogramTitle.Layout.Column = 1;
 
     app.DrawerHistogramPanel = uipanel(contentGrid);
-    app.DrawerHistogramPanel.Layout.Row = 8;
+    app.DrawerHistogramPanel.Layout.Row = 10;
     app.DrawerHistogramPanel.Layout.Column = 1;
     app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
     app.DrawerHistogramPanel.BorderType = 'none';
@@ -169,4 +192,25 @@ function createOptimizationRow(app, rowIndex, labelText, valuePropName)
     valueLabel.WordWrap = 'on';
 
     app.(valuePropName) = valueLabel;
+end
+
+function createDurationRow(app, rowIndex, labelText, spinnerPropName)
+    % DURATION-EDITING: Create a row with a label and spinner for duration input
+    staticLabel = uilabel(app.DrawerDurationsGrid);
+    staticLabel.Text = labelText;
+    staticLabel.FontColor = [0.7 0.7 0.7];
+    staticLabel.Layout.Row = rowIndex;
+    staticLabel.Layout.Column = 1;
+
+    spinner = uispinner(app.DrawerDurationsGrid);
+    spinner.Limits = [0 Inf];
+    spinner.Value = 0;
+    spinner.ValueDisplayFormat = '%.0f';
+    spinner.FontColor = [0.95 0.95 0.95];
+    spinner.BackgroundColor = [0.15 0.15 0.15];
+    spinner.Layout.Row = rowIndex;
+    spinner.Layout.Column = 2;
+    spinner.Enable = 'on';
+
+    app.(spinnerPropName) = spinner;
 end

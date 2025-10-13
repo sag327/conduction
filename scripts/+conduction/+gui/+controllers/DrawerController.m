@@ -103,6 +103,12 @@ classdef DrawerController < handle
             obj.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
             obj.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
 
+            % DURATION-EDITING: Update duration spinners
+            obj.setSpinnerValue(app.DrawerSetupSpinner, details.SetupMinutes);
+            obj.setSpinnerValue(app.DrawerProcSpinner, details.ProcMinutes);
+            obj.setSpinnerValue(app.DrawerPostSpinner, details.PostMinutes);
+            obj.setSpinnerValue(app.DrawerTurnoverSpinner, details.TurnoverMinutes);
+
             % CASE-LOCKING: Update lock toggle state
             if ~isempty(app.DrawerLockToggle) && isvalid(app.DrawerLockToggle)
                 isLocked = ismember(caseId, app.LockedCaseIds);
@@ -121,6 +127,12 @@ classdef DrawerController < handle
             obj.setLabelText(app.DrawerLabValueLabel, '--');
             obj.setLabelText(app.DrawerStartValueLabel, '--');
             obj.setLabelText(app.DrawerEndValueLabel, '--');
+
+            % DURATION-EDITING: Reset duration spinners
+            obj.setSpinnerValue(app.DrawerSetupSpinner, 0);
+            obj.setSpinnerValue(app.DrawerProcSpinner, 0);
+            obj.setSpinnerValue(app.DrawerPostSpinner, 0);
+            obj.setSpinnerValue(app.DrawerTurnoverSpinner, 0);
         end
 
         function updateHistogram(obj, app, operatorName, procedureName)
@@ -193,6 +205,11 @@ classdef DrawerController < handle
             details.StartDisplay = string('--');
             details.EndDisplay = string('--');
             details.Status = string('missing');
+            % DURATION-EDITING: Add duration fields
+            details.SetupMinutes = NaN;
+            details.ProcMinutes = NaN;
+            details.PostMinutes = NaN;
+            details.TurnoverMinutes = NaN;
 
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
                 return;
@@ -240,6 +257,22 @@ classdef DrawerController < handle
                         details.EndMinutes = obj.extractNumericField(entry, {'procEndTime', 'endTime'});
                         details.StartDisplay = obj.formatDrawerTime(details.StartMinutes);
                         details.EndDisplay = obj.formatDrawerTime(details.EndMinutes);
+
+                        % DURATION-EDITING: Extract duration fields
+                        details.SetupMinutes = obj.extractNumericField(entry, {'setupTime', 'setupMinutes', 'setupDuration'});
+                        details.PostMinutes = obj.extractNumericField(entry, {'postTime', 'postDuration', 'postMinutes'});
+                        details.TurnoverMinutes = obj.extractNumericField(entry, {'turnoverTime', 'turnoverDuration', 'turnoverMinutes'});
+
+                        % Calculate procedure duration from times or extract directly
+                        details.ProcMinutes = obj.extractNumericField(entry, {'procTime', 'procedureMinutes', 'procedureDuration'});
+                        if isnan(details.ProcMinutes)
+                            procStart = obj.extractNumericField(entry, {'procStartTime', 'procedureStartTime'});
+                            procEnd = obj.extractNumericField(entry, {'procEndTime', 'procedureEndTime'});
+                            if ~isnan(procStart) && ~isnan(procEnd)
+                                details.ProcMinutes = procEnd - procStart;
+                            end
+                        end
+
                         details.Status = string('scheduled');
                         return;
                     end
@@ -523,6 +556,18 @@ classdef DrawerController < handle
                 textValue = char(textValue);
             end
             labelHandle.Text = textValue;
+        end
+
+        function setSpinnerValue(~, spinnerHandle, numericValue)
+            % DURATION-EDITING: Set spinner value, handling NaN appropriately
+            if isempty(spinnerHandle) || ~isvalid(spinnerHandle)
+                return;
+            end
+            if isnan(numericValue)
+                spinnerHandle.Value = 0;
+            else
+                spinnerHandle.Value = max(0, round(numericValue));
+            end
         end
 
         function logLines = buildDrawerLog(obj, app, details)
