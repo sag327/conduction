@@ -992,6 +992,76 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.markDirty();  % SAVE/LOAD: Mark as dirty when cases cleared (Stage 7)
         end
 
+        function applyDrawerDurationChange(app, durationType, newDurationMinutes)
+            % DURATION-EDITING: Apply duration change from drawer spinner
+            %   durationType: 'setup', 'procedure', or 'post'
+            %   newDurationMinutes: new duration value in minutes
+
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+
+            caseId = app.DrawerCurrentCaseId;
+            newDurationMinutes = max(0, round(newDurationMinutes));
+
+            % Find the ProspectiveCase object in CaseManager
+            [caseObj, caseIndex] = app.CaseManager.findCaseById(caseId);
+            if isempty(caseObj)
+                warning('applyDrawerDurationChange: Case with ID "%s" not found', caseId);
+                return;
+            end
+
+            % Update the case object based on duration type
+            switch lower(durationType)
+                case 'procedure'
+                    % Update procedure duration in ProspectiveCase
+                    caseObj.EstimatedDurationMinutes = newDurationMinutes;
+
+                    % If case is in schedule, update using applyCaseResize
+                    if ~isempty(app.OptimizedSchedule)
+                        % Get current procStart from schedule
+                        details = app.DrawerController.extractCaseDetails(app, caseId);
+                        if ~isnan(details.StartMinutes)
+                            procStart = details.StartMinutes;
+                            newProcEnd = procStart + newDurationMinutes;
+                            app.ScheduleRenderer.applyCaseResize(app, caseId, newProcEnd);
+                        end
+                    end
+
+                case 'setup'
+                    % Setup time is not directly stored in ProspectiveCase
+                    % Update the schedule if case is present
+                    if ~isempty(app.OptimizedSchedule)
+                        app.updateScheduleSetupDuration(caseId, newDurationMinutes);
+                    end
+
+                case 'post'
+                    % Post time is not directly stored in ProspectiveCase
+                    % Update the schedule if case is present
+                    if ~isempty(app.OptimizedSchedule)
+                        app.updateSchedulePostDuration(caseId, newDurationMinutes);
+                    end
+            end
+
+            % Update the cases table to reflect new duration
+            app.updateCasesTable();
+
+            % Mark as dirty
+            app.markDirty();
+        end
+
+        function updateScheduleSetupDuration(app, caseId, newSetupMinutes)
+            % DURATION-EDITING: Update setup duration in schedule
+            %   Shifts setupStart earlier while keeping procStart fixed
+            app.ScheduleRenderer.updateCaseSetupDuration(app, caseId, newSetupMinutes);
+        end
+
+        function updateSchedulePostDuration(app, caseId, newPostMinutes)
+            % DURATION-EDITING: Update post duration in schedule
+            %   Recalculates postEnd while keeping procEnd fixed
+            app.ScheduleRenderer.updateCasePostDuration(app, caseId, newPostMinutes);
+        end
+
         function LoadDataButtonPushed(app, event)
             %#ok<INUSD>
             conduction.gui.app.loadBaselineData(app);
@@ -1202,6 +1272,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Toggle the lock state
             app.DrawerController.toggleCaseLock(app, app.DrawerCurrentCaseId);
             app.markDirty();  % SAVE/LOAD: Mark as dirty when case lock state changed (Stage 7)
+        end
+
+        function DrawerSetupSpinnerChanged(app, event)
+            % DURATION-EDITING: Handle setup duration change from drawer
+            app.applyDrawerDurationChange('setup', event.Value);
+        end
+
+        function DrawerProcSpinnerChanged(app, event)
+            % DURATION-EDITING: Handle procedure duration change from drawer
+            app.applyDrawerDurationChange('procedure', event.Value);
+        end
+
+        function DrawerPostSpinnerChanged(app, event)
+            % DURATION-EDITING: Handle post duration change from drawer
+            app.applyDrawerDurationChange('post', event.Value);
         end
 
         function CanvasTabGroupSelectionChanged(app, event)

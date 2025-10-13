@@ -211,5 +211,9 @@ function createDurationRow(app, rowIndex, labelText, spinnerPropName)
     spinner.Layout.Column = 2;
     spinner.Enable = 'on';
 
+    % Wire up callback based on spinner type
+    callbackName = [spinnerPropName 'Changed'];
+    spinner.ValueChangedFcn = createCallbackFcn(app, str2func(callbackName), true);
+
     app.(spinnerPropName) = spinner;
 end

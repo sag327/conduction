@@ -1424,6 +1424,126 @@ classdef ScheduleRenderer < handle
             end
         end
 
+        function updateCaseSetupDuration(obj, app, caseId, newSetupMinutes)
+            % DURATION-EDITING: Update setup duration for a case in the schedule
+            %   Shifts setupStart while keeping procStart fixed
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+            metrics = app.OptimizedSchedule.metrics();
+
+            % Find the case
+            [sourceLabIdx, caseIdx, caseStruct] = obj.findCaseInAssignments(assignments, caseId);
+            if isnan(sourceLabIdx) || isnan(caseIdx)
+                warning('ScheduleRenderer:CaseSetupUpdateFailed', 'Failed to locate case %s for setup duration update.', caseId);
+                return;
+            end
+
+            % Update setup duration
+            caseStruct = obj.setFieldIfExists(caseStruct, {'setupTime', 'setupDuration', 'setupMinutes'}, newSetupMinutes);
+
+            % Recalculate setupStart based on procStart - newSetupMinutes
+            procStart = obj.getFieldValue(caseStruct, {'procStartTime', 'procedureStartTime'}, NaN);
+            if ~isnan(procStart)
+                newSetupStart = procStart - newSetupMinutes;
+                caseStruct = obj.setFieldIfExists(caseStruct, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'}, newSetupStart);
+            end
+
+            % Update the case in assignments
+            assignments{sourceLabIdx}(caseIdx) = caseStruct;
+            assignments = obj.normalizeLabAssignments(assignments);
+
+            % Update schedule
+            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
+            app.OptimizationController.markOptimizationDirty(app);
+            app.markDirty();
+
+            % Refresh drawer if needed
+            if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
+                    app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                app.DrawerController.populateDrawer(app, caseId);
+            end
+        end
+
+        function updateCasePostDuration(obj, app, caseId, newPostMinutes)
+            % DURATION-EDITING: Update post duration for a case in the schedule
+            %   Recalculates postEnd while keeping procEnd fixed
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+            metrics = app.OptimizedSchedule.metrics();
+
+            % Find the case
+            [sourceLabIdx, caseIdx, caseStruct] = obj.findCaseInAssignments(assignments, caseId);
+            if isnan(sourceLabIdx) || isnan(caseIdx)
+                warning('ScheduleRenderer:CasePostUpdateFailed', 'Failed to locate case %s for post duration update.', caseId);
+                return;
+            end
+
+            % Update post duration
+            caseStruct = obj.setFieldIfExists(caseStruct, {'postTime', 'postDuration', 'postMinutes'}, newPostMinutes);
+
+            % Recalculate postEnd based on procEnd + newPostMinutes
+            procEnd = obj.getFieldValue(caseStruct, {'procEndTime', 'procedureEndTime'}, NaN);
+            if ~isnan(procEnd)
+                newPostEnd = procEnd + newPostMinutes;
+                caseStruct = obj.setFieldIfExists(caseStruct, {'postEndTime', 'postProcedureEndTime'}, newPostEnd);
+
+                % Update turnover and end times
+                turnoverDuration = obj.getFieldValue(caseStruct, {'turnoverTime', 'turnoverDuration'}, 0);
+                if isnan(turnoverDuration)
+                    turnoverDuration = 0;
+                end
+                newTurnoverEnd = newPostEnd + turnoverDuration;
+                caseStruct = obj.setFieldIfExists(caseStruct, {'turnoverEnd', 'turnoverEndTime'}, newTurnoverEnd);
+                caseStruct = obj.setFieldIfExists(caseStruct, {'endTime', 'caseEndTime', 'scheduleEnd'}, newTurnoverEnd);
+            end
+
+            % Update the case in assignments
+            assignments{sourceLabIdx}(caseIdx) = caseStruct;
+            assignments = obj.normalizeLabAssignments(assignments);
+
+            % Update schedule
+            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
+            app.OptimizationController.markOptimizationDirty(app);
+            app.markDirty();
+
+            % Refresh drawer if needed
+            if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
+                    app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                app.DrawerController.populateDrawer(app, caseId);
+            end
+        end
+
+        function [sourceLabIdx, caseIdx, caseStruct] = findCaseInAssignments(obj, assignments, caseId)
+            % DURATION-EDITING: Helper to find a case in lab assignments
+            sourceLabIdx = NaN;
+            caseIdx = NaN;
+            caseStruct = struct();
+
+            for labIdx = 1:numel(assignments)
+                casesArr = assignments{labIdx};
+                if isempty(casesArr)
+                    continue;
+                end
+                casesArr = casesArr(:);
+                ids = obj.collectCaseIds(casesArr);
+                matchMask = (ids == caseId);
+                if any(matchMask)
+                    sourceLabIdx = labIdx;
+                    caseIdx = find(matchMask, 1, 'first');
+                    caseStruct = casesArr(caseIdx);
+                    return;
+                end
+            end
+        end
+
         function ids = collectCaseIds(obj, data)
             %COLLECTCASEIDS Helper to collect case IDs from arrays or cell arrays
             if isempty(data)
