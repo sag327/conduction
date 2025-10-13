@@ -331,6 +331,22 @@ classdef ScheduleRenderer < handle
                 drag.startPoint = [NaN, NaN];
             end
 
+            % Preserve the vertical offset from the rectangle's bottom to the
+            % initial mouse click so the block doesn't jump toward the cursor.
+            try
+                rectPos = get(rectHandle, 'Position');
+            catch
+                rectPos = [NaN NaN NaN NaN];
+            end
+            if numel(rectPos) ~= 4 || any(~isfinite(rectPos)) || any(~isfinite(drag.startPoint))
+                drag.cursorOffsetHours = drag.rectHeight / 2; % safe fallback
+            else
+                clickOffset = drag.startPoint(2) - rectPos(2);
+                % Clamp to [0, rectHeight] so we stay within the block
+                clickOffset = max(0, min(drag.rectHeight, clickOffset));
+                drag.cursorOffsetHours = clickOffset;
+            end
+
             if isprop(rectHandle, 'FaceAlpha') && rectHandle.FaceAlpha == 0
                 rectHandle.FaceAlpha = 0.1;
             end
@@ -339,7 +355,7 @@ classdef ScheduleRenderer < handle
                 dragController.setActiveDrag(drag);
             end
 
-            app.UIFigure.Pointer = 'hand';
+            app.UIFigure.Pointer = 'fleur';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
             app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endDragCase(app);
         end
@@ -369,11 +385,13 @@ classdef ScheduleRenderer < handle
 
             durationHours = drag.rectHeight;
             yLimits = ylim(app.ScheduleAxes);
-            newStartHour = currentPoint(2);
-            newStartHour = max(yLimits(1), min(yLimits(2) - durationHours, newStartHour));
+            % Compute new bottom-left Y by subtracting the preserved click offset
+            % so the block drags naturally from its current position.
+            newBottomHour = currentPoint(2) - drag.cursorOffsetHours;
+            newBottomHour = max(yLimits(1), min(yLimits(2) - durationHours, newBottomHour));
 
             snapMinutes = max(1, drag.snapMinutes);
-            newStartMinutes = round((newStartHour * 60) / snapMinutes) * snapMinutes;
+            newStartMinutes = round((newBottomHour * 60) / snapMinutes) * snapMinutes;
             newStartHour = newStartMinutes / 60;
 
             newLeft = newLabIndex - drag.rectWidth / 2;
@@ -412,6 +430,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.WindowButtonUpFcn = [];
             app.UIFigure.Pointer = 'arrow';
             dragController.clearActiveDrag();
+            dragController.enableSelectionHoverWatcher();
 
             if ~isgraphics(drag.rectHandle)
                 return;
@@ -460,6 +479,10 @@ classdef ScheduleRenderer < handle
                 app.OptimizationController.markOptimizationDirty(app);
                 app.markDirty();
                 app.updateCasesTable();
+                if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
+                        app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, drag.caseId);
+                end
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
                 end
@@ -643,6 +666,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.WindowButtonMotionFcn = [];
             app.UIFigure.WindowButtonUpFcn = [];
             app.UIFigure.Pointer = 'arrow';
+            dragController.enableSelectionHoverWatcher();
 
             if ~resizeWasActive
                 obj.restoreSelectionOverlay(app);
@@ -670,6 +694,11 @@ classdef ScheduleRenderer < handle
                 end
                 if isfield(resize, 'handleRect') && isgraphics(resize.handleRect)
                     set(resize.handleRect, 'Position', resize.originalHandlePos);
+                end
+            else
+                if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
+                        app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, caseId);
                 end
             end
 
