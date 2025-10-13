@@ -540,12 +540,22 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             procDuration = max(procEndHour - procStartHour, eps);
             labelY = procStartHour + procDuration / 2;
             [xPosEff, ~] = applyLateralOffsetIfNeeded(entry, opts, caseTimelines, setupStartHour, turnoverEndHour, xPos, barWidth);
+
+            % Determine text color based on operator background color luminance
+            opKey = char(entry.operatorName);
+            if isKey(operatorColors, opKey)
+                opColor = operatorColors(opKey);
+            else
+                opColor = [0.5, 0.5, 0.5];
+            end
+            textColor = determineTextColorForBackground(opColor);
+
             labelHandle = text(ax, xPosEff, labelY, composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
                 'FontWeight', 'bold', ...
-                'Color', 'white');
+                'Color', textColor);
             labelHandle.HitTest = 'off';
             if isprop(labelHandle, 'PickableParts')
                 labelHandle.PickableParts = 'none';
@@ -830,6 +840,18 @@ function labelColor = determineAxisLabelColor(ax)
         labelColor = [1 1 1];
     else
         labelColor = [0.1 0.1 0.1];
+    end
+end
+
+function textColor = determineTextColorForBackground(bgColor)
+    %DETERMINETEXTCOLORFORBACKGROUND Choose black or white text based on background luminance
+    %   Uses the relative luminance formula to determine contrast
+    rgb = normalizeColorSpec(bgColor);
+    luminance = sum(rgb .* [0.299, 0.587, 0.114]);
+    if luminance < 0.5
+        textColor = [1 1 1];  % White text for dark backgrounds
+    else
+        textColor = [0 0 0];  % Black text for light backgrounds
     end
 end
 
