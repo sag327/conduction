@@ -1213,15 +1213,17 @@ classdef ScheduleRenderer < handle
                 if closedEndHour - closedStartHour > 0.1
                     if closedStartHour <= yLimits(1) + 1e-3
                         labelText = 'Closed (all day)';
-                        labelHour = min(closedStartHour + 0.3, closedEndHour - 0.2);
+                        labelHour = min(closedEndHour - 0.1, max(closedStartHour + 0.2, yLimits(1) + 0.25));
+                        textAlignment = 'bottom';
                     else
                         labelText = sprintf('Closed after %s', obj.minutesToTimeString(closedStartHour * 60));
                         labelHour = min(closedStartHour + 0.3, closedEndHour - 0.2);
+                        textAlignment = 'middle';
                     end
 
                     textHandle = text(ax, labId, labelHour, labelText, ...
                         'Color', [0.55 0.55 0.55], 'FontWeight', 'bold', 'FontSize', 8.5, ...
-                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                        'HorizontalAlignment', 'center', 'VerticalAlignment', textAlignment, ...
                         'Clipping', 'on', 'HitTest', 'off', 'Tag', 'ClosedLabOverlay');
                     if isprop(textHandle, 'PickableParts')
                         textHandle.PickableParts = 'none';
