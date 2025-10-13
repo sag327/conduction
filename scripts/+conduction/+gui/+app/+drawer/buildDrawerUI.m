@@ -102,7 +102,7 @@ function buildDrawerUI(app)
     app.DrawerDurationsGrid = uigridlayout(contentGrid);
     app.DrawerDurationsGrid.Layout.Row = 6;
     app.DrawerDurationsGrid.Layout.Column = 1;
-    app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 4);
+    app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 3);
     app.DrawerDurationsGrid.ColumnWidth = {90, '1x'};
     app.DrawerDurationsGrid.RowSpacing = 4;
     app.DrawerDurationsGrid.ColumnSpacing = 12;
@@ -112,7 +112,6 @@ function buildDrawerUI(app)
     createDurationRow(app, 1, 'Setup', 'DrawerSetupSpinner');
     createDurationRow(app, 2, 'Procedure', 'DrawerProcSpinner');
     createDurationRow(app, 3, 'Post', 'DrawerPostSpinner');
-    createDurationRow(app, 4, 'Turnover', 'DrawerTurnoverSpinner');
 
     app.DrawerOptimizationTitle = uilabel(contentGrid);
     app.DrawerOptimizationTitle.Text = 'Optimization Details';

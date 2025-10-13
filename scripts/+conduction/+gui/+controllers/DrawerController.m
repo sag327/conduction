@@ -107,7 +107,6 @@ classdef DrawerController < handle
             obj.setSpinnerValue(app.DrawerSetupSpinner, details.SetupMinutes);
             obj.setSpinnerValue(app.DrawerProcSpinner, details.ProcMinutes);
             obj.setSpinnerValue(app.DrawerPostSpinner, details.PostMinutes);
-            obj.setSpinnerValue(app.DrawerTurnoverSpinner, details.TurnoverMinutes);
 
             % CASE-LOCKING: Update lock toggle state
             if ~isempty(app.DrawerLockToggle) && isvalid(app.DrawerLockToggle)
@@ -132,7 +131,6 @@ classdef DrawerController < handle
             obj.setSpinnerValue(app.DrawerSetupSpinner, 0);
             obj.setSpinnerValue(app.DrawerProcSpinner, 0);
             obj.setSpinnerValue(app.DrawerPostSpinner, 0);
-            obj.setSpinnerValue(app.DrawerTurnoverSpinner, 0);
         end
 
         function updateHistogram(obj, app, operatorName, procedureName)
@@ -209,7 +207,6 @@ classdef DrawerController < handle
             details.SetupMinutes = NaN;
             details.ProcMinutes = NaN;
             details.PostMinutes = NaN;
-            details.TurnoverMinutes = NaN;
 
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
                 return;
@@ -261,7 +258,6 @@ classdef DrawerController < handle
                         % DURATION-EDITING: Extract duration fields
                         details.SetupMinutes = obj.extractNumericField(entry, {'setupTime', 'setupMinutes', 'setupDuration'});
                         details.PostMinutes = obj.extractNumericField(entry, {'postTime', 'postDuration', 'postMinutes'});
-                        details.TurnoverMinutes = obj.extractNumericField(entry, {'turnoverTime', 'turnoverDuration', 'turnoverMinutes'});
 
                         % Calculate procedure duration from times or extract directly
                         details.ProcMinutes = obj.extractNumericField(entry, {'procTime', 'procedureMinutes', 'procedureDuration'});
