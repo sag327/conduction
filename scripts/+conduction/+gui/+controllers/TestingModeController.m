@@ -16,11 +16,23 @@ classdef TestingModeController < handle
 
             if app.CaseManager.CaseCount > 0
                 answer = uiconfirm(app.UIFigure, ...
-                    'Activating testing mode clears the current case list. Continue?', ...
-                    'Testing Mode', 'Options', {'Clear Cases', 'Cancel'}, ...
-                    'DefaultOption', 'Clear Cases', 'CancelOption', 'Cancel');
-                if strcmp(answer, 'Clear Cases')
+                    ['Activating testing mode can clear existing cases. ', ...
+                     'Do you want to clear all cases or keep locked cases?'], ...
+                    'Testing Mode', 'Options', {'Clear All Cases', 'Keep Locked Cases', 'Cancel'}, ...
+                    'DefaultOption', 'Clear All Cases', 'CancelOption', 'Cancel');
+
+                if strcmp(answer, 'Clear All Cases')
                     app.CaseManager.clearAllCases();
+                    % Clear locks so visualization and table stay consistent
+                    app.LockedCaseIds = string.empty;
+                    if isprop(app, 'TimeControlLockedCaseIds')
+                        app.TimeControlLockedCaseIds = string.empty;
+                    end
+                elseif strcmp(answer, 'Keep Locked Cases')
+                    keepIds = string(app.LockedCaseIds);
+                    app.CaseManager.clearCasesExcept(keepIds);
+                    % Ensure lock list only contains kept IDs
+                    app.LockedCaseIds = intersect(keepIds, keepIds, 'stable');
                 else
                     obj.setTestToggleValue(app, false);
                     obj.updateTestingActionStates(app);

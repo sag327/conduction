@@ -298,14 +298,17 @@ function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange
         ends = ends(~isnan(ends));
 
         if isempty(starts) || isempty(ends)
-            startHour = 6;
-            endHour = 18;
+            startHour = 7;
+            endHour = 16;
         else
             scheduleStart = min(starts);
             scheduleEnd = max(ends);
 
-            startHour = (scheduleStart - 60) / 60;
-            endHour = (scheduleEnd + 60) / 60;
+            oneHourBeforeFirst = (scheduleStart - 60) / 60;
+            oneHourAfterLast = (scheduleEnd + 60) / 60;
+
+            startHour = min(7, oneHourBeforeFirst);
+            endHour = max(16, oneHourAfterLast);
         end
     end
 
