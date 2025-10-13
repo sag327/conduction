@@ -417,7 +417,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.Layout.Row = 3;
             app.BottomBarLayout.Layout.Column = 2;
             app.BottomBarLayout.RowHeight = {'fit'};
-            app.BottomBarLayout.ColumnWidth = {'1x','fit','fit','fit','fit','fit'};
+            app.BottomBarLayout.ColumnWidth = {'3x','fit','fit','fit','fit','fit'};
             app.BottomBarLayout.ColumnSpacing = 6;
             app.BottomBarLayout.Padding = [0 0 4 12];
 
