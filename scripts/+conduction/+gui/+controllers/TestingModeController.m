@@ -16,11 +16,17 @@ classdef TestingModeController < handle
 
             if app.CaseManager.CaseCount > 0
                 answer = uiconfirm(app.UIFigure, ...
-                    'Activating testing mode clears the current case list. Continue?', ...
-                    'Testing Mode', 'Options', {'Clear Cases', 'Cancel'}, ...
-                    'DefaultOption', 'Clear Cases', 'CancelOption', 'Cancel');
-                if strcmp(answer, 'Clear Cases')
-                    app.CaseManager.clearAllCases();
+                    ['Activating testing mode can clear existing cases. ', ...
+                     'Do you want to clear all cases or keep locked cases?'], ...
+                    'Testing Mode', 'Options', {'Clear All Cases', 'Keep Locked Cases', 'Cancel'}, ...
+                    'DefaultOption', 'Clear All Cases', 'CancelOption', 'Cancel');
+
+                if strcmp(answer, 'Clear All Cases')
+                    % Use centralized helper to clear cases and reset UI consistently
+                    app.clearAllCasesIncludingLocked();
+                elseif strcmp(answer, 'Keep Locked Cases')
+                    % Use centralized helper for keeping only locked cases
+                    app.clearUnlockedCasesOnly();
                 else
                     obj.setTestToggleValue(app, false);
                     obj.updateTestingActionStates(app);
@@ -78,7 +84,7 @@ classdef TestingModeController < handle
             app.DurationSelector.refreshDurationOptions(app);
 
             if clearCases
-                app.CaseManager.clearAllCases();
+                app.clearAllCasesIncludingLocked();
             end
 
             app.CurrentTestingSummary = struct();
@@ -101,7 +107,7 @@ classdef TestingModeController < handle
             preference = app.DurationSelector.getSelectedDurationPreference(app);
             admissionDefault = obj.getTestingAdmissionStatus(app);
             result = app.CaseManager.applyTestingScenario(selectedDate, ...
-                'durationPreference', preference, 'resetExisting', true, ...
+                'durationPreference', preference, 'resetExisting', false, ...
                 'admissionStatus', admissionDefault);
 
             app.CurrentTestingSummary = result;

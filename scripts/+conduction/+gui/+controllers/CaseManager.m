@@ -190,6 +190,36 @@ classdef CaseManager < handle
             obj.notifyChange();
         end
 
+        function clearCasesExcept(obj, keepCaseIds)
+            %CLEARCASESEXCEPT Retain only cases whose CaseId is in keepCaseIds
+            %   keepCaseIds: string array or cellstr of CaseId values to retain
+            if isempty(obj.Cases)
+                return;
+            end
+            if iscellstr(keepCaseIds)
+                keepCaseIds = string(keepCaseIds);
+            elseif ischar(keepCaseIds)
+                keepCaseIds = string(keepCaseIds);
+            end
+            keepCaseIds = string(keepCaseIds);
+
+            if isempty(keepCaseIds)
+                obj.clearAllCases();
+                return;
+            end
+
+            newCases = conduction.gui.models.ProspectiveCase.empty;
+            for i = 1:numel(obj.Cases)
+                if any(obj.Cases(i).CaseId == keepCaseIds)
+                    newCases(end+1) = obj.Cases(i); %#ok<AGROW>
+                end
+            end
+            obj.Cases = newCases;
+            % Reset completed archive; testing mode restarts a fresh plan
+            obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;
+            obj.notifyChange();
+        end
+
         % REALTIME-SCHEDULING: Status management methods
         function setCaseStatus(obj, caseIndex, newStatus, actualTimes)
             %SETCASESTATUS Update case status and optionally record actual times
@@ -656,6 +686,26 @@ classdef CaseManager < handle
             if options.resetExisting
                 obj.Cases = newCases;
             else
+                % Append, ensuring incoming CaseIds are unique vs existing
+                if ~isempty(obj.Cases)
+                    existingIds = arrayfun(@(c) c.CaseId, obj.Cases, 'UniformOutput', false);
+                    existingIds = string(existingIds(:));
+                else
+                    existingIds = string.empty(0,1);
+                end
+
+                for k = 1:numel(newCases)
+                    cid = newCases(k).CaseId;
+                    % If collision, regenerate until unique
+                    safety = 0;
+                    while any(existingIds == cid) && safety < 5
+                        newCases(k).CaseId = conduction.gui.models.ProspectiveCase.generateUniqueCaseId();
+                        cid = newCases(k).CaseId;
+                        safety = safety + 1;
+                    end
+                    existingIds(end+1,1) = cid; %#ok<AGROW>
+                end
+
                 obj.Cases = [obj.Cases, newCases];
             end
 

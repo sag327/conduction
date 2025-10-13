@@ -87,12 +87,10 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
 
-    scheduleTitle = composeTitle(opts.Title, dailySchedule.Date, caseTimelines);
-    title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');    
+    % Title removed per design update
 
     labelColorSchedule = applyAxisTextStyle(axSchedule);
 
-    annotateScheduleSummary(axSchedule, caseTimelines, metrics, scheduleStartHour, scheduleEndHour, labelColorSchedule);
     hold(axSchedule, 'off');
 
     if ~isempty(axOperators)
@@ -298,14 +296,17 @@ function [startHour, endHour] = determineTimeWindow(caseTimelines, overrideRange
         ends = ends(~isnan(ends));
 
         if isempty(starts) || isempty(ends)
-            startHour = 6;
-            endHour = 18;
+            startHour = 7;
+            endHour = 16;
         else
             scheduleStart = min(starts);
             scheduleEnd = max(ends);
 
-            startHour = (scheduleStart - 60) / 60;
-            endHour = (scheduleEnd + 60) / 60;
+            oneHourBeforeFirst = (scheduleStart - 60) / 60;
+            oneHourAfterLast = (scheduleEnd + 60) / 60;
+
+            startHour = min(7, oneHourBeforeFirst);
+            endHour = max(16, oneHourAfterLast);
         end
     end
 
@@ -636,8 +637,34 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         end
     end
 
-    set(ax, 'XTick', 1:numLabs, 'XTickLabel', labLabels);
+    set(ax, 'XTick', 1:numLabs, 'XTickLabel', repmat({''}, 1, numLabs));
+
+    % Draw lab labels at the top of the schedule, inside the axes
+    delete(findobj(ax, 'Tag', 'LabTopLabel'));
+    [~, labelOffsetHours] = pointsToDataOffsets(ax, 14);
+    if ~isfinite(labelOffsetHours) || labelOffsetHours <= 0
+        labelOffsetHours = max((endHour - startHour) * 0.03, 0.2);
+    end
+    labelY = startHour + labelOffsetHours;
+    labelColorTop = determineAxisLabelColor(ax);
+    baseFontSize = max(8, get(ax, 'FontSize'));
+    labelFontSize = baseFontSize * 1.75;
+    for labIdx = 1:numLabs
+        text(ax, labIdx, labelY, labLabels{labIdx}, ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', ...
+            'FontWeight', 'bold', 'Color', labelColorTop, 'FontSize', labelFontSize, ...
+            'HitTest', 'off', 'PickableParts', 'none', ...
+            'Tag', 'LabTopLabel');
+    end
+
     formatYAxisTimeTicks(ax, startHour, endHour);
+    set(ax, 'XTick', [], 'Box', 'off', 'TickLength', [0 0]);
+    if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'MinorTick')
+        ax.XAxis.MinorTick = 'off';
+    end
+    if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'TickValues')
+        ax.XAxis.TickValues = [];
+    end
     applyAxisTextStyle(ax);
 
     function attachCaseClick(rectHandle, caseEntry, callback)
@@ -743,66 +770,6 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
     end
 end
 
-function annotateScheduleSummary(ax, caseTimelines, metrics, startHour, endHour, labelColor)
-    if nargin < 6 || isempty(labelColor)
-        labelColor = determineAxisLabelColor(ax);
-    end
-    numCases = numel(caseTimelines);
-    numLabs = max([caseTimelines.labIndex]);
-    operatorNames = unique(string({caseTimelines.operatorName}));
-    numOperators = numel(operatorNames);
-
-    startCandidates = [caseTimelines.setupStart];
-    startCandidates = startCandidates(~isnan(startCandidates));
-    endCandidates = [caseTimelines.scheduleEnd];
-    endCandidates = endCandidates(~isnan(endCandidates));
-    if isempty(startCandidates) || isempty(endCandidates)
-        fallbackMakespan = (endHour - startHour) * 60;
-    else
-        fallbackMakespan = max(endCandidates) - min(startCandidates);
-    end
-    makespanHours = fetchMetric(metrics, 'makespan', fallbackMakespan) / 60;
-    meanUtilization = fetchMetric(metrics, 'averageLabOccupancyRatio', NaN) * 100;
-    totalIdleHours = fetchMetric(metrics, 'totalOperatorIdleMinutes', NaN) / 60;
-    totalOvertimeHours = fetchMetric(metrics, 'totalOperatorOvertimeMinutes', NaN) / 60;
-
-    summaryParts = {
-        sprintf('Cases: %d', numCases), ...
-        sprintf('Labs: %d', numLabs), ...
-        sprintf('Operators: %d', numOperators), ...
-        sprintf('Makespan: %.1f hrs', makespanHours)
-    };
-
-    if ~isnan(meanUtilization)
-        summaryParts{end+1} = sprintf('Mean lab occupancy: %.1f%%', meanUtilization); %#ok<AGROW>
-    end
-    if ~isnan(totalIdleHours)
-        summaryParts{end+1} = sprintf('Op idle: %.1f hrs', totalIdleHours); %#ok<AGROW>
-    end
-    if ~isnan(totalOvertimeHours)
-        summaryParts{end+1} = sprintf('Op overtime: %.1f hrs', totalOvertimeHours); %#ok<AGROW>
-    end
-
-    summaryText = strjoin(summaryParts, ' | ');
-
-    xLimits = xlim(ax);
-    yLimits = ylim(ax);
-    summaryBg = chooseSummaryBackground(labelColor);
-    text(ax, xLimits(2) - 0.1, max(yLimits) - 0.2, summaryText, ...
-        'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
-        'FontSize', 10, 'Color', labelColor, ...
-        'BackgroundColor', summaryBg, 'Margin', 4);
-
-    sixPMHour = 18;
-    if sixPMHour >= startHour && sixPMHour <= endHour
-        line(ax, xLimits, [sixPMHour, sixPMHour], ...
-            'Color', 'red', 'LineStyle', '--', 'LineWidth', 2, 'Parent', ax);
-        text(ax, xLimits(2) - 0.1, sixPMHour + 0.1, '6 PM', ...
-            'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', ...
-            'FontSize', 10, 'FontWeight', 'bold', 'Color', 'red');
-    end
-end
-
 function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
     %POINTSTODATAOFFSETS Convert a line width (points) to data offsets in x/y
     %   dxLabs in lab index units (x-axis), dyHours in hours (y-axis)
@@ -832,15 +799,6 @@ function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
 
     dxLabs = (px / axPixW) * xRange;
     dyHours = (px / axPixH) * yRange;
-end
-
-function summaryBg = chooseSummaryBackground(labelColor)
-    if isempty(labelColor)
-        summaryBg = [0 0 0];
-        return;
-    end
-    inverted = 1 - labelColor;
-    summaryBg = labelColor * 0.1 + inverted * 0.9;
 end
 
 function labelColor = applyAxisTextStyle(ax)
@@ -1227,7 +1185,11 @@ function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
     if isnat(resolvedDate)
         titleStr = baseTitleStr;
     else
-        titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+        if strlength(strtrim(string(baseTitleStr))) == 0
+            titleStr = datestr(resolvedDate, 'mmm dd, yyyy');
+        else
+            titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+        end
     end
 end
 

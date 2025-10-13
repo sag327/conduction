@@ -417,20 +417,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.Layout.Row = 3;
             app.BottomBarLayout.Layout.Column = 2;
             app.BottomBarLayout.RowHeight = {'fit'};
-            app.BottomBarLayout.ColumnWidth = {'1x','1x','1x','1x','1x'};
-            app.BottomBarLayout.ColumnSpacing = 12;
-            app.BottomBarLayout.Padding = [0 0 0 0];
+            app.BottomBarLayout.ColumnWidth = {'3x','fit','fit','fit','fit','fit'};
+            app.BottomBarLayout.ColumnSpacing = 11;
+            app.BottomBarLayout.Padding = [0 12 4 0];
 
-            app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --');
-            app.KPI1.Layout.Column = 1;
-            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --');
-            app.KPI2.Layout.Column = 2;
-            app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --');
-            app.KPI3.Layout.Column = 3;
-            app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --');
-            app.KPI4.Layout.Column = 4;
-            app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --');
-            app.KPI5.Layout.Column = 5;
+            sharedKpiStyle = {'HorizontalAlignment','right','VerticalAlignment','top'};
+
+            app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --', sharedKpiStyle{:});
+            app.KPI1.Layout.Column = 2;
+            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --', sharedKpiStyle{:});
+            app.KPI2.Layout.Column = 3;
+            app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --', sharedKpiStyle{:});
+            app.KPI3.Layout.Column = 4;
+            app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --', sharedKpiStyle{:});
+            app.KPI4.Layout.Column = 5;
+            app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --', sharedKpiStyle{:});
+            app.KPI5.Layout.Column = 6;
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
@@ -884,7 +886,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            % Gather locked IDs
+            % Gather locked IDs from both case objects and app-level lock list
             lockedCaseIds = string.empty(0, 1);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
@@ -892,13 +894,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
                 end
             end
-
-            % Remove unlocked cases from manager
-            for i = caseCount:-1:1
-                if ~app.CaseManager.getCase(i).IsLocked
-                    app.CaseManager.removeCase(i);
-                end
+            if ~isempty(app.LockedCaseIds)
+                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
             end
+
+            % Remove unlocked cases from manager using a single filtered update
+            app.CaseManager.clearCasesExcept(lockedCaseIds);
 
             caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
             scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
