@@ -211,6 +211,7 @@ classdef ScheduleRenderer < handle
                 set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
                 try, uistack(blockHandle, 'top'); catch, end
             end
+
         end
 
         function onCaseBlockMouseDown(obj, app, rectHandle)
@@ -330,6 +331,22 @@ classdef ScheduleRenderer < handle
                 drag.startPoint = [NaN, NaN];
             end
 
+            % Preserve the vertical offset from the rectangle's bottom to the
+            % initial mouse click so the block doesn't jump toward the cursor.
+            try
+                rectPos = get(rectHandle, 'Position');
+            catch
+                rectPos = [NaN NaN NaN NaN];
+            end
+            if numel(rectPos) ~= 4 || any(~isfinite(rectPos)) || any(~isfinite(drag.startPoint))
+                drag.cursorOffsetHours = drag.rectHeight / 2; % safe fallback
+            else
+                clickOffset = drag.startPoint(2) - rectPos(2);
+                % Clamp to [0, rectHeight] so we stay within the block
+                clickOffset = max(0, min(drag.rectHeight, clickOffset));
+                drag.cursorOffsetHours = clickOffset;
+            end
+
             if isprop(rectHandle, 'FaceAlpha') && rectHandle.FaceAlpha == 0
                 rectHandle.FaceAlpha = 0.1;
             end
@@ -338,7 +355,7 @@ classdef ScheduleRenderer < handle
                 dragController.setActiveDrag(drag);
             end
 
-            app.UIFigure.Pointer = 'hand';
+            app.UIFigure.Pointer = 'fleur';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
             app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endDragCase(app);
         end
@@ -368,11 +385,13 @@ classdef ScheduleRenderer < handle
 
             durationHours = drag.rectHeight;
             yLimits = ylim(app.ScheduleAxes);
-            newStartHour = currentPoint(2);
-            newStartHour = max(yLimits(1), min(yLimits(2) - durationHours, newStartHour));
+            % Compute new bottom-left Y by subtracting the preserved click offset
+            % so the block drags naturally from its current position.
+            newBottomHour = currentPoint(2) - drag.cursorOffsetHours;
+            newBottomHour = max(yLimits(1), min(yLimits(2) - durationHours, newBottomHour));
 
             snapMinutes = max(1, drag.snapMinutes);
-            newStartMinutes = round((newStartHour * 60) / snapMinutes) * snapMinutes;
+            newStartMinutes = round((newBottomHour * 60) / snapMinutes) * snapMinutes;
             newStartHour = newStartMinutes / 60;
 
             newLeft = newLabIndex - drag.rectWidth / 2;
@@ -411,6 +430,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.WindowButtonUpFcn = [];
             app.UIFigure.Pointer = 'arrow';
             dragController.clearActiveDrag();
+            dragController.enableSelectionHoverWatcher();
 
             if ~isgraphics(drag.rectHandle)
                 return;
@@ -459,6 +479,10 @@ classdef ScheduleRenderer < handle
                 app.OptimizationController.markOptimizationDirty(app);
                 app.markDirty();
                 app.updateCasesTable();
+                if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
+                        app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, drag.caseId);
+                end
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
                 end
@@ -474,6 +498,208 @@ classdef ScheduleRenderer < handle
 
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
                 drag.rectHandle.FaceAlpha = 0;
+            end
+
+            obj.restoreSelectionOverlay(app);
+        end
+
+        function onCaseResizeMouseDown(obj, app, handle)
+            if ~isgraphics(handle)
+                return;
+            end
+
+            dragController = app.CaseDragController;
+            if isempty(dragController)
+                return;
+            end
+
+            try
+                ud = get(handle, 'UserData');
+            catch
+                return;
+            end
+
+            if ~isstruct(ud) || ~isfield(ud, 'caseId')
+                return;
+            end
+
+            caseId = string(ud.caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+
+            if app.IsOptimizationRunning || app.IsTimeControlActive
+                obj.restoreSelectionOverlay(app);
+                return;
+            end
+
+            if ~obj.isCaseBlockDraggable(app, caseId)
+                obj.restoreSelectionOverlay(app);
+                return;
+            end
+
+            caseRect = [];
+            if isfield(ud, 'caseRect') && isgraphics(ud.caseRect)
+                caseRect = ud.caseRect;
+            else
+                caseRect = obj.findCaseBlockHandle(app.ScheduleAxes, caseId);
+            end
+            if isempty(caseRect) || ~isgraphics(caseRect)
+                return;
+            end
+
+            resize.originalCaseRectPos = get(caseRect, 'Position');
+            resize.caseRectHandle = caseRect;
+            resize.handleRect = handle;
+            resize.caseId = caseId;
+            resize.labIndex = obj.extractField(ud, 'labIndex', NaN);
+            resize.snapMinutes = obj.extractField(ud, 'snapMinutes', 5);
+            resize.originalProcStart = obj.extractField(ud, 'procStart', NaN);
+            resize.originalProcEnd = obj.extractField(ud, 'procEnd', NaN);
+            resize.setupStartMinutes = obj.extractField(ud, 'setupStart', NaN);
+            resize.postDuration = obj.extractField(ud, 'postDuration', 0);
+            if isnan(resize.postDuration)
+                resize.postDuration = 0;
+            end
+            resize.turnoverDuration = obj.extractField(ud, 'turnoverDuration', 0);
+            if isnan(resize.turnoverDuration)
+                resize.turnoverDuration = 0;
+            end
+            resize.handleHeightHours = obj.extractField(ud, 'handleHeightHours', 0.08);
+            resize.originalHandlePos = get(handle, 'Position');
+            resize.minProcDuration = max(1, resize.snapMinutes);  % minutes
+            resize.currentProcEnd = resize.originalProcEnd;
+            resize.hasResized = false;
+
+            if ~isfinite(resize.originalProcStart) || ~isfinite(resize.originalProcEnd)
+                return;
+            end
+
+            dragController.hideSelectionOverlay(false);
+            dragController.showSoftHighlight(app.ScheduleAxes, caseRect);
+            dragController.setActiveResize(resize);
+            dragController.clearActiveDrag();
+            dragController.markMotionUpdate();
+
+            app.UIFigure.Pointer = 'crosshair';
+            app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateResizeCase(app);
+            app.UIFigure.WindowButtonUpFcn = @(~, ~) obj.endResizeCase(app);
+        end
+
+        function updateResizeCase(obj, app)
+            dragController = app.CaseDragController;
+            if isempty(dragController) || ~dragController.hasActiveResize()
+                return;
+            end
+
+            resize = dragController.getActiveResize();
+            if isempty(resize) || ~isfield(resize, 'caseRectHandle') || ~isgraphics(resize.caseRectHandle)
+                return;
+            end
+
+            if dragController.shouldThrottleMotion()
+                return;
+            end
+
+            currentPoint = get(app.ScheduleAxes, 'CurrentPoint');
+            currentPoint = currentPoint(1, 1:2);
+
+            yLimits = ylim(app.ScheduleAxes);
+            newProcEndHour = min(max(currentPoint(2), resize.setupStartMinutes/60), yLimits(2));
+            newProcEndMinutes = round((newProcEndHour * 60) / resize.snapMinutes) * resize.snapMinutes;
+            minProcEnd = resize.originalProcStart + resize.minProcDuration;
+            if newProcEndMinutes < minProcEnd
+                newProcEndMinutes = minProcEnd;
+            end
+
+            maxProcEndMinutes = yLimits(2) * 60;
+            if newProcEndMinutes > maxProcEndMinutes
+                newProcEndMinutes = maxProcEndMinutes;
+            end
+
+            if newProcEndMinutes < resize.originalProcStart
+                newProcEndMinutes = resize.originalProcStart + resize.minProcDuration;
+            end
+
+            procDurationMinutes = newProcEndMinutes - resize.originalProcStart;
+            postDurationMinutes = max(0, resize.postDuration);
+            turnoverDurationMinutes = max(0, resize.turnoverDuration);
+            totalDurationMinutes = procDurationMinutes + postDurationMinutes + turnoverDurationMinutes;
+            caseStartHour = resize.setupStartMinutes / 60;
+            totalDurationHours = totalDurationMinutes / 60;
+
+            caseRectPos = resize.originalCaseRectPos;
+            caseRectPos(2) = caseStartHour;
+            caseRectPos(4) = totalDurationHours;
+            set(resize.caseRectHandle, 'Position', caseRectPos);
+
+            if isgraphics(resize.handleRect)
+                handleHeight = resize.handleHeightHours;
+                handleBottom = (newProcEndMinutes / 60) - handleHeight;
+                handleBottom = max(caseStartHour, handleBottom);
+                handleHeight = (newProcEndMinutes / 60) - handleBottom;
+                handlePos = [caseRectPos(1), handleBottom, caseRectPos(3), handleHeight];
+                set(resize.handleRect, 'Position', handlePos);
+                resize.handleHeightHours = handleHeight;
+            end
+
+            dragController.moveSoftHighlight(caseRectPos);
+
+            resize.currentProcEnd = newProcEndMinutes;
+            resize.hasResized = resize.hasResized || abs(newProcEndMinutes - resize.originalProcEnd) >= (resize.snapMinutes / 2);
+            dragController.setActiveResize(resize);
+            dragController.markMotionUpdate();
+        end
+
+        function endResizeCase(obj, app)
+            dragController = app.CaseDragController;
+            if isempty(dragController)
+                return;
+            end
+
+            resizeWasActive = dragController.hasActiveResize();
+            resize = dragController.getActiveResize();
+
+            dragController.hideSoftHighlight();
+            dragController.clearActiveResize();
+
+            app.UIFigure.WindowButtonMotionFcn = [];
+            app.UIFigure.WindowButtonUpFcn = [];
+            app.UIFigure.Pointer = 'arrow';
+            dragController.enableSelectionHoverWatcher();
+
+            if ~resizeWasActive
+                obj.restoreSelectionOverlay(app);
+                return;
+            end
+
+            if ~resize.hasResized || ~isfield(resize, 'currentProcEnd')
+                if isfield(resize, 'caseRectHandle') && isgraphics(resize.caseRectHandle)
+                    set(resize.caseRectHandle, 'Position', resize.originalCaseRectPos);
+                end
+                if isfield(resize, 'handleRect') && isgraphics(resize.handleRect)
+                    set(resize.handleRect, 'Position', resize.originalHandlePos);
+                end
+                obj.restoreSelectionOverlay(app);
+                return;
+            end
+
+            newProcEndMinutes = resize.currentProcEnd;
+            caseId = resize.caseId;
+
+            caseUpdated = obj.applyCaseResize(app, caseId, newProcEndMinutes);
+            if ~caseUpdated
+                if isfield(resize, 'caseRectHandle') && isgraphics(resize.caseRectHandle)
+                    set(resize.caseRectHandle, 'Position', resize.originalCaseRectPos);
+                end
+                if isfield(resize, 'handleRect') && isgraphics(resize.handleRect)
+                    set(resize.handleRect, 'Position', resize.originalHandlePos);
+                end
+            else
+                if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
+                        app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                    app.DrawerController.populateDrawer(app, caseId);
+                end
             end
 
             obj.restoreSelectionOverlay(app);
@@ -1122,6 +1348,80 @@ classdef ScheduleRenderer < handle
             end
         end
 
+        function scheduleWasUpdated = applyCaseResize(obj, app, caseId, newProcEndMinutes)
+            scheduleWasUpdated = false;
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            originalAssignments = assignments;
+            labs = app.OptimizedSchedule.Labs;
+            metrics = app.OptimizedSchedule.metrics();
+
+            beforeGlobalIds = obj.collectCaseIds(assignments);
+
+            sourceLabIdx = NaN;
+            caseIdx = NaN;
+            for labIdx = 1:numel(assignments)
+                casesArr = assignments{labIdx};
+                if isempty(casesArr)
+                    continue;
+                end
+                casesArr = casesArr(:);
+                ids = obj.collectCaseIds(casesArr);
+                matchMask = (ids == caseId);
+                if any(matchMask)
+                    sourceLabIdx = labIdx;
+                    caseIdx = find(matchMask, 1, 'first');
+                    caseStruct = casesArr(caseIdx);
+                    break;
+                end
+            end
+
+            if isnan(sourceLabIdx) || isnan(caseIdx)
+                warning('ScheduleRenderer:CaseResizeFailed', 'Failed to locate case %s for resize operation.', caseId);
+                return;
+            end
+
+            caseStruct = obj.updateCaseProcedureEnd(caseStruct, newProcEndMinutes);
+            assignments{sourceLabIdx}(caseIdx) = caseStruct;
+            assignments = obj.normalizeLabAssignments(assignments);
+
+            afterGlobalIds = obj.collectCaseIds(assignments);
+            afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
+            beforeSourceIds = obj.collectCaseIds(originalAssignments{sourceLabIdx});
+
+            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, sourceLabIdx, beforeSourceIds, afterSourceIds, beforeSourceIds, afterSourceIds, app.DebugShowCaseIds);
+            if hasAnomaly
+                warnMsg = sprintf('Resize for case %s reverted due to integrity check failure.', caseId);
+                if strlength(anomalyDetails) > 0
+                    warnMsg = sprintf('%s\n%s', warnMsg, char(anomalyDetails));
+                end
+                warning('ScheduleRenderer:CaseResizeReverted', warnMsg);
+                return;
+            end
+
+            scheduleWasUpdated = true;
+            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
+            app.LastDraggedCaseId = caseId;
+
+            if ~ismember(caseId, app.LockedCaseIds)
+                app.LockedCaseIds(end+1, 1) = caseId;
+                app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
+            end
+
+            app.OptimizationController.markOptimizationDirty(app);
+            app.markDirty();
+            app.updateCasesTable();
+
+            if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
+                    app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                app.DrawerController.populateDrawer(app, caseId);
+            end
+        end
+
         function ids = collectCaseIds(obj, data)
             %COLLECTCASEIDS Helper to collect case IDs from arrays or cell arrays
             if isempty(data)
@@ -1334,6 +1634,82 @@ classdef ScheduleRenderer < handle
             s = s([]);
         end
 
+        function caseStruct = updateCaseProcedureEnd(obj, caseStruct, newProcEndMinutes)
+            procStart = obj.getFieldValue(caseStruct, {'procStartTime','procedureStartTime'}, NaN);
+            if isnan(procStart)
+                procStart = obj.getFieldValue(caseStruct, {'startTime','setupStartTime','caseStartTime'}, NaN);
+            end
+
+            oldProcEnd = obj.getFieldValue(caseStruct, {'procEndTime','procedureEndTime'}, NaN);
+            oldPostEnd = obj.getFieldValue(caseStruct, {'postEndTime','postProcedureEndTime'}, NaN);
+            oldTurnoverEnd = obj.getFieldValue(caseStruct, {'turnoverEnd','turnoverEndTime'}, NaN);
+            oldEndTime = obj.getFieldValue(caseStruct, {'endTime','caseEndTime','scheduleEnd'}, NaN);
+
+            postDuration = obj.safeDifference(oldPostEnd, oldProcEnd);
+            if isnan(postDuration)
+                postDuration = obj.getFieldValue(caseStruct, 'postTime', 0);
+            end
+            if isnan(postDuration)
+                postDuration = 0;
+            end
+
+            turnoverDuration = obj.safeDifference(oldTurnoverEnd, oldPostEnd);
+            if isnan(turnoverDuration)
+                turnoverDuration = obj.getFieldValue(caseStruct, 'turnoverTime', 0);
+            end
+            if isnan(turnoverDuration)
+                turnoverDuration = 0;
+            end
+
+            setupStart = obj.getFieldValue(caseStruct, {'startTime','setupStartTime','caseStartTime'}, NaN);
+            if isnan(setupStart)
+                setupStart = obj.safeDifference(procStart, obj.getFieldValue(caseStruct, 'setupTime', NaN));
+            end
+
+            newPostEnd = newProcEndMinutes + postDuration;
+            newTurnoverEnd = newPostEnd + turnoverDuration;
+            newEndTime = newTurnoverEnd;
+
+            caseStruct = obj.setFieldIfExists(caseStruct, {'procEndTime','procedureEndTime'}, newProcEndMinutes);
+            if ~isnan(procStart)
+                procDuration = newProcEndMinutes - procStart;
+                caseStruct = obj.setFieldIfExists(caseStruct, {'procTime','procedureMinutes','procedureDuration'}, procDuration);
+            end
+            caseStruct = obj.setFieldIfExists(caseStruct, {'postEndTime','postProcedureEndTime'}, newPostEnd);
+            caseStruct = obj.setFieldIfExists(caseStruct, {'turnoverEnd','turnoverEndTime'}, newTurnoverEnd);
+            caseStruct = obj.setFieldIfExists(caseStruct, {'endTime','caseEndTime','scheduleEnd'}, newEndTime);
+
+            if isfield(caseStruct, 'assignedLab') && isempty(caseStruct.assignedLab)
+                caseStruct.assignedLab = obj.getFieldValue(caseStruct, 'labIndex', []);
+            end
+            if isfield(caseStruct, 'startTime') && ~isnan(setupStart)
+                caseStruct.startTime = setupStart;
+            end
+        end
+
+        function s = setFieldIfExists(~, s, fieldNames, value)
+            if isempty(fieldNames)
+                return;
+            end
+            if ~iscell(fieldNames)
+                fieldNames = {fieldNames};
+            end
+            for i = 1:numel(fieldNames)
+                name = fieldNames{i};
+                if isfield(s, name)
+                    s.(name) = value;
+                end
+            end
+        end
+
+        function diffValue = safeDifference(~, a, b)
+            if isnan(a) || isnan(b)
+                diffValue = NaN;
+            else
+                diffValue = a - b;
+            end
+        end
+
         function showCaseDragWarning(~, app, message)
             if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
                 return;
@@ -1360,6 +1736,28 @@ classdef ScheduleRenderer < handle
             value = defaultValue;
             if isstruct(source) && isfield(source, fieldName)
                 value = source.(fieldName);
+            end
+        end
+
+        function caseRect = findCaseBlockHandle(~, axesHandle, caseId)
+            caseRect = [];
+            if ~isgraphics(axesHandle)
+                return;
+            end
+            blocks = findobj(axesHandle, 'Tag', 'CaseBlock');
+            for idx = 1:numel(blocks)
+                block = blocks(idx);
+                if ~isgraphics(block)
+                    continue;
+                end
+                ud = get(block, 'UserData');
+                if ~isstruct(ud) || ~isfield(ud, 'caseId')
+                    continue;
+                end
+                if string(ud.caseId) == caseId
+                    caseRect = block;
+                    return;
+                end
             end
         end
 

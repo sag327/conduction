@@ -551,7 +551,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             end
         end
 
-        % Transparent overlay for interaction (drag/click)
+        % Transparent overlay for interaction (drag/click/resize)
         if ~isnan(setupStartHour) && ~isnan(postEndHour)
             caseStartHour = setupStartHour;
             caseEndHour = postEndHour;

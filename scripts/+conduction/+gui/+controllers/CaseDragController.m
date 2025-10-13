@@ -17,6 +17,7 @@ classdef CaseDragController < handle
         LastMotionTimer uint64 = uint64(0)
         MotionThrottleSeconds double = 0.016  % ~60 Hz default
         ActiveDrag struct = struct()
+        ActiveResize struct = struct()
 
         % Soft highlight behaviour
         SoftSelectOnMouseDown logical = true
@@ -34,6 +35,10 @@ classdef CaseDragController < handle
         SelectionLineWidth double = 3
         SelectionLastPosition double = [NaN NaN NaN NaN]
         SelectionCaseId string = ""
+        SelectionGrip = gobjects(0, 1)
+        SelectionHoverMotionActive logical = false
+        SelectionHoverMotionFcn = []
+        SelectionHoverPrevMotionFcn = []
     end
 
     methods
@@ -96,6 +101,8 @@ classdef CaseDragController < handle
             obj.HandleIndex = obj.buildHandleIndex(rectHandles);
             obj.LastRegistryUpdate = datetime('now');
 
+            obj.enableSelectionHoverWatcher();
+
             if strlength(obj.SelectionCaseId) > 0
                 obj.showSelectionOverlay(obj.SelectionCaseId);
             end
@@ -105,6 +112,7 @@ classdef CaseDragController < handle
             %CLEARREGISTRY Remove all tracked case block metadata.
             obj.hideSoftHighlight();
             obj.hideSelectionOverlay(false);
+            obj.disableSelectionHoverWatcher();
             obj.CaseIds = string.empty(0, 1);
             obj.RectHandles = gobjects(0, 1);
             obj.UserDataCells = cell(0, 1);
@@ -113,6 +121,7 @@ classdef CaseDragController < handle
             obj.LastMotionTimer = uint64(0);
             obj.AppHandle = conduction.gui.ProspectiveSchedulerApp.empty;
             obj.ActiveDrag = struct();
+            obj.ActiveResize = struct();
         end
 
         function ids = listCaseIds(obj)
@@ -233,6 +242,9 @@ classdef CaseDragController < handle
             if clearCaseId
                 obj.SelectionCaseId = "";
             end
+            if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
+                set(obj.SelectionGrip, 'Visible', 'off');
+            end
         end
 
         function success = showSelectionOverlay(obj, caseId)
@@ -254,6 +266,9 @@ classdef CaseDragController < handle
                 obj.hideSelectionOverlay(false);
                 return;
             end
+
+            isLocked = obj.isCaseLocked(caseId);
+            timeControlActive = obj.isTimeControlActive();
 
             rectHandle = entry.rectHandle;
             axesHandle = ancestor(rectHandle, 'axes');
@@ -289,10 +304,73 @@ classdef CaseDragController < handle
                 set(obj.SelectionRect, 'Position', selPos, 'Visible', 'on');
             end
 
+            % Create/update resize grip when case is selectable
+            % Allow resizing even when the case is locked; only block during time control
+            canResize = ~timeControlActive;
+            if ~canResize
+                if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
+                    set(obj.SelectionGrip, 'Visible', 'off');
+                end
+                obj.SelectionAxes = axesHandle;
+                obj.SelectionLastPosition = selPos;
+                try
+                    uistack(obj.SelectionRect, 'top');
+                catch
+                    % ignore stacking issues
+                end
+                success = true;
+                return;
+            end
+
+            gripWidth = selPos(3) * 0.6;
+            gripX = selPos(1) + (selPos(3) - gripWidth)/2;
+            [~, gripHeightHours] = obj.pointsToDataOffsets(axesHandle, 6);
+            if ~isfinite(gripHeightHours) || gripHeightHours <= 0
+                gripHeightHours = selPos(4) * 0.06;
+            end
+            gripHeightHours = min(gripHeightHours, selPos(4)/2);
+            gripY = selPos(2) + selPos(4) - gripHeightHours;
+
+            if isempty(obj.SelectionGrip) || ~isgraphics(obj.SelectionGrip)
+                obj.SelectionGrip = rectangle(axesHandle, ...
+                    'Position', [gripX, gripY, gripWidth, gripHeightHours], ...
+                    'FaceColor', [1 1 1], 'FaceAlpha', 0.6, ...
+                    'EdgeColor', [1 1 1], 'LineWidth', 1.5, ...
+                    'HitTest', 'on', 'PickableParts', 'all', ...
+                    'Clipping', 'on', 'Tag', 'CaseResizeHandle');
+            else
+                if obj.SelectionGrip.Parent ~= axesHandle
+                    set(obj.SelectionGrip, 'Parent', axesHandle);
+                end
+                set(obj.SelectionGrip, 'Position', [gripX, gripY, gripWidth, gripHeightHours], 'Visible', 'on');
+            end
+
+            if ~isempty(obj.AppHandle) && isprop(obj.AppHandle, 'ScheduleRenderer')
+                set(obj.SelectionGrip, 'ButtonDownFcn', @(src, ~) obj.AppHandle.ScheduleRenderer.onCaseResizeMouseDown(obj.AppHandle, src));
+            end
+
+            postDuration = obj.safeDifference(obj.extractFieldFromStruct(entry.userData, 'postEnd'), obj.extractFieldFromStruct(entry.userData, 'procEnd'));
+            if isnan(postDuration), postDuration = 0; end
+            turnoverDuration = obj.safeDifference(obj.extractFieldFromStruct(entry.userData, 'turnoverEnd'), obj.extractFieldFromStruct(entry.userData, 'postEnd'));
+            if isnan(turnoverDuration), turnoverDuration = 0; end
+
+            gripData = struct( ...
+                'caseId', caseId, ...
+                'labIndex', obj.extractFieldFromStruct(entry.userData, 'labIndex'), ...
+                'snapMinutes', 5, ...
+                'handleHeightHours', gripHeightHours, ...
+                'procStart', obj.extractFieldFromStruct(entry.userData, 'procStart'), ...
+                'procEnd', obj.extractFieldFromStruct(entry.userData, 'procEnd'), ...
+                'setupStart', obj.extractFieldFromStruct(entry.userData, 'setupStart'), ...
+                'postDuration', postDuration, ...
+                'turnoverDuration', turnoverDuration, ...
+                'caseRect', rectHandle);
+            obj.SelectionGrip.UserData = gripData;
+
             obj.SelectionAxes = axesHandle;
             obj.SelectionLastPosition = selPos;
             try
-                uistack(obj.SelectionRect, 'top');
+                uistack(obj.SelectionRect, 'top'); uistack(obj.SelectionGrip, 'top');
             catch
                 % ignore stacking issues
             end
@@ -301,6 +379,7 @@ classdef CaseDragController < handle
             catch
                 % ignore draw timing errors
             end
+            obj.enableSelectionHoverWatcher();
             success = true;
         end
 
@@ -358,6 +437,215 @@ classdef CaseDragController < handle
 
             idx = obj.HandleIndex(key);
             entry = obj.buildEntry(idx);
+        end
+
+        function enableSelectionHoverWatcher(obj)
+            %ENABLESELECTIONHOVERWATCHER Ensure hover cursor updates while grip visible.
+            app = obj.AppHandle;
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            fig = app.UIFigure;
+
+            if obj.SelectionHoverMotionActive && isequal(fig.WindowButtonMotionFcn, obj.SelectionHoverMotionFcn)
+                return;
+            end
+
+            obj.SelectionHoverPrevMotionFcn = fig.WindowButtonMotionFcn;
+            obj.SelectionHoverMotionFcn = @(src, evt) obj.onSelectionHoverMotion(src, evt);
+            fig.WindowButtonMotionFcn = obj.SelectionHoverMotionFcn;
+            obj.SelectionHoverMotionActive = true;
+        end
+
+        function disableSelectionHoverWatcher(obj)
+            %DISABLESELECTIONHOVERWATCHER Restore prior motion callback and cursor.
+            if ~obj.SelectionHoverMotionActive
+                return;
+            end
+
+            app = obj.AppHandle;
+            if ~isempty(app) && ~isempty(app.UIFigure) && isvalid(app.UIFigure)
+                fig = app.UIFigure;
+                if isequal(fig.WindowButtonMotionFcn, obj.SelectionHoverMotionFcn)
+                    fig.WindowButtonMotionFcn = obj.SelectionHoverPrevMotionFcn;
+                end
+                if ~strcmp(fig.Pointer, 'arrow') && ~obj.hasActiveDrag() && ~obj.hasActiveResize()
+                    fig.Pointer = 'arrow';
+                end
+            end
+
+            obj.SelectionHoverMotionActive = false;
+            obj.SelectionHoverMotionFcn = [];
+            obj.SelectionHoverPrevMotionFcn = [];
+        end
+
+        function onSelectionHoverMotion(obj, src, evt)
+            %ONSELECTIONHOVERMOTION Update cursor based on current hover target.
+            prevFcn = obj.SelectionHoverPrevMotionFcn;
+            if ~isempty(prevFcn) && ~isequal(prevFcn, obj.SelectionHoverMotionFcn)
+                try
+                    prevFcn(src, evt);
+                catch
+                    obj.SelectionHoverPrevMotionFcn = [];
+                end
+            end
+
+            app = obj.AppHandle;
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                obj.disableSelectionHoverWatcher();
+                return;
+            end
+
+            if obj.hasActiveDrag() || obj.hasActiveResize()
+                return;
+            end
+
+            fig = app.UIFigure;
+            try
+                hovered = hittest(fig);
+            catch
+                hovered = [];
+            end
+
+            gripVisible = obj.isSelectionGripVisible();
+            if gripVisible && isequal(hovered, obj.SelectionGrip)
+                if ~strcmp(fig.Pointer, 'crosshair')
+                    fig.Pointer = 'crosshair';
+                end
+                return;
+            end
+
+            caseRect = obj.resolveCaseRectFromHover(hovered);
+            if ~isempty(caseRect)
+                [entry, ~] = obj.findCaseByHandle(caseRect);
+                if ~isempty(entry) && isfield(entry, 'caseId')
+                    caseId = string(entry.caseId);
+                    if strlength(caseId) > 0 && obj.canInteractWithCase(caseId)
+                        if ~strcmp(fig.Pointer, 'fleur')
+                            fig.Pointer = 'fleur';
+                        end
+                        return;
+                    end
+                end
+            end
+
+            if ~strcmp(fig.Pointer, 'arrow')
+                fig.Pointer = 'arrow';
+            end
+        end
+
+        function tf = isSelectionGripVisible(obj)
+            tf = false;
+            if isempty(obj.SelectionGrip) || ~isgraphics(obj.SelectionGrip)
+                return;
+            end
+            tf = strcmp(obj.SelectionGrip.Visible, 'on');
+        end
+
+        function rectHandle = resolveCaseRectFromHover(obj, hovered)
+            rectHandle = [];
+            if isempty(hovered) || ~isgraphics(hovered)
+                return;
+            end
+
+            if obj.isCaseBlockHandle(hovered)
+                rectHandle = hovered;
+                return;
+            end
+
+            [entry, ~] = obj.findCaseByHandle(hovered);
+            if ~isempty(entry) && isstruct(entry) && isfield(entry, 'rectHandle') && isgraphics(entry.rectHandle)
+                rectHandle = entry.rectHandle;
+                return;
+            end
+
+            try
+                candidate = ancestor(hovered, 'matlab.graphics.primitive.Rectangle');
+            catch
+                candidate = [];
+            end
+
+            if obj.isCaseBlockHandle(candidate)
+                rectHandle = candidate;
+                return;
+            end
+
+            try
+                candidateAll = ancestor(hovered, 'matlab.graphics.primitive.Rectangle', 'include', 'all');
+            catch
+                candidateAll = [];
+            end
+
+            if obj.isCaseBlockHandle(candidateAll)
+                rectHandle = candidateAll;
+                return;
+            end
+
+            % Fallback: hit-test by cursor position within known case rectangles
+            app = obj.AppHandle;
+            if isempty(app) || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+
+            currentPoint = get(app.ScheduleAxes, 'CurrentPoint');
+            if isempty(currentPoint)
+                return;
+            end
+            cursorXY = currentPoint(1, 1:2);
+            if any(~isfinite(cursorXY))
+                return;
+            end
+
+            rectHandle = obj.findRectContainingPoint(cursorXY);
+        end
+
+        function rectHandle = findRectContainingPoint(obj, cursorXY)
+            rectHandle = [];
+            if isempty(obj.RectHandles)
+                return;
+            end
+
+            xCoord = cursorXY(1);
+            yCoord = cursorXY(2);
+
+            for idx = 1:numel(obj.RectHandles)
+                h = obj.RectHandles(idx);
+                if ~isgraphics(h)
+                    continue;
+                end
+                pos = get(h, 'Position');
+                if numel(pos) ~= 4 || any(~isfinite(pos))
+                    continue;
+                end
+
+                xMin = pos(1);
+                xMax = pos(1) + pos(3);
+                yMin = pos(2);
+                yMax = pos(2) + pos(4);
+
+                if xCoord >= xMin && xCoord <= xMax && yCoord >= yMin && yCoord <= yMax
+                    rectHandle = h;
+                    return;
+                end
+            end
+        end
+
+        function tf = isCaseBlockHandle(~, handle)
+            tf = false;
+            if ~isgraphics(handle)
+                return;
+            end
+            try
+                tagValue = get(handle, 'Tag');
+            catch
+                tagValue = '';
+            end
+            if isstring(tagValue)
+                tf = any(tagValue == "CaseBlock");
+            elseif ischar(tagValue)
+                tf = strcmp(tagValue, 'CaseBlock');
+            end
         end
 
         function markMotionUpdate(obj)
@@ -435,15 +723,32 @@ classdef CaseDragController < handle
             tf = ~isempty(fieldnames(obj.ActiveDrag));
         end
 
+        function setActiveResize(obj, resizeState)
+            if nargin < 2
+                resizeState = struct();
+            end
+            obj.ActiveResize = resizeState;
+        end
+
+        function resize = getActiveResize(obj)
+            resize = obj.ActiveResize;
+        end
+
+        function clearActiveResize(obj)
+            obj.ActiveResize = struct();
+            obj.LastMotionTimer = uint64(0);
+        end
+
+        function tf = hasActiveResize(obj)
+            tf = ~isempty(fieldnames(obj.ActiveResize));
+        end
+
         function enableTimingDebug(obj, tf)
             if nargin < 2
                 tf = true;
             end
             obj.DebugTiming = logical(tf);
         end
-    end
-
-    methods (Access = private)
         function [dxLabs, dyHours] = pointsToDataOffsets(~, ax, points)
             if nargin < 3 || isempty(points)
                 points = 1;
@@ -469,6 +774,87 @@ classdef CaseDragController < handle
 
             dxLabs = (px / axPixW) * xRange;
             dyHours = (px / axPixH) * yRange;
+        end
+
+        function value = extractFieldFromStruct(~, s, fieldName)
+            value = NaN;
+            if isstruct(s) && isfield(s, fieldName)
+                value = s.(fieldName);
+            end
+        end
+
+        function diffValue = safeDifference(~, a, b)
+            if isnan(a) || isnan(b)
+                diffValue = NaN;
+            else
+                diffValue = a - b;
+            end
+        end
+
+        function tf = isCaseLocked(obj, caseId)
+            tf = false;
+            if isempty(obj.AppHandle)
+                return;
+            end
+            if isprop(obj.AppHandle, 'LockedCaseIds')
+                tf = ismember(caseId, obj.AppHandle.LockedCaseIds);
+            end
+        end
+
+        function tf = isTimeControlActive(obj)
+            tf = false;
+            if isempty(obj.AppHandle)
+                return;
+            end
+            if isprop(obj.AppHandle, 'IsTimeControlActive')
+                tf = obj.AppHandle.IsTimeControlActive;
+            end
+        end
+
+        function tf = canInteractWithCase(obj, caseId)
+            tf = false;
+            if strlength(caseId) == 0
+                return;
+            end
+
+            app = obj.AppHandle;
+            if isempty(app)
+                return;
+            end
+
+            if isprop(app, 'IsOptimizationRunning') && app.IsOptimizationRunning
+                return;
+            end
+            if isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive
+                return;
+            end
+
+            if ~isprop(app, 'CaseManager') || isempty(app.CaseManager)
+                tf = true;
+                return;
+            end
+
+            caseIdChar = char(caseId);
+            try
+                [caseObj, ~] = app.CaseManager.findCaseById(caseIdChar);
+            catch
+                caseObj = [];
+            end
+
+            if isempty(caseObj)
+                tf = true;
+                return;
+            end
+
+            if ismethod(caseObj, 'isPending')
+                try
+                    tf = caseObj.isPending();
+                catch
+                    tf = true;
+                end
+            else
+                tf = true;
+            end
         end
         function entry = buildEntry(obj, idx)
             entry = struct( ...
