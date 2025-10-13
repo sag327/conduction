@@ -417,20 +417,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.Layout.Row = 3;
             app.BottomBarLayout.Layout.Column = 2;
             app.BottomBarLayout.RowHeight = {'fit'};
-            app.BottomBarLayout.ColumnWidth = {'1x','1x','1x','1x','1x'};
-            app.BottomBarLayout.ColumnSpacing = 12;
-            app.BottomBarLayout.Padding = [0 0 0 0];
+            app.BottomBarLayout.ColumnWidth = {'1x','fit','fit','fit','fit','fit'};
+            app.BottomBarLayout.ColumnSpacing = 6;
+            app.BottomBarLayout.Padding = [0 0 4 12];
 
-            app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --');
-            app.KPI1.Layout.Column = 1;
-            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --');
-            app.KPI2.Layout.Column = 2;
-            app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --');
-            app.KPI3.Layout.Column = 3;
-            app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --');
-            app.KPI4.Layout.Column = 4;
-            app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --');
-            app.KPI5.Layout.Column = 5;
+            sharedKpiStyle = {'HorizontalAlignment','right'};
+
+            app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --', sharedKpiStyle{:});
+            app.KPI1.Layout.Column = 2;
+            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --', sharedKpiStyle{:});
+            app.KPI2.Layout.Column = 3;
+            app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --', sharedKpiStyle{:});
+            app.KPI3.Layout.Column = 4;
+            app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --', sharedKpiStyle{:});
+            app.KPI4.Layout.Column = 5;
+            app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --', sharedKpiStyle{:});
+            app.KPI5.Layout.Column = 6;
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
