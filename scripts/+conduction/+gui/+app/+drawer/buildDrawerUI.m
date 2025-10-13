@@ -213,7 +213,7 @@ function createDurationRow(app, rowIndex, labelText, spinnerPropName)
 
     % Wire up callback based on spinner type
     callbackName = [spinnerPropName 'Changed'];
-    spinner.ValueChangedFcn = createCallbackFcn(app, str2func(callbackName), true);
+    spinner.ValueChangedFcn = @(src, event) app.(callbackName)(event);
 
     app.(spinnerPropName) = spinner;
 end
