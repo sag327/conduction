@@ -1213,8 +1213,8 @@ classdef ScheduleRenderer < handle
                 if closedEndHour - closedStartHour > 0.1
                     if closedStartHour <= yLimits(1) + 1e-3
                         labelText = 'Closed (all day)';
-                        labelHour = min(closedEndHour - 0.1, max(closedStartHour + 0.2, yLimits(1) + 0.25));
-                        textAlignment = 'bottom';
+                        labelHour = max(closedEndHour - 0.25, yLimits(1) + 0.2);
+                        textAlignment = 'top';
                     else
                         labelText = sprintf('Closed after %s', obj.minutesToTimeString(closedStartHour * 60));
                         labelHour = min(closedStartHour + 0.3, closedEndHour - 0.2);
