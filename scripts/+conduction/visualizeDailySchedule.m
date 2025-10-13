@@ -87,7 +87,7 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     plotLabSchedule(axSchedule, caseTimelines, labLabels, scheduleStartHour, scheduleEndHour, operatorColors, opts);
 
-    scheduleTitle = composeTitle(opts.Title, dailySchedule.Date, caseTimelines);
+    scheduleTitle = composeTitle("", dailySchedule.Date, caseTimelines);
     title(axSchedule, scheduleTitle, 'FontSize', 16, 'FontWeight', 'bold');    
 
     labelColorSchedule = applyAxisTextStyle(axSchedule);
@@ -644,7 +644,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     delete(findobj(ax, 'Tag', 'LabTopLabel'));
     [~, labelOffsetHours] = pointsToDataOffsets(ax, 14);
     if ~isfinite(labelOffsetHours) || labelOffsetHours <= 0
-        labelOffsetHours = max((endHour - startHour) * 0.015, 0.1);
+        labelOffsetHours = max((endHour - startHour) * 0.03, 0.2);
     end
     labelY = startHour + labelOffsetHours;
     labelColorTop = determineAxisLabelColor(ax);
@@ -652,14 +652,20 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     labelFontSize = baseFontSize * 1.75;
     for labIdx = 1:numLabs
         text(ax, labIdx, labelY, labLabels{labIdx}, ...
-            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', ...
             'FontWeight', 'bold', 'Color', labelColorTop, 'FontSize', labelFontSize, ...
             'HitTest', 'off', 'PickableParts', 'none', ...
             'Tag', 'LabTopLabel');
     end
 
     formatYAxisTimeTicks(ax, startHour, endHour);
-    set(ax, 'XTick', [], 'Box', 'off');
+    set(ax, 'XTick', [], 'Box', 'off', 'TickLength', [0 0]);
+    if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'MinorTick')
+        ax.XAxis.MinorTick = 'off';
+    end
+    if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'TickValues')
+        ax.XAxis.TickValues = [];
+    end
     applyAxisTextStyle(ax);
 
     function attachCaseClick(rectHandle, caseEntry, callback)
@@ -1180,7 +1186,11 @@ function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
     if isnat(resolvedDate)
         titleStr = baseTitleStr;
     else
-        titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+        if strlength(strtrim(string(baseTitleStr))) == 0
+            titleStr = datestr(resolvedDate, 'mmm dd, yyyy');
+        else
+            titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
+        end
     end
 end
 
