@@ -884,7 +884,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            % Gather locked IDs
+            % Gather locked IDs from both case objects and app-level lock list
             lockedCaseIds = string.empty(0, 1);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
@@ -892,13 +892,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
                 end
             end
-
-            % Remove unlocked cases from manager
-            for i = caseCount:-1:1
-                if ~app.CaseManager.getCase(i).IsLocked
-                    app.CaseManager.removeCase(i);
-                end
+            if ~isempty(app.LockedCaseIds)
+                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
             end
+
+            % Remove unlocked cases from manager using a single filtered update
+            app.CaseManager.clearCasesExcept(lockedCaseIds);
 
             caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
             scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
