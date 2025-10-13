@@ -638,7 +638,24 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         end
     end
 
-    set(ax, 'XTick', 1:numLabs, 'XTickLabel', labLabels);
+    set(ax, 'XTick', 1:numLabs, 'XTickLabel', repmat({''}, 1, numLabs));
+
+    % Draw lab labels at the top of the schedule, inside the axes
+    delete(findobj(ax, 'Tag', 'LabTopLabel'));
+    [~, labelOffsetHours] = pointsToDataOffsets(ax, 14);
+    if ~isfinite(labelOffsetHours) || labelOffsetHours <= 0
+        labelOffsetHours = max((endHour - startHour) * 0.015, 0.1);
+    end
+    labelY = startHour + labelOffsetHours;
+    labelColorTop = determineAxisLabelColor(ax);
+    for labIdx = 1:numLabs
+        text(ax, labIdx, labelY, labLabels{labIdx}, ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+            'FontWeight', 'bold', 'Color', labelColorTop, ...
+            'HitTest', 'off', 'PickableParts', 'none', ...
+            'Tag', 'LabTopLabel');
+    end
+
     formatYAxisTimeTicks(ax, startHour, endHour);
     applyAxisTextStyle(ax);
 
