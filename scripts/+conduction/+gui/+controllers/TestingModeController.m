@@ -22,17 +22,11 @@ classdef TestingModeController < handle
                     'DefaultOption', 'Clear All Cases', 'CancelOption', 'Cancel');
 
                 if strcmp(answer, 'Clear All Cases')
-                    app.CaseManager.clearAllCases();
-                    % Clear locks so visualization and table stay consistent
-                    app.LockedCaseIds = string.empty;
-                    if isprop(app, 'TimeControlLockedCaseIds')
-                        app.TimeControlLockedCaseIds = string.empty;
-                    end
+                    % Use centralized helper to clear cases and reset UI consistently
+                    app.clearAllCasesIncludingLocked();
                 elseif strcmp(answer, 'Keep Locked Cases')
-                    keepIds = string(app.LockedCaseIds);
-                    app.CaseManager.clearCasesExcept(keepIds);
-                    % Ensure lock list only contains kept IDs
-                    app.LockedCaseIds = intersect(keepIds, keepIds, 'stable');
+                    % Use centralized helper for keeping only locked cases
+                    app.clearUnlockedCasesOnly();
                 else
                     obj.setTestToggleValue(app, false);
                     obj.updateTestingActionStates(app);
@@ -90,7 +84,7 @@ classdef TestingModeController < handle
             app.DurationSelector.refreshDurationOptions(app);
 
             if clearCases
-                app.CaseManager.clearAllCases();
+                app.clearAllCasesIncludingLocked();
             end
 
             app.CurrentTestingSummary = struct();
