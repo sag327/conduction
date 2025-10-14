@@ -1301,6 +1301,17 @@ classdef ScheduleRenderer < handle
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
 
+            % DURATION-EDITING: Update the ProspectiveCase object's EstimatedDurationMinutes
+            % so the case table reflects the new duration
+            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+            if ~isempty(caseObj)
+                procStart = obj.getFieldValue(caseStruct, {'procStartTime', 'procedureStartTime'}, NaN);
+                if ~isnan(procStart)
+                    newProcDurationMinutes = newProcEndMinutes - procStart;
+                    caseObj.EstimatedDurationMinutes = max(0, round(newProcDurationMinutes));
+                end
+            end
+
             app.OptimizationController.markOptimizationDirty(app);
             app.markDirty();
             app.updateCasesTable();
