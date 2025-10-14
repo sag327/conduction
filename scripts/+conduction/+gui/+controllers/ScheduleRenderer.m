@@ -1236,120 +1236,7 @@ classdef ScheduleRenderer < handle
             end
         end
 
-    end
-
-    methods (Access = private)
-
-        function scheduleWasUpdated = applyCaseMove(obj, app, caseId, targetLabIndex, newSetupStartMinutes)
-            scheduleWasUpdated = false;
-
-            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
-                return;
-            end
-
-            assignments = app.OptimizedSchedule.labAssignments();
-            originalAssignments = assignments;
-            labs = app.OptimizedSchedule.Labs;
-            metrics = app.OptimizedSchedule.metrics();
-
-            beforeGlobalIds = obj.collectCaseIds(assignments);
-
-            sourceLabIdx = NaN;
-            movedCase = struct();
-            beforeSourceIds = string.empty(0,1);
-            beforeTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
-
-            newAssignments = assignments;
-            for labIdx = 1:numel(assignments)
-                casesArr = assignments{labIdx};
-                if isempty(casesArr)
-                    continue;
-                end
-                casesArr = casesArr(:);
-                ids = obj.collectCaseIds(casesArr);
-                matchMask = (ids == caseId);
-                if any(matchMask)
-                    sourceLabIdx = labIdx;
-                    beforeSourceIds = ids;
-                    movedCase = casesArr(find(matchMask, 1, 'first'));
-
-                    originalStart = obj.getCaseStartMinutes(movedCase);
-                    if isnan(originalStart)
-                        originalStart = newSetupStartMinutes;
-                    end
-                    deltaMinutes = newSetupStartMinutes - originalStart;
-                    if isnan(deltaMinutes)
-                        deltaMinutes = 0;
-                    end
-                    movedCase = obj.shiftCaseTimes(movedCase, deltaMinutes);
-                    if isfield(movedCase, 'lab'), movedCase.lab = targetLabIndex; end
-                    if isfield(movedCase, 'labIndex'), movedCase.labIndex = targetLabIndex; end
-                    movedCase.assignedLab = targetLabIndex;
-                    movedCase.startTime = newSetupStartMinutes;
-                    if ~isfield(movedCase, 'setupStartTime') || isempty(movedCase.setupStartTime)
-                        movedCase.setupStartTime = newSetupStartMinutes;
-                    else
-                        movedCase.setupStartTime = newSetupStartMinutes;
-                    end
-
-                    casesArr(matchMask) = [];
-                    newAssignments{labIdx} = casesArr;
-                    break;
-                end
-            end
-
-            if isnan(sourceLabIdx) || isempty(movedCase)
-                warning('ScheduleRenderer:CaseMoveFailed', 'Failed to locate case %s for drag operation.', caseId);
-                return;
-            end
-
-            targetCases = newAssignments{targetLabIndex};
-            [targetCases, movedCase] = obj.alignStructFieldsForConcat(targetCases, movedCase);
-
-            if isempty(targetCases)
-                targetCases = movedCase;
-            else
-                targetCases = targetCases(:);
-                startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
-                startTimes(~isfinite(startTimes)) = inf;
-
-                insertPos = find(startTimes > newSetupStartMinutes, 1, 'first');
-                if isempty(insertPos)
-                    targetCases = [targetCases; movedCase];
-                else
-                    targetCases = [targetCases(1:insertPos-1); movedCase; targetCases(insertPos:end)];
-                end
-            end
-
-            newAssignments{targetLabIndex} = targetCases(:);
-            assignments = obj.normalizeLabAssignments(newAssignments);
-
-            afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
-            afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
-            afterGlobalIds = obj.collectCaseIds(assignments);
-
-            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, app.DebugShowCaseIds);
-            if hasAnomaly
-                warnMsg = sprintf('Move for case %s reverted due to integrity check failure.', caseId);
-                if strlength(anomalyDetails) > 0
-                    warnMsg = sprintf('%s\n%s', warnMsg, char(anomalyDetails));
-                end
-                warning('ScheduleRenderer:CaseMoveReverted', warnMsg);
-                app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, originalAssignments, metrics);
-                scheduleWasUpdated = false;
-                return;
-            end
-
-            scheduleWasUpdated = true;
-            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
-            app.LastDraggedCaseId = caseId;
-
-            if ~ismember(caseId, app.LockedCaseIds)
-                app.LockedCaseIds(end+1, 1) = caseId;
-                app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
-            end
-        end
-
+        % DURATION-EDITING: Public methods for updating case durations
         function scheduleWasUpdated = applyCaseResize(obj, app, caseId, newProcEndMinutes)
             scheduleWasUpdated = false;
 
@@ -1518,6 +1405,120 @@ classdef ScheduleRenderer < handle
             if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
                     app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                 app.DrawerController.populateDrawer(app, caseId);
+            end
+        end
+
+    end
+
+    methods (Access = private)
+
+        function scheduleWasUpdated = applyCaseMove(obj, app, caseId, targetLabIndex, newSetupStartMinutes)
+            scheduleWasUpdated = false;
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            originalAssignments = assignments;
+            labs = app.OptimizedSchedule.Labs;
+            metrics = app.OptimizedSchedule.metrics();
+
+            beforeGlobalIds = obj.collectCaseIds(assignments);
+
+            sourceLabIdx = NaN;
+            movedCase = struct();
+            beforeSourceIds = string.empty(0,1);
+            beforeTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
+
+            newAssignments = assignments;
+            for labIdx = 1:numel(assignments)
+                casesArr = assignments{labIdx};
+                if isempty(casesArr)
+                    continue;
+                end
+                casesArr = casesArr(:);
+                ids = obj.collectCaseIds(casesArr);
+                matchMask = (ids == caseId);
+                if any(matchMask)
+                    sourceLabIdx = labIdx;
+                    beforeSourceIds = ids;
+                    movedCase = casesArr(find(matchMask, 1, 'first'));
+
+                    originalStart = obj.getCaseStartMinutes(movedCase);
+                    if isnan(originalStart)
+                        originalStart = newSetupStartMinutes;
+                    end
+                    deltaMinutes = newSetupStartMinutes - originalStart;
+                    if isnan(deltaMinutes)
+                        deltaMinutes = 0;
+                    end
+                    movedCase = obj.shiftCaseTimes(movedCase, deltaMinutes);
+                    if isfield(movedCase, 'lab'), movedCase.lab = targetLabIndex; end
+                    if isfield(movedCase, 'labIndex'), movedCase.labIndex = targetLabIndex; end
+                    movedCase.assignedLab = targetLabIndex;
+                    movedCase.startTime = newSetupStartMinutes;
+                    if ~isfield(movedCase, 'setupStartTime') || isempty(movedCase.setupStartTime)
+                        movedCase.setupStartTime = newSetupStartMinutes;
+                    else
+                        movedCase.setupStartTime = newSetupStartMinutes;
+                    end
+
+                    casesArr(matchMask) = [];
+                    newAssignments{labIdx} = casesArr;
+                    break;
+                end
+            end
+
+            if isnan(sourceLabIdx) || isempty(movedCase)
+                warning('ScheduleRenderer:CaseMoveFailed', 'Failed to locate case %s for drag operation.', caseId);
+                return;
+            end
+
+            targetCases = newAssignments{targetLabIndex};
+            [targetCases, movedCase] = obj.alignStructFieldsForConcat(targetCases, movedCase);
+
+            if isempty(targetCases)
+                targetCases = movedCase;
+            else
+                targetCases = targetCases(:);
+                startTimes = arrayfun(@(s) obj.getCaseStartMinutes(s), targetCases);
+                startTimes(~isfinite(startTimes)) = inf;
+
+                insertPos = find(startTimes > newSetupStartMinutes, 1, 'first');
+                if isempty(insertPos)
+                    targetCases = [targetCases; movedCase];
+                else
+                    targetCases = [targetCases(1:insertPos-1); movedCase; targetCases(insertPos:end)];
+                end
+            end
+
+            newAssignments{targetLabIndex} = targetCases(:);
+            assignments = obj.normalizeLabAssignments(newAssignments);
+
+            afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
+            afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
+            afterGlobalIds = obj.collectCaseIds(assignments);
+
+            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, app.DebugShowCaseIds);
+            if hasAnomaly
+                warnMsg = sprintf('Move for case %s reverted due to integrity check failure.', caseId);
+                if strlength(anomalyDetails) > 0
+                    warnMsg = sprintf('%s\n%s', warnMsg, char(anomalyDetails));
+                end
+                warning('ScheduleRenderer:CaseMoveReverted', warnMsg);
+                app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, originalAssignments, metrics);
+                scheduleWasUpdated = false;
+                return;
+            end
+
+            scheduleWasUpdated = true;
+            app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
+            app.LastDraggedCaseId = caseId;
+
+            if ~ismember(caseId, app.LockedCaseIds)
+                app.LockedCaseIds(end+1, 1) = caseId;
+                app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
         end
 
