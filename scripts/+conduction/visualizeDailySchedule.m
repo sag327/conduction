@@ -89,7 +89,7 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
 
     % Title removed per design update
 
-    labelColorSchedule = applyAxisTextStyle(axSchedule);
+    labelColorSchedule = conduction.visualization.colors.applyAxisTextStyle(axSchedule);
 
     hold(axSchedule, 'off');
 
@@ -133,7 +133,7 @@ end
 
 function opts = parseOptions(varargin)
     p = inputParser;
-    addParameter(p, 'Title', 'EP Lab Schedule', @ischarLike);
+    addParameter(p, 'Title', 'EP Lab Schedule', @conduction.utils.conversion.ischarLike);
     addParameter(p, 'ShowLabels', true, @islogical);
     addParameter(p, 'TimeRange', [], @(x) isempty(x) || (isnumeric(x) && numel(x) == 2));
     addParameter(p, 'FontSize', 8, @(x) isnumeric(x) && isscalar(x) && x > 0);
@@ -229,17 +229,17 @@ end
 function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, sequenceId)
     caseTimeline = struct();
     caseTimeline.labIndex = labIdx;
-    caseTimeline.caseId = resolveCaseId(caseItem, sequenceId);
-    caseTimeline.caseNumber = resolveCaseNumber(caseItem, sequenceId);  % DUAL-ID: Extract case number
-    caseTimeline.operatorName = resolveOperatorName(caseItem);
-    caseTimeline.admissionStatus = resolveAdmissionStatus(caseItem);
-    caseTimeline.caseStatus = resolveCaseStatus(caseItem);  % REALTIME-SCHEDULING
-    caseTimeline.setupStart = getNumericField(caseItem, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
-    caseTimeline.procStart = getNumericField(caseItem, {'procStartTime', 'procedureStartTime', 'procedureStart'});
-    caseTimeline.procEnd = getNumericField(caseItem, {'procEndTime', 'procedureEndTime', 'procedureEnd'});
-    caseTimeline.postDuration = getNumericField(caseItem, {'postTime', 'postDuration', 'postProcedureDuration'});
-    caseTimeline.turnoverDuration = getNumericField(caseItem, {'turnoverTime', 'turnoverDuration'});
-    caseTimeline.date = resolveCaseDate(caseItem);
+    caseTimeline.caseId = conduction.visualization.fieldResolvers.resolveCaseId(caseItem, sequenceId);
+    caseTimeline.caseNumber = conduction.visualization.fieldResolvers.resolveCaseNumber(caseItem, sequenceId);  % DUAL-ID: Extract case number
+    caseTimeline.operatorName = conduction.visualization.fieldResolvers.resolveOperatorName(caseItem);
+    caseTimeline.admissionStatus = conduction.visualization.fieldResolvers.resolveAdmissionStatus(caseItem);
+    caseTimeline.caseStatus = conduction.visualization.fieldResolvers.resolveCaseStatus(caseItem);  % REALTIME-SCHEDULING
+    caseTimeline.setupStart = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
+    caseTimeline.procStart = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'procStartTime', 'procedureStartTime', 'procedureStart'});
+    caseTimeline.procEnd = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'procEndTime', 'procedureEndTime', 'procedureEnd'});
+    caseTimeline.postDuration = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'postTime', 'postDuration', 'postProcedureDuration'});
+    caseTimeline.turnoverDuration = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'turnoverTime', 'turnoverDuration'});
+    caseTimeline.date = conduction.visualization.fieldResolvers.resolveCaseDate(caseItem);
 
     if isnan(caseTimeline.setupStart)
         caseTimeline.setupStart = caseTimeline.procStart;
@@ -248,7 +248,7 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
         caseTimeline.procStart = caseTimeline.setupStart;
     end
     if isnan(caseTimeline.procEnd)
-        durationHint = getNumericField(caseItem, {'procedureMinutes', 'procedureDuration'});
+        durationHint = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'procedureMinutes', 'procedureDuration'});
         if ~isnan(durationHint) && ~isnan(caseTimeline.procStart)
             caseTimeline.procEnd = caseTimeline.procStart + durationHint;
         else
@@ -257,7 +257,7 @@ function caseTimeline = normalizeCaseItem(caseItem, labIdx, includeTurnover, seq
     end
 
     if isnan(caseTimeline.postDuration)
-        endTime = getNumericField(caseItem, {'endTime', 'caseEndTime'});
+        endTime = conduction.visualization.fieldResolvers.getNumericField(caseItem, {'endTime', 'caseEndTime'});
         if ~isnan(endTime) && ~isnan(caseTimeline.procEnd)
             caseTimeline.postDuration = max(0, endTime - caseTimeline.procEnd);
         else
@@ -548,9 +548,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             else
                 opColor = [0.5, 0.5, 0.5];
             end
-            textColor = determineTextColorForBackground(opColor);
+            textColor = conduction.visualization.colors.determineTextColorForBackground(opColor);
 
-            labelHandle = text(ax, xPosEff, labelY, composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
+            labelHandle = text(ax, xPosEff, labelY, conduction.visualization.labels.composeCaseLabel(entry.caseNumber, entry.operatorName, entry.admissionStatus), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
                 'FontSize', opts.FontSize, ...
@@ -624,7 +624,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             handleMarker.ButtonDownFcn = [];
 
             % Add "NOW" label with tag for updating
-            timeStr = minutesToTimeString(currentTimeMinutes);
+            timeStr = conduction.visualization.timeFormatting.minutesToTimeString(currentTimeMinutes);
             nowLabelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
                 sprintf('NOW (%s)', timeStr), ...
                 'Color', [0, 0, 0], 'FontWeight', 'bold', 'FontSize', 13, ...
@@ -656,9 +656,9 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         labelOffsetHours = max((endHour - startHour) * 0.03, 0.2);
     end
     labelY = startHour + labelOffsetHours;
-    labelColorTop = determineAxisLabelColor(ax);
+    labelColorTop = conduction.visualization.colors.determineAxisLabelColor(ax);
     baseFontSize = max(8, get(ax, 'FontSize'));
-    labelFontSize = baseFontSize * 1.75;
+    labelFontSize = baseFontSize * 1.4875;  % 1.75 * 0.85 (15% smaller)
     for labIdx = 1:numLabs
         text(ax, labIdx, labelY, labLabels{labIdx}, ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', ...
@@ -667,7 +667,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             'Tag', 'LabTopLabel');
     end
 
-    formatYAxisTimeTicks(ax, startHour, endHour);
+    conduction.visualization.timeFormatting.formatAxisTimeTicks(ax, startHour, endHour, 'y');
     set(ax, 'XTick', [], 'Box', 'off', 'TickLength', [0 0]);
     if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'MinorTick')
         ax.XAxis.MinorTick = 'off';
@@ -675,7 +675,7 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'TickValues')
         ax.XAxis.TickValues = [];
     end
-    applyAxisTextStyle(ax);
+    conduction.visualization.colors.applyAxisTextStyle(ax);
 
     function attachCaseClick(rectHandle, caseEntry, callback)
         if isempty(rectHandle) || ~isgraphics(rectHandle)
@@ -811,97 +811,6 @@ function [dxLabs, dyHours] = pointsToDataOffsets(ax, points)
     dyHours = (px / axPixH) * yRange;
 end
 
-function labelColor = applyAxisTextStyle(ax)
-    labelColor = determineAxisLabelColor(ax);
-    if isempty(labelColor)
-        labelColor = [0 0 0];
-    end
-    gridColor = labelColor * 0.6 + (1 - labelColor) * 0.4;
-    set(ax, 'XColor', labelColor, 'YColor', labelColor);
-    if isprop(ax, 'GridColor')
-        set(ax, 'GridColor', gridColor);
-    end
-    if ~isempty(ax.Title) && isprop(ax.Title, 'Color')
-        ax.Title.Color = labelColor;
-    end
-    if ~isempty(ax.XLabel) && isprop(ax.XLabel, 'Color')
-        ax.XLabel.Color = labelColor;
-    end
-    if ~isempty(ax.YLabel) && isprop(ax.YLabel, 'Color')
-        ax.YLabel.Color = labelColor;
-    end
-end
-
-function labelColor = determineAxisLabelColor(ax)
-    bgColor = get(ax, 'Color');
-    rgb = normalizeColorSpec(bgColor);
-    luminance = sum(rgb .* [0.299, 0.587, 0.114]);
-    if luminance < 0.5
-        labelColor = [1 1 1];
-    else
-        labelColor = [0.1 0.1 0.1];
-    end
-end
-
-function textColor = determineTextColorForBackground(bgColor)
-    %DETERMINETEXTCOLORFORBACKGROUND Choose black or white text based on background luminance
-    %   Uses the relative luminance formula to determine contrast
-    rgb = normalizeColorSpec(bgColor);
-    luminance = sum(rgb .* [0.299, 0.587, 0.114]);
-    if luminance < 0.5
-        textColor = [1 1 1];  % White text for dark backgrounds
-    else
-        textColor = [0 0 0];  % Black text for light backgrounds
-    end
-end
-
-function rgb = normalizeColorSpec(colorValue)
-    if isnumeric(colorValue)
-        rgb = double(colorValue(:)');
-        if any(rgb > 1)
-            rgb = rgb / 255;
-        end
-        rgb = max(min(rgb, 1), 0);
-        if numel(rgb) >= 3
-            rgb = rgb(1:3);
-        else
-            rgb = [rgb, zeros(1, 3 - numel(rgb))];
-        end
-        return;
-    end
-
-    if isstring(colorValue)
-        colorValue = char(colorValue);
-    end
-
-    if ischar(colorValue)
-        switch lower(strtrim(colorValue))
-            case {'white', 'w'}
-                rgb = [1 1 1];
-            case {'black', 'k'}
-                rgb = [0 0 0];
-            case {'red', 'r'}
-                rgb = [1 0 0];
-            case {'green', 'g'}
-                rgb = [0 1 0];
-            case {'blue', 'b'}
-                rgb = [0 0 1];
-            case {'cyan', 'c'}
-                rgb = [0 1 1];
-            case {'magenta', 'm'}
-                rgb = [1 0 1];
-            case {'yellow', 'y'}
-                rgb = [1 1 0];
-            case {'none', 'transparent'}
-                rgb = [0 0 0];
-            otherwise
-                rgb = [0 0 0];
-        end
-    else
-        rgb = [0 0 0];
-    end
-end
-
 function operatorData = calculateOperatorTimelines(caseTimelines, uniqueOperators)
     operatorData = struct('name', {}, 'cases', {}, 'workingPeriods', {}, 'idlePeriods', {}, ...
         'totalIdle', {}, 'firstStart', {}, 'lastEnd', {});
@@ -949,7 +858,7 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
     if numOperators == 0
         xlabel(ax, 'Time of Day');
         title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold');
-        applyAxisTextStyle(ax);
+        conduction.visualization.colors.applyAxisTextStyle(ax);
         return;
     end
 
@@ -1003,15 +912,15 @@ function plotOperatorTimeline(ax, operatorData, operatorColors, startHour, endHo
     xlim(ax, [startHour, endHour + 1]);
     ylim(ax, [0.5, numOperators + 0.5]);
 
-    labels = formatOperatorLabels(operatorData);
+    labels = conduction.visualization.labels.formatOperatorLabels(operatorData);
     set(ax, 'YTick', 1:numOperators, 'YTickLabel', labels);
 
-    formatXAxisTimeTicks(ax, startHour, endHour);
+    conduction.visualization.timeFormatting.formatAxisTimeTicks(ax, startHour, endHour, 'x');
     xlabel(ax, 'Time of Day');
     title(ax, 'Operator Utilization Timeline', 'FontSize', 14, 'FontWeight', 'bold');
     grid(ax, 'on');
     set(ax, 'GridAlpha', 0.3, 'Box', 'on', 'LineWidth', 1);
-    applyAxisTextStyle(ax);
+    conduction.visualization.colors.applyAxisTextStyle(ax);
 
     sixPMHour = 18;
     if sixPMHour >= startHour && sixPMHour <= endHour
@@ -1028,209 +937,6 @@ function addHourGrid(ax, startHour, endHour)
     end
 end
 
-function formatYAxisTimeTicks(ax, startHour, endHour)
-    hourTicks = floor(startHour):ceil(endHour);
-    hourLabels = arrayfun(@hourLabel, hourTicks, 'UniformOutput', false);
-    set(ax, 'YTick', hourTicks, 'YTickLabel', hourLabels);
-end
-
-function formatXAxisTimeTicks(ax, startHour, endHour)
-    hourTicks = floor(startHour):ceil(endHour);
-    hourLabels = arrayfun(@hourLabel, hourTicks, 'UniformOutput', false);
-    set(ax, 'XTick', hourTicks, 'XTickLabel', hourLabels);
-end
-
-function label = hourLabel(hourValue)
-    displayHour = mod(hourValue, 24);
-    if hourValue >= 24
-        label = sprintf('%02d:00 (+1)', round(displayHour));
-    else
-        label = sprintf('%02d:00', round(displayHour));
-    end
-end
-
-function label = composeCaseLabel(caseNumber, operatorName, admissionStatus)
-    % DUAL-ID: Use case number for display (simple integer like "1", "2", "3")
-    info = parseOperatorName(operatorName);
-    lastName = char(info.lastName);
-    if isempty(lastName)
-        lastName = 'Unknown';
-    end
-
-    % Format case number as simple integer string
-    if isnumeric(caseNumber) && ~isnan(caseNumber)
-        caseNumStr = sprintf('%d', round(caseNumber));
-    else
-        caseNumStr = '?';
-    end
-
-    % Add admission status suffix
-    if nargin >= 3 && ~isempty(admissionStatus)
-        isInpatient = strcmpi(admissionStatus, 'inpatient') || strcmpi(admissionStatus, 'ip');
-        if isInpatient
-            suffix = ' (IP)';
-        else
-            suffix = ' (OP)';
-        end
-        label = sprintf('%s%s\n%s', caseNumStr, suffix, lastName);
-    else
-        label = sprintf('%s\n%s', caseNumStr, lastName);
-    end
-end
-
-function labels = formatOperatorLabels(operatorData)
-    if isempty(operatorData)
-        labels = {};
-        return;
-    end
-
-    parts = arrayfun(@(op) parseOperatorName(op.name), operatorData);
-    numOps = numel(parts);
-
-    lastNames = cell(1, numOps);
-    firstInitials = cell(1, numOps);
-    firstNames = cell(1, numOps);
-    for i = 1:numOps
-        rawLast = string(parts(i).lastName);
-        if strlength(rawLast) == 0
-            rawLast = "Unknown";
-        end
-        lastNames{i} = char(rawLast);
-
-        initialToken = string(parts(i).firstInitial);
-        if strlength(initialToken) > 0
-            firstInitials{i} = char(initialToken(1));
-        else
-            firstInitials{i} = '';
-        end
-
-        firstToken = string(parts(i).firstName);
-        if strlength(firstToken) > 0
-            firstNames{i} = char(firstToken);
-        else
-            firstNames{i} = '';
-        end
-    end
-
-    labels = lastNames;
-
-    normalizedLast = cellfun(@lower, lastNames, 'UniformOutput', false);
-    [~, ~, idx] = unique(normalizedLast);
-    counts = accumarray(idx, 1);
-    duplicateMask = counts(idx) > 1;
-
-    for i = 1:numOps
-        if ~duplicateMask(i)
-            continue;
-        end
-        if ~isempty(firstInitials{i})
-            labels{i} = sprintf('%s %s.', lastNames{i}, firstInitials{i});
-        end
-    end
-
-    if ~any(duplicateMask)
-        return;
-    end
-
-    groupMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
-    for i = 1:numOps
-        if ~duplicateMask(i)
-            continue;
-        end
-        initialKey = lower(firstInitials{i});
-        if isempty(initialKey)
-            initialKey = '_';
-        end
-        key = sprintf('%s|%s', normalizedLast{i}, initialKey);
-        if ~groupMap.isKey(key)
-            groupMap(key) = [];
-        end
-        groupMap(key) = [groupMap(key), i];
-    end
-
-    keys = groupMap.keys;
-    for k = 1:numel(keys)
-        indices = groupMap(keys{k});
-        if numel(indices) <= 1
-            continue;
-        end
-        for j = 1:numel(indices)
-            idxVal = indices(j);
-            if ~isempty(firstNames{idxVal})
-                labels{idxVal} = sprintf('%s %s', lastNames{idxVal}, firstNames{idxVal});
-            elseif ~isempty(firstInitials{idxVal})
-                labels{idxVal} = sprintf('%s %s.', lastNames{idxVal}, firstInitials{idxVal});
-            else
-                labels{idxVal} = lastNames{idxVal};
-            end
-        end
-    end
-end
-
-function info = parseOperatorName(fullName)
-    nameStr = strtrim(string(fullName));
-    info = struct('firstName', "", 'firstInitial', "", 'lastName', "");
-    if strlength(nameStr) == 0
-        return;
-    end
-
-    if contains(nameStr, ',')
-        segments = split(nameStr, ',');
-        lastPart = strtrim(segments(1));
-        firstPart = "";
-        if numel(segments) > 1
-            firstPart = strtrim(segments(2));
-        end
-    else
-        tokens = split(nameStr, ' ');
-        tokens(tokens == "") = [];
-        if numel(tokens) == 0
-            return;
-        end
-        lastPart = string(tokens(end));
-        firstPart = join(tokens(1:end-1), ' ');
-    end
-
-    firstPart = strtrim(firstPart);
-    lastPart = strtrim(lastPart);
-
-    if strlength(firstPart) > 0
-        info.firstName = firstPart;
-        info.firstInitial = extractBetween(firstPart, 1, 1);
-    end
-    info.lastName = lastPart;
-end
-
-function titleStr = composeTitle(baseTitle, scheduleDate, caseTimelines)
-    resolvedDate = resolveScheduleDate(scheduleDate, caseTimelines);
-    baseTitleStr = char(baseTitle);
-    if isnat(resolvedDate)
-        titleStr = baseTitleStr;
-    else
-        if strlength(strtrim(string(baseTitleStr))) == 0
-            titleStr = datestr(resolvedDate, 'mmm dd, yyyy');
-        else
-            titleStr = sprintf('%s: %s', baseTitleStr, datestr(resolvedDate, 'mmm dd, yyyy'));
-        end
-    end
-end
-
-function resolvedDate = resolveScheduleDate(scheduleDate, caseTimelines)
-    resolvedDate = NaT;
-    if nargin >= 1 && ~isempty(scheduleDate) && ~isnat(scheduleDate)
-        resolvedDate = dateshift(scheduleDate, 'start', 'day');
-        return;
-    end
-
-    if nargin >= 2 && ~isempty(caseTimelines)
-        dates = [caseTimelines.date];
-        dates = dates(~isnat(dates));
-        if ~isempty(dates)
-            resolvedDate = dateshift(dates(1), 'start', 'day');
-        end
-    end
-end
-
 function logDebugSummary(caseTimelines, metrics, operatorData)
     fprintf('\nDaily Schedule Visualization Summary:\n');
     fprintf('  Total cases: %d\n', numel(caseTimelines));
@@ -1242,7 +948,7 @@ function logDebugSummary(caseTimelines, metrics, operatorData)
     for idx = 1:numel(coreFields)
         key = coreFields{idx};
         if isfield(metrics, key)
-            fprintf('  %s: %g\n', key, castToDouble(metrics.(key)));
+            fprintf('  %s: %g\n', key, conduction.utils.conversion.castToDouble(metrics.(key)));
         end
     end
 
@@ -1267,7 +973,7 @@ function val = fetchMetric(metrics, field, fallback)
     end
 
     if isfield(metrics, field)
-        val = castToDouble(metrics.(field));
+        val = conduction.utils.conversion.castToDouble(metrics.(field));
         return;
     end
 
@@ -1290,7 +996,7 @@ function val = fetchMetric(metrics, field, fallback)
                     if isempty(mapValues)
                         val = 0;
                     else
-                        numericVals = cellfun(@castToDouble, mapValues);
+                        numericVals = cellfun(@conduction.utils.conversion.castToDouble, mapValues);
                         val = sum(numericVals);
                     end
                     return;
@@ -1300,235 +1006,16 @@ function val = fetchMetric(metrics, field, fallback)
 
     if isfield(metrics, 'departmentMetrics') && isstruct(metrics.departmentMetrics) && ...
             isfield(metrics.departmentMetrics, field)
-        val = castToDouble(metrics.departmentMetrics.(field));
+        val = conduction.utils.conversion.castToDouble(metrics.departmentMetrics.(field));
         return;
     end
 
     if isfield(metrics, 'operatorMetrics') && isstruct(metrics.operatorMetrics) && ...
             isfield(metrics.operatorMetrics, field)
-        val = castToDouble(metrics.operatorMetrics.(field));
+        val = conduction.utils.conversion.castToDouble(metrics.operatorMetrics.(field));
         return;
     end
 
     val = fallback;
 end
 
-function flag = ischarLike(value)
-    flag = ischar(value) || (isstring(value) && isscalar(value));
-end
-
-function value = getNumericField(source, candidates)
-    value = NaN;
-    for idx = 1:numel(candidates)
-        name = candidates{idx};
-        if isstruct(source) && isfield(source, name)
-            raw = source.(name);
-        elseif isobject(source) && isprop(source, name)
-            raw = source.(name);
-        else
-            continue;
-        end
-        value = castToDouble(raw);
-        if ~isnan(value)
-            return;
-        end
-    end
-end
-
-function numeric = castToDouble(raw)
-    if isempty(raw)
-        numeric = NaN;
-        return;
-    end
-    if iscell(raw)
-        raw = raw{1};
-    end
-    if isnumeric(raw)
-        numeric = double(raw(1));
-    elseif isduration(raw)
-        numeric = minutes(raw(1));
-    elseif isstring(raw) || ischar(raw)
-        numeric = str2double(raw(1));
-    else
-        numeric = NaN;
-    end
-end
-
-function caseId = resolveCaseId(caseItem, fallbackIndex)
-    candidates = {'caseID', 'CaseId', 'caseId', 'id', 'CaseID'};
-    for idx = 1:numel(candidates)
-        name = candidates{idx};
-        if isstruct(caseItem) && isfield(caseItem, name)
-            candidate = asString(caseItem.(name));
-        elseif isobject(caseItem) && isprop(caseItem, name)
-            candidate = asString(caseItem.(name));
-        else
-            continue;
-        end
-        if strlength(candidate) > 0
-            caseId = candidate;
-            return;
-        end
-    end
-    caseId = string(sprintf('Case %d', fallbackIndex));
-end
-
-function caseNumber = resolveCaseNumber(caseItem, fallbackIndex)
-    % DUAL-ID: Extract user-facing case number for display
-    candidates = {'caseNumber', 'CaseNumber', 'case_number'};
-    for idx = 1:numel(candidates)
-        name = candidates{idx};
-        if isstruct(caseItem) && isfield(caseItem, name)
-            candidate = caseItem.(name);
-        elseif isobject(caseItem) && isprop(caseItem, name)
-            candidate = caseItem.(name);
-        else
-            continue;
-        end
-        if isnumeric(candidate) && isscalar(candidate) && ~isnan(candidate)
-            caseNumber = double(candidate);
-            return;
-        end
-    end
-    % Fallback: use sequence ID if no case number found
-    caseNumber = fallbackIndex;
-end
-
-function operatorName = resolveOperatorName(caseItem)
-    if isstruct(caseItem)
-        fields = {'operator', 'Operator', 'attending', 'physician'};
-        for idx = 1:numel(fields)
-            name = fields{idx};
-            if isfield(caseItem, name)
-                candidate = asString(caseItem.(name));
-                if strlength(candidate) > 0
-                    operatorName = candidate;
-                    return;
-                end
-            end
-        end
-    elseif isobject(caseItem)
-        if isprop(caseItem, 'Operator') && ~isempty(caseItem.Operator)
-            operatorName = asString(caseItem.Operator.Name);
-            if strlength(operatorName) > 0
-                return;
-            end
-        end
-        if isprop(caseItem, 'operator')
-            candidate = asString(caseItem.operator);
-            if strlength(candidate) > 0
-                operatorName = candidate;
-                return;
-            end
-        end
-    end
-    operatorName = string('Unknown Operator');
-end
-
-function admissionStatus = resolveAdmissionStatus(caseItem)
-    if isstruct(caseItem)
-        fields = {'admissionStatus', 'admission_status', 'AdmissionStatus'};
-        for idx = 1:numel(fields)
-            name = fields{idx};
-            if isfield(caseItem, name)
-                candidate = asString(caseItem.(name));
-                if strlength(candidate) > 0
-                    admissionStatus = lower(candidate);
-                    return;
-                end
-            end
-        end
-    elseif isobject(caseItem)
-        if isprop(caseItem, 'AdmissionStatus')
-            candidate = asString(caseItem.AdmissionStatus);
-            if strlength(candidate) > 0
-                admissionStatus = lower(candidate);
-                return;
-            end
-        end
-    end
-    admissionStatus = string('outpatient');  % Default to outpatient
-end
-
-function caseStatus = resolveCaseStatus(caseItem)
-    % REALTIME-SCHEDULING: Extract case status (pending/in_progress/completed)
-    if isstruct(caseItem)
-        fields = {'caseStatus', 'CaseStatus', 'status', 'Status'};
-        for idx = 1:numel(fields)
-            name = fields{idx};
-            if isfield(caseItem, name)
-                candidate = asString(caseItem.(name));
-                if strlength(candidate) > 0
-                    caseStatus = lower(candidate);
-                    return;
-                end
-            end
-        end
-    elseif isobject(caseItem)
-        if isprop(caseItem, 'CaseStatus')
-            candidate = asString(caseItem.CaseStatus);
-            if strlength(candidate) > 0
-                caseStatus = lower(candidate);
-                return;
-            end
-        end
-    end
-    caseStatus = string('pending');  % Default to pending
-end
-
-function dt = resolveCaseDate(caseItem)
-    if isstruct(caseItem)
-        if isfield(caseItem, 'date')
-            dt = parseMaybeDate(caseItem.date);
-            return;
-        end
-    elseif isobject(caseItem)
-        if isprop(caseItem, 'Date')
-            dt = caseItem.Date;
-            return;
-        end
-    end
-    dt = NaT;
-end
-
-function str = asString(value)
-    if isstring(value)
-        str = value(1);
-    elseif ischar(value)
-        str = string(value);
-    elseif isnumeric(value) && isscalar(value)
-        str = string(value);
-    else
-        str = string.empty;
-    end
-end
-
-function timeStr = minutesToTimeString(minutes)
-    % REALTIME-SCHEDULING: Convert minutes from midnight to HH:MM (24-hour format)
-    % Round to nearest minute
-    minutes = round(minutes);
-
-    hours = floor(minutes / 60);
-    mins = mod(minutes, 60);
-
-    % 24-hour format
-    timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
-end
-
-function dt = parseMaybeDate(value)
-    if isempty(value)
-        dt = NaT;
-        return;
-    end
-    if isa(value, 'datetime')
-        dt = value;
-    elseif isnumeric(value)
-        dt = datetime(value, 'ConvertFrom', 'datenum');
-    else
-        try
-            dt = datetime(string(value));
-        catch
-            dt = NaT;
-        end
-    end
-end
