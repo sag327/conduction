@@ -103,7 +103,7 @@ function buildDrawerUI(app)
     app.DrawerDurationsGrid.Layout.Row = 6;
     app.DrawerDurationsGrid.Layout.Column = 1;
     app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 3);
-    app.DrawerDurationsGrid.ColumnWidth = {90, '1x'};
+    app.DrawerDurationsGrid.ColumnWidth = {90, 82, '1x'};  % Label + spinner take ~half width (90 + 12 spacing + 82 ≈ 184px of 368px available)
     app.DrawerDurationsGrid.RowSpacing = 4;
     app.DrawerDurationsGrid.ColumnSpacing = 12;
     app.DrawerDurationsGrid.Padding = [0 0 0 0];
