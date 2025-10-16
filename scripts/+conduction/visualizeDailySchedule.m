@@ -709,7 +709,24 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         end
 
         try
-            callback(string(userData.caseId));
+            % Detect click type using SelectionType
+            fig = ancestor(rectHandle, 'figure');
+            if isempty(fig) || ~isgraphics(fig)
+                % Fallback to single-click behavior if figure not found
+                callback(string(userData.caseId));
+                return;
+            end
+
+            selectionType = get(fig, 'SelectionType');
+
+            if strcmp(selectionType, 'open')
+                % Double-click detected - toggle lock
+                % Send special prefix to indicate lock toggle request
+                callback(sprintf('lock-toggle:%s', string(userData.caseId)));
+            else
+                % Single-click or other - normal behavior
+                callback(string(userData.caseId));
+            end
         catch ME
             warning('visualizeDailySchedule:CaseClickFailed', 'Case click handler failed: %s', ME.message);
         end

@@ -1679,15 +1679,39 @@ classdef ScheduleRenderer < handle
                 end
             end
 
-            if isempty(callback)
-                if strlength(caseId) > 0
-                    app.onScheduleBlockClicked(caseId);
-                end
-                return;
-            end
-
+            % Detect double-click using SelectionType
+            % This enables double-click to toggle lock directly on schedule blocks
             try
-                callback(caseId);
+                fig = ancestor(rectHandle, 'figure');
+                if isempty(fig) || ~isgraphics(fig)
+                    % Fallback: no figure found, use single-click behavior
+                    if isempty(callback)
+                        if strlength(caseId) > 0
+                            app.onScheduleBlockClicked(caseId);
+                        end
+                    else
+                        callback(caseId);
+                    end
+                    return;
+                end
+
+                selectionType = get(fig, 'SelectionType');
+
+                if strcmp(selectionType, 'open')
+                    % Double-click detected - toggle lock
+                    callbackArg = sprintf('lock-toggle:%s', caseId);
+                else
+                    % Single-click or other - normal behavior
+                    callbackArg = caseId;
+                end
+
+                if isempty(callback)
+                    if strlength(callbackArg) > 0
+                        app.onScheduleBlockClicked(callbackArg);
+                    end
+                else
+                    callback(callbackArg);
+                end
             catch ME
                 warning('ScheduleRenderer:CaseClickFailed', 'Case click handler failed: %s', ME.message);
             end

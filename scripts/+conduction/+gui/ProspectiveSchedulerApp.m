@@ -599,8 +599,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Set selected case
-            app.SelectedCaseId = string(caseId);
+            % Check if this is a lock-toggle request from double-click
+            caseIdStr = string(caseId);
+            if startsWith(caseIdStr, 'lock-toggle:')
+                % Extract the actual caseId from the prefix
+                actualCaseId = extractAfter(caseIdStr, 'lock-toggle:');
+                if strlength(actualCaseId) > 0
+                    % Toggle lock state
+                    app.DrawerController.toggleCaseLock(app, actualCaseId);
+                    app.markDirty();  % Mark as dirty when case lock state changed
+                end
+                return;  % Exit early - don't do normal single-click behavior
+            end
+
+            % Normal single-click behavior: select case
+            app.SelectedCaseId = caseIdStr;
 
             % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
             [~, caseIndex] = app.CaseManager.findCaseById(caseId);
