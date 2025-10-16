@@ -1,0 +1,300 @@
+classdef LockedCaseConflictValidator
+    %LOCKEDCASECONFLICTVALIDATOR Validates locked case constraints for conflicts
+    %   Detects impossible scheduling scenarios where locked cases conflict:
+    %   - Operator conflicts: same operator assigned to multiple locked cases at overlapping times
+    %   - Lab conflicts: same lab has multiple locked cases at overlapping times
+
+    methods (Static)
+        function [hasConflicts, conflictReport] = validate(lockedConstraints)
+            %VALIDATE Check for operator and lab conflicts in locked cases
+            %   [hasConflicts, conflictReport] = validate(lockedConstraints)
+            %
+            %   Returns:
+            %       hasConflicts - true if any conflicts detected
+            %       conflictReport - struct with fields:
+            %           operatorConflicts - cell array of conflict descriptions
+            %           labConflicts - cell array of conflict descriptions
+            %           message - formatted error message for user display
+
+            hasConflicts = false;
+            conflictReport = struct();
+            conflictReport.operatorConflicts = {};
+            conflictReport.labConflicts = {};
+            conflictReport.message = '';
+
+            if isempty(lockedConstraints)
+                return;
+            end
+
+            % Detect operator conflicts
+            operatorConflicts = conduction.scheduling.LockedCaseConflictValidator.detectOperatorConflicts(lockedConstraints);
+
+            % Detect lab conflicts
+            labConflicts = conduction.scheduling.LockedCaseConflictValidator.detectLabConflicts(lockedConstraints);
+
+            % Build report
+            if ~isempty(operatorConflicts) || ~isempty(labConflicts)
+                hasConflicts = true;
+                conflictReport.operatorConflicts = operatorConflicts;
+                conflictReport.labConflicts = labConflicts;
+                conflictReport.message = conduction.scheduling.LockedCaseConflictValidator.formatConflictMessage(...
+                    operatorConflicts, labConflicts);
+            end
+        end
+
+        function conflicts = detectOperatorConflicts(lockedConstraints)
+            %DETECTOPERATORCONFLICTS Find locked cases with same operator at overlapping times
+            %   Returns cell array of conflict descriptions
+
+            conflicts = {};
+
+            if isempty(lockedConstraints)
+                return;
+            end
+
+            % Group locked cases by operator
+            operatorMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+            for i = 1:numel(lockedConstraints)
+                constraint = lockedConstraints(i);
+
+                % Extract operator name
+                if ~isfield(constraint, 'operator') || isempty(constraint.operator)
+                    continue;
+                end
+                operatorName = char(string(constraint.operator));
+
+                % Extract timing information
+                if ~isfield(constraint, 'procStartTime') || ~isfield(constraint, 'procEndTime')
+                    continue;
+                end
+
+                procStart = double(constraint.procStartTime);
+                procEnd = double(constraint.procEndTime);
+
+                if isnan(procStart) || isnan(procEnd)
+                    continue;
+                end
+
+                % Extract case ID and number
+                caseId = '';
+                if isfield(constraint, 'caseID')
+                    caseId = char(string(constraint.caseID));
+                end
+
+                % DUAL-ID: Extract case number for display (preferred over internal ID)
+                caseNumber = NaN;
+                if isfield(constraint, 'caseNumber') && ~isempty(constraint.caseNumber)
+                    caseNumber = double(constraint.caseNumber);
+                end
+
+                % Build case info struct
+                caseInfo = struct();
+                caseInfo.caseID = caseId;
+                caseInfo.caseNumber = caseNumber;
+                caseInfo.procStartTime = procStart;
+                caseInfo.procEndTime = procEnd;
+
+                % Add to operator map
+                if isKey(operatorMap, operatorName)
+                    cases = operatorMap(operatorName);
+                    cases{end+1} = caseInfo;
+                    operatorMap(operatorName) = cases;
+                else
+                    operatorMap(operatorName) = {caseInfo};
+                end
+            end
+
+            % Check each operator's cases for overlaps
+            operators = keys(operatorMap);
+            for i = 1:numel(operators)
+                operatorName = operators{i};
+                cases = operatorMap(operatorName);
+
+                % Check all pairs for overlaps
+                for j = 1:numel(cases)
+                    for k = (j+1):numel(cases)
+                        case1 = cases{j};
+                        case2 = cases{k};
+
+                        % Check if time windows overlap
+                        % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
+                        if case1.procStartTime < case2.procEndTime && ...
+                           case2.procStartTime < case1.procEndTime
+
+                            % Format time strings
+                            start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.procStartTime);
+                            end1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.procEndTime);
+                            start2Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case2.procStartTime);
+                            end2Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case2.procEndTime);
+
+                            % Format case names (use case number if available, otherwise ID)
+                            case1Name = conduction.scheduling.LockedCaseConflictValidator.formatCaseName(case1);
+                            case2Name = conduction.scheduling.LockedCaseConflictValidator.formatCaseName(case2);
+
+                            conflictMsg = sprintf('%s: %s (%s-%s) overlaps with %s (%s-%s)', ...
+                                operatorName, ...
+                                case1Name, start1Str, end1Str, ...
+                                case2Name, start2Str, end2Str);
+
+                            conflicts{end+1} = conflictMsg; %#ok<AGROW>
+                        end
+                    end
+                end
+            end
+        end
+
+        function conflicts = detectLabConflicts(lockedConstraints)
+            %DETECTLABCONFLICTS Find locked cases assigned to same lab at overlapping times
+            %   Returns cell array of conflict descriptions
+
+            conflicts = {};
+
+            if isempty(lockedConstraints)
+                return;
+            end
+
+            % Group locked cases by lab
+            labMap = containers.Map('KeyType', 'double', 'ValueType', 'any');
+
+            for i = 1:numel(lockedConstraints)
+                constraint = lockedConstraints(i);
+
+                % Extract lab assignment
+                if ~isfield(constraint, 'assignedLab') || isempty(constraint.assignedLab)
+                    continue;
+                end
+                labIdx = double(constraint.assignedLab);
+
+                if isnan(labIdx)
+                    continue;
+                end
+
+                % Extract timing information (full window including setup, post, turnover)
+                if ~isfield(constraint, 'startTime') || ~isfield(constraint, 'endTime')
+                    continue;
+                end
+
+                startTime = double(constraint.startTime);
+                endTime = double(constraint.endTime);
+
+                if isnan(startTime) || isnan(endTime)
+                    continue;
+                end
+
+                % Extract case ID and number
+                caseId = '';
+                if isfield(constraint, 'caseID')
+                    caseId = char(string(constraint.caseID));
+                end
+
+                % DUAL-ID: Extract case number for display (preferred over internal ID)
+                caseNumber = NaN;
+                if isfield(constraint, 'caseNumber') && ~isempty(constraint.caseNumber)
+                    caseNumber = double(constraint.caseNumber);
+                end
+
+                % Build case info struct
+                caseInfo = struct();
+                caseInfo.caseID = caseId;
+                caseInfo.caseNumber = caseNumber;
+                caseInfo.startTime = startTime;
+                caseInfo.endTime = endTime;
+
+                % Add to lab map
+                if isKey(labMap, labIdx)
+                    cases = labMap(labIdx);
+                    cases{end+1} = caseInfo;
+                    labMap(labIdx) = cases;
+                else
+                    labMap(labIdx) = {caseInfo};
+                end
+            end
+
+            % Check each lab's cases for overlaps
+            labs = cell2mat(keys(labMap));
+            for i = 1:numel(labs)
+                labIdx = labs(i);
+                cases = labMap(labIdx);
+
+                % Check all pairs for overlaps
+                for j = 1:numel(cases)
+                    for k = (j+1):numel(cases)
+                        case1 = cases{j};
+                        case2 = cases{k};
+
+                        % Check if time windows overlap
+                        % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
+                        if case1.startTime < case2.endTime && ...
+                           case2.startTime < case1.endTime
+
+                            % Format time strings
+                            start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.startTime);
+                            end1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.endTime);
+                            start2Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case2.startTime);
+                            end2Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case2.endTime);
+
+                            % Format case names (use case number if available, otherwise ID)
+                            case1Name = conduction.scheduling.LockedCaseConflictValidator.formatCaseName(case1);
+                            case2Name = conduction.scheduling.LockedCaseConflictValidator.formatCaseName(case2);
+
+                            conflictMsg = sprintf('Lab %d: %s (%s-%s) overlaps with %s (%s-%s)', ...
+                                labIdx, ...
+                                case1Name, start1Str, end1Str, ...
+                                case2Name, start2Str, end2Str);
+
+                            conflicts{end+1} = conflictMsg; %#ok<AGROW>
+                        end
+                    end
+                end
+            end
+        end
+
+        function timeStr = formatTime(minutes)
+            %FORMATTIME Convert minutes from midnight to HH:MM format
+            hours = floor(minutes / 60);
+            mins = round(mod(minutes, 60));  % Round to nearest minute
+            timeStr = sprintf('%02d:%02d', hours, mins);
+        end
+
+        function caseName = formatCaseName(caseInfo)
+            %FORMATCASENAME Format case name using case number if available, otherwise ID
+            %   Prefers "Case 5" format over internal IDs like "case_20250115_143025_001"
+            if isfield(caseInfo, 'caseNumber') && ~isnan(caseInfo.caseNumber)
+                caseName = sprintf('Case %d', round(caseInfo.caseNumber));
+            elseif isfield(caseInfo, 'caseID') && ~isempty(caseInfo.caseID)
+                caseName = char(string(caseInfo.caseID));
+            else
+                caseName = 'Unknown';
+            end
+        end
+
+        function message = formatConflictMessage(operatorConflicts, labConflicts)
+            %FORMATCONFLICTMESSAGE Create user-friendly error message
+
+            lines = {};
+            lines{end+1} = 'Cannot optimize: Locked cases have impossible conflicts.';
+            lines{end+1} = '';
+
+            if ~isempty(operatorConflicts)
+                lines{end+1} = 'Operator Conflicts:';
+                for i = 1:numel(operatorConflicts)
+                    lines{end+1} = sprintf('  • %s', operatorConflicts{i});
+                end
+                lines{end+1} = '';
+            end
+
+            if ~isempty(labConflicts)
+                lines{end+1} = 'Lab Conflicts:';
+                for i = 1:numel(labConflicts)
+                    lines{end+1} = sprintf('  • %s', labConflicts{i});
+                end
+                lines{end+1} = '';
+            end
+
+            lines{end+1} = 'Unlock one case in each conflicting pair to proceed.';
+
+            message = strjoin(lines, newline);
+        end
+    end
+end

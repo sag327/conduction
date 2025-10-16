@@ -61,6 +61,14 @@ classdef OptimizationController < handle
             % The optimizer will enforce these as hard constraints during optimization
             lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
 
+            % CONFLICT-DETECTION: Validate locked case constraints before optimization
+            % Check for impossible conflicts (same operator/lab at overlapping times)
+            [hasConflicts, conflictReport] = conduction.scheduling.LockedCaseConflictValidator.validate(lockedConstraints);
+            if hasConflicts
+                uialert(app.UIFigure, conflictReport.message, 'Locked Case Conflicts');
+                return;
+            end
+
             % CASE-LOCKING: Merge locked cases into optimization input
             % Locked cases from the schedule need to be part of casesStruct
             if ~isempty(lockedAssignments)
@@ -613,6 +621,13 @@ classdef OptimizationController < handle
                 constraint = struct();
                 constraint.caseID = char(string(locked.caseID));
                 constraint.operator = char(string(locked.operator));
+
+                % DUAL-ID: Extract case number for user-friendly display in error messages
+                if isfield(locked, 'caseNumber') && ~isempty(locked.caseNumber) && isnumeric(locked.caseNumber)
+                    constraint.caseNumber = double(locked.caseNumber);
+                else
+                    constraint.caseNumber = NaN;
+                end
 
                 % Extract timing fields
                 % startTime includes setup, procStartTime is procedure start
