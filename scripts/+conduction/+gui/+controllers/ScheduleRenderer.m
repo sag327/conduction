@@ -89,6 +89,9 @@ classdef ScheduleRenderer < handle
                 currentTime = app.CaseManager.getCurrentTime();
             end
 
+            % Detect and cache overlapping cases before rendering
+            app.OverlappingCaseIds = obj.detectOverlappingCases(app);
+
             app.OperatorColors = conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'ScheduleAxes', app.ScheduleAxes, ...
@@ -100,7 +103,7 @@ classdef ScheduleRenderer < handle
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
-                'NarrowCaseId', char(app.LastDraggedCaseId), ...
+                'OverlappingCaseIds', app.OverlappingCaseIds, ...
                 'DebugShowCaseIds', app.DebugShowCaseIds);
 
             obj.drawClosedLabOverlays(app, dailySchedule);
@@ -1296,6 +1299,9 @@ classdef ScheduleRenderer < handle
             app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.LastDraggedCaseId = caseId;
 
+            % Detect and cache overlapping cases after the resize
+            app.OverlappingCaseIds = obj.detectOverlappingCases(app);
+
             if ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1, 1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
@@ -1526,6 +1532,9 @@ classdef ScheduleRenderer < handle
             scheduleWasUpdated = true;
             app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.LastDraggedCaseId = caseId;
+
+            % Detect and cache overlapping cases after the move
+            app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
             if ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1, 1) = caseId;
@@ -1892,6 +1901,121 @@ classdef ScheduleRenderer < handle
                     caseRect = block;
                     return;
                 end
+            end
+        end
+
+        function overlappingIds = detectOverlappingCases(obj, app)
+            %DETECTOVERLAPPINGCASES Detect all cases that should be offset (persistent tracking)
+            %   Scans ALL cases for overlaps and determines which case is "on top" for each pair
+            %   Preserves existing overlaps until they are resolved by moving one of the cases
+            overlappingIds = string.empty(0, 1);
+
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+
+            % Get the previous cached overlapping IDs for persistence
+            previousOverlappingIds = string(app.OverlappingCaseIds);
+
+            % Get the last dragged case ID for determining new "on top" cases
+            lastDraggedCaseId = "";
+            if ~isempty(app.LastDraggedCaseId) && strlength(app.LastDraggedCaseId) > 0
+                lastDraggedCaseId = string(app.LastDraggedCaseId);
+            end
+
+            % Scan each lab for overlapping cases
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases) || numel(labCases) < 2
+                    continue;  % Need at least 2 cases to have overlaps
+                end
+
+                % Extract timing windows for all cases on this lab
+                numCases = numel(labCases);
+                caseIds = strings(numCases, 1);
+                setupStarts = nan(numCases, 1);
+                turnoverEnds = nan(numCases, 1);
+
+                for i = 1:numCases
+                    caseEntry = labCases(i);
+                    caseIds(i) = string(obj.getFieldValue(caseEntry, {'caseID', 'caseId'}, ""));
+
+                    % Get setupStart (or earliest time field)
+                    setupStarts(i) = obj.getFieldValue(caseEntry, ...
+                        {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime', 'procStartTime'}, NaN);
+
+                    % Get turnoverEnd (or latest time field)
+                    turnoverEnds(i) = obj.getFieldValue(caseEntry, ...
+                        {'turnoverEnd', 'turnoverEndTime', 'endTime', 'caseEndTime', 'scheduleEnd'}, NaN);
+
+                    % Fallback: if no turnoverEnd, try computing from procEnd + post + turnover
+                    if isnan(turnoverEnds(i))
+                        procEnd = obj.getFieldValue(caseEntry, {'procEndTime', 'procedureEndTime'}, NaN);
+                        postDur = obj.getFieldValue(caseEntry, {'postTime', 'postDuration'}, 0);
+                        turnoverDur = obj.getFieldValue(caseEntry, {'turnoverTime', 'turnoverDuration'}, 0);
+                        if ~isnan(procEnd)
+                            turnoverEnds(i) = procEnd + max(0, postDur) + max(0, turnoverDur);
+                        end
+                    end
+                end
+
+                % Check all pairs for overlaps
+                for i = 1:numCases
+                    for j = (i+1):numCases
+                        % Skip if either case has invalid timing
+                        if isnan(setupStarts(i)) || isnan(turnoverEnds(i)) || ...
+                           isnan(setupStarts(j)) || isnan(turnoverEnds(j))
+                            continue;
+                        end
+
+                        % Check if time windows overlap
+                        % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
+                        if setupStarts(i) < turnoverEnds(j) && setupStarts(j) < turnoverEnds(i)
+                            % These cases overlap - determine which is "on top"
+                            topCaseId = "";
+
+                            % Priority 1: Check if either is in the previous cached list (persistence)
+                            iWasPreviouslyOnTop = ismember(caseIds(i), previousOverlappingIds);
+                            jWasPreviouslyOnTop = ismember(caseIds(j), previousOverlappingIds);
+
+                            if iWasPreviouslyOnTop && ~jWasPreviouslyOnTop
+                                topCaseId = caseIds(i);
+                            elseif jWasPreviouslyOnTop && ~iWasPreviouslyOnTop
+                                topCaseId = caseIds(j);
+                            else
+                                % Priority 2: Check if either is the last dragged case (new drag)
+                                if strlength(lastDraggedCaseId) > 0
+                                    if caseIds(i) == lastDraggedCaseId
+                                        topCaseId = caseIds(i);
+                                    elseif caseIds(j) == lastDraggedCaseId
+                                        topCaseId = caseIds(j);
+                                    end
+                                end
+
+                                % Priority 3: Heuristic - later start time is "on top"
+                                if strlength(topCaseId) == 0
+                                    if setupStarts(i) > setupStarts(j)
+                                        topCaseId = caseIds(i);
+                                    else
+                                        topCaseId = caseIds(j);
+                                    end
+                                end
+                            end
+
+                            % Add the "on top" case to the new overlapping list
+                            if strlength(topCaseId) > 0 && ~ismember(topCaseId, overlappingIds)
+                                overlappingIds(end+1, 1) = topCaseId; %#ok<AGROW>
+                            end
+                        end
+                    end
+                end
+            end
+
+            % Return unique sorted list
+            if ~isempty(overlappingIds)
+                overlappingIds = unique(overlappingIds, 'stable');
             end
         end
 

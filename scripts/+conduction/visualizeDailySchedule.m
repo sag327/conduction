@@ -149,7 +149,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
-    addParameter(p, 'NarrowCaseId', "", @(x) isstring(x) || ischar(x));  % DRAG: case ID to draw narrowly to reveal underlying
+    addParameter(p, 'OverlappingCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % DRAG: array of overlapping case IDs for lateral offset
     addParameter(p, 'DebugShowCaseIds', false, @(x) islogical(x) || isnumeric(x));
     parse(p, varargin{:});
     opts = p.Results;
@@ -323,18 +323,6 @@ function labLabels = resolveLabLabels(~, expectedLabs)
 end
 
 function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, operatorColors, opts)
-    % Reorder to draw last-dragged (NarrowCaseId) after others so underlying stays visible
-    try
-        if isfield(opts, 'NarrowCaseId') && strlength(string(opts.NarrowCaseId)) > 0
-            narrowId = string(opts.NarrowCaseId);
-            mask = string({caseTimelines.caseId}) == narrowId;
-            if any(mask)
-                caseTimelines = [caseTimelines(~mask), caseTimelines(mask)]; %#ok<AGROW>
-            end
-        end
-    catch
-        % ignore reordering errors
-    end
     numLabs = numel(labLabels);
 
     caseClickedCallback = [];
@@ -732,13 +720,24 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
     xPosEff = xPos;
     barWidthEff = barWidth;
     try
-        if ~isfield(opts, 'NarrowCaseId')
+        % Check if OverlappingCaseIds parameter exists
+        if ~isfield(opts, 'OverlappingCaseIds')
             return;
         end
-        narrowId = string(opts.NarrowCaseId);
-        if strlength(narrowId) == 0 || string(entry.caseId) ~= narrowId
+
+        % Convert to string array
+        overlappingIds = string(opts.OverlappingCaseIds);
+        if isempty(overlappingIds)
             return;
         end
+
+        % Check if this case is in the overlapping list
+        entryCaseId = string(entry.caseId);
+        if ~ismember(entryCaseId, overlappingIds)
+            return;
+        end
+
+        % This case is marked as overlapping, so apply lateral offset
         % Determine entry time window (hours), robust to missing fields
         entryStarts = [setupStartHour, entry.procStart/60];
         entryEnds = [turnoverEndHour, entry.postEnd/60, entry.procEnd/60];
@@ -749,14 +748,17 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
         end
         entryStartHour = min(entryStarts);
         entryEndHour = max(entryEnds);
+
+        % Check if it overlaps with any other case on the same lab
         for k = 1:numel(caseTimelines)
             other = caseTimelines(k);
-            if string(other.caseId) == narrowId
-                continue;
+            if string(other.caseId) == entryCaseId
+                continue;  % Skip self
             end
             if other.labIndex ~= entry.labIndex
-                continue;
+                continue;  % Only check same lab
             end
+
             oStarts = [other.setupStart, other.procStart];
             oEnds = [other.turnoverEnd, other.postEnd, other.procEnd];
             oStarts = oStarts(~isnan(oStarts));
@@ -766,6 +768,7 @@ function [xPosEff, barWidthEff] = applyLateralOffsetIfNeeded(entry, opts, caseTi
             end
             oStartHour = min(oStarts)/60;
             oEndHour = max(oEnds)/60;
+
             % Overlap if intervals intersect (hours)
             if ~(entryEndHour <= oStartHour || entryStartHour >= oEndHour)
                 % Apply lateral shift to reveal underlying case
