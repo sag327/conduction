@@ -28,7 +28,7 @@ Persistence: Undock state does not persist across app restarts.
 - [x] Phase 0: Author this plan and testing approach
 - [x] Phase 1: CaseStore (model) extraction + unit tests
 - [x] Phase 2: CaseTableView (component) + UI tests
-- [ ] Phase 3: CasesPopout (window) + lifecycle tests
+- [x] Phase 3: CasesPopout (window) + lifecycle tests
 - [ ] Phase 4: Main app integration + tab guard/overlay + wiring
 - [ ] Phase 5: UX polish (icons, tooltips, shortcuts) + help text
 - [ ] Phase 6: Final verification, docs update, and cleanup
@@ -113,11 +113,11 @@ Planned API:
 - Methods: `show()`, `focus()`, `isOpen()`, `close()` (triggers redock), `destroy()`
 
 Tasks:
-- [ ] Create `+conduction/CasesPopout.m`
-- [ ] Integrate `CaseTableView` inside pop-out
-- [ ] Add redock button with icon and tooltip; wire to `onRedock`
-- [ ] Implement `CloseRequestFcn` → redock path
-- [ ] Ensure only one instance exists and `focus()` brings to front
+- [x] Create `scripts/+conduction/+gui/+windows/CasesPopout.m`
+- [x] Integrate `CaseTableView` inside pop-out figure with header controls
+- [x] Add redock button (text+icon placeholder) + tooltip wired to shared closer
+- [x] Implement `CloseRequestFcn` → redock path, `close()` helper, and lifecycle cleanup
+- [x] Ensure single-instance behaviour via `show/focus/isOpen` guards
 
 Automated Tests (CLI):
 - Location: `tests/matlab/TestCasesPopout.m`
@@ -126,7 +126,9 @@ Automated Tests (CLI):
   - Calling `show()` twice focuses existing instance
   - `close()` and window close both invoke `onRedock`
 - Commands:
-  - `matlab -batch "addpath('tests'); results = runtests('tests/matlab/TestCasesPopout.m'); assertSuccess(results);"`
+  - `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/matlab/TestCasesPopout.m'}); assertSuccess(results);"`
+
+Latest run: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/matlab/TestCasesPopout.m'}); assertSuccess(results);"` (✅ passed)
 
 Screenshots:
 - Save `images/cases_popout_smoke.png` via `exportapp(popout.UIFigure, ...)`.
