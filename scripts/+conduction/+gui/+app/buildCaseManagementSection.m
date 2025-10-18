@@ -31,7 +31,12 @@ function buildCaseManagementSection(app, casesGrid)
     app.CasesUndockButton.Layout.Row = 1;
     app.CasesUndockButton.Layout.Column = 2;
     app.CasesUndockButton.Text = 'Open Window';
-    app.CasesUndockButton.Tooltip = 'Open cases in a separate window';
+    app.CasesUndockButton.Tooltip = 'Open cases in a separate window (Ctrl/Cmd+Shift+U)';
+    iconPath = conduction.gui.utils.Icons.undockIcon();
+    if ~isempty(iconPath)
+        app.CasesUndockButton.Icon = iconPath;
+        app.CasesUndockButton.IconAlignment = 'left';
+    end
     app.CasesUndockButton.ButtonPushedFcn = @(src, evt) app.handleCasesUndockRequest();
 
     container = uipanel(casesGrid);
@@ -41,4 +46,3 @@ function buildCaseManagementSection(app, casesGrid)
     container.BackgroundColor = casesGrid.BackgroundColor;
     app.CasesEmbeddedContainer = container;
 end
-

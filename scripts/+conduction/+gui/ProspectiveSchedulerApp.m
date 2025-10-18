@@ -144,6 +144,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     methods (Access = private)
 
+        function onGlobalKeyPress(app, event)
+            if isempty(event) || ~isprop(event, 'Key')
+                return;
+            end
+
+            key = lower(string(event.Key));
+            modifiers = string(event.Modifier);
+
+            hasShift = any(modifiers == "shift");
+            hasAccel = any(modifiers == "control") || any(modifiers == "command");
+
+            if key == "u" && hasShift && hasAccel
+                app.handleCasesUndockRequest();
+            elseif key == "escape" && app.IsCasesUndocked
+                app.redockCases();
+            end
+        end
+
         function initializeCaseTableComponents(app)
             if isempty(app.CaseManager)
                 return;
@@ -298,7 +316,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             message = uilabel(grid);
             message.Layout.Row = 2;
             message.Layout.Column = 1;
-            message.Text = 'Cases table is open in a separate window';
+            message.Text = 'Cases table is open in a separate window (Esc to redock)';
             message.FontWeight = 'bold';
             message.HorizontalAlignment = 'center';
 
@@ -306,6 +324,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             focusButton.Layout.Row = 3;
             focusButton.Layout.Column = 1;
             focusButton.Text = 'Focus Window';
+            focusButton.Tooltip = 'Bring the cases window to the front';
             focusButton.ButtonPushedFcn = @(src, evt) app.focusCasesPopout(); %#ok<NASGU,INUSD>
 
             app.CasesTabOverlay = overlay;
@@ -317,6 +336,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CasesPopout.focus();
             else
                 app.handleCasesUndockRequest();
+            end
+        end
+
+        function redockCases(app)
+            if ~app.IsCasesUndocked
+                return;
+            end
+
+            if ~isempty(app.CasesPopout) && isvalid(app.CasesPopout)
+                app.CasesPopout.close();
+            else
+                app.applyCasesTabUndockedState(false);
             end
         end
 
@@ -414,6 +445,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             versionInfo = conduction.version();
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
+            app.UIFigure.KeyPressFcn = @(src, event) app.onGlobalKeyPress(event);
 
             % Root layout: header, content
             app.MainGridLayout = uigridlayout(app.UIFigure);

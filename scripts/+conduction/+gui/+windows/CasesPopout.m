@@ -135,7 +135,10 @@ classdef CasesPopout < handle
             redockBtn.Layout.Row = 1;
             redockBtn.Layout.Column = 2;
             redockBtn.Text = 'Dock';
-            redockBtn.Icon = obj.Options.RedockIcon;
+            if ~isempty(obj.Options.RedockIcon)
+                redockBtn.Icon = obj.Options.RedockIcon;
+                redockBtn.IconAlignment = 'left';
+            end
             redockBtn.Tooltip = obj.Options.RedockTooltip;
             redockBtn.ButtonPushedFcn = @(src, event) obj.handleCloseRequest();
             obj.RedockButton = redockBtn;
@@ -156,6 +159,8 @@ classdef CasesPopout < handle
             layoutOverrides = struct('Padding', [0 0 0 0]);
             obj.TableView = conduction.gui.components.CaseTableView(tableGrid, obj.Store, ...
                 struct('Title', "", 'Layout', layoutOverrides));
+
+            fig.KeyPressFcn = @(src, event) obj.onKeyPress(event);
 
             obj.UIFigure.Visible = 'on';
         end
@@ -179,12 +184,23 @@ classdef CasesPopout < handle
             obj.destroy();
         end
 
+        function onKeyPress(obj, event)
+            if isempty(event) || ~isprop(event, 'Key')
+                return;
+            end
+
+            key = lower(string(event.Key));
+            if key == "escape"
+                obj.handleCloseRequest();
+            end
+        end
+
         function opts = normalizeOptions(obj, opts)
             defaults = struct( ...
                 'Title', obj.DefaultTitle, ...
                 'Position', [100 100 640 520], ...
-                'RedockIcon', '', ...
-                'RedockTooltip', 'Return cases to main window');
+                'RedockIcon', conduction.gui.utils.Icons.redockIcon(), ...
+                'RedockTooltip', 'Return cases to main window (Esc)');
 
             fields = fieldnames(defaults);
             for i = 1:numel(fields)
