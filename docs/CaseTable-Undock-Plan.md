@@ -13,21 +13,21 @@ Persistence: Undock state does not persist across app restarts.
 - Provide automated tests runnable via MATLAB CLI; add screenshot checkpoints where needed.
 
 ## Deliverables
-- Modular classes under `+conduction/`:
-  - `+conduction/CaseStore.m`: data model (single source of truth)
-  - `+conduction/CaseTableView.m`: embedded/popup table UI component
-  - `+conduction/CasesPopout.m`: undockable `uifigure` window
-  - `+conduction/UIOverlay.m`: utility to apply/remove overlay on cases tab
-  - `+conduction/Icons.m` (or assets): icon accessors/paths for undock/dock
+- Modular classes under `scripts/+conduction/+gui/`:
+  - `+stores/CaseStore.m`: data/selection/sort state model
+  - `+components/CaseTableView.m`: embedded/popup table UI component
+  - `+windows/CasesPopout.m`: undockable `uifigure` window
+  - `+utils/UIOverlay.m`: utility to apply/remove overlay on cases tab
+  - `+utils/Icons.m` (or assets): icon accessors/paths for undock/dock
 - Refactored `prospectiveSchedulerApp.m` wiring to use these modules.
 - Tests under `tests/matlab/`.
 - Screenshots saved to `images/` during UI test phases.
 
 ## Phases & Tracking
 
-- [ ] Phase 0: Author this plan and testing approach
-- [ ] Phase 1: CaseStore (model) extraction + unit tests
-- [ ] Phase 2: CaseTableView (component) + UI tests
+- [x] Phase 0: Author this plan and testing approach
+- [x] Phase 1: CaseStore (model) extraction + unit tests
+- [x] Phase 2: CaseTableView (component) + UI tests
 - [ ] Phase 3: CasesPopout (window) + lifecycle tests
 - [ ] Phase 4: Main app integration + tab guard/overlay + wiring
 - [ ] Phase 5: UX polish (icons, tooltips, shortcuts) + help text
@@ -45,9 +45,9 @@ Planned API:
 - Events: `DataChanged`, `SelectionChanged`, `SortChanged`
 
 Tasks:
-- [ ] Create `+conduction/CaseStore.m` (handle class, events)
-- [ ] Port current data mutations from `prospectiveSchedulerApp.m` into store methods
-- [ ] Replace direct table writes in app with `CaseStore` usage (in Phase 4)
+- [x] Create `scripts/+conduction/+gui/+stores/CaseStore.m` (handle class with events)
+- [x] Add MATLAB unit tests covering data refresh, selection, sort state, and mutations
+- [ ] Replace direct table writes in app with `CaseStore` usage (Phase 4 task)
 
 Automated Tests (CLI):
 - Location: `tests/matlab/TestCaseStore.m`
@@ -58,9 +58,11 @@ Automated Tests (CLI):
   - `clearAll` empties data, resets selection
 - Command (from repo root):
   - macOS/Linux:
-    - `matlab -batch "addpath('tests'); results = runtests('tests/matlab/TestCaseStore.m'); assertSuccess(results);"`
+    - `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests/matlab/TestCaseStore.m'); assertSuccess(results);"`
   - Windows:
-    - `matlab -batch "addpath('tests'); results = runtests('tests\\matlab\\TestCaseStore.m'); assertSuccess(results);"`
+    - `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests\\matlab\\TestCaseStore.m'); assertSuccess(results);"`
+
+Latest run: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests/matlab/TestCaseStore.m'); assertSuccess(results);"` (✅ passed)
 
 Artifacts:
 - None (non-UI)
@@ -77,9 +79,9 @@ Planned API:
 - Internals: subscribe to store events; forward edits/selection to store methods; provide buttons for "Remove Selected" and "Clear All" that call store.
 
 Tasks:
-- [ ] Create `+conduction/CaseTableView.m`
-- [ ] Subscribe to `CaseStore` events and implement `refresh`
-- [ ] Implement callbacks: `CellEdit`, `SelectionChanged`, buttons
+- [x] Create `scripts/+conduction/+gui/+components/CaseTableView.m`
+- [x] Subscribe to `CaseStore` events, implement `refresh`, and button state management
+- [x] Implement callbacks: selection sync, remove/clear handlers (customizable)
 
 Automated Tests (CLI):
 - Location: `tests/matlab/TestCaseTableView.m`
@@ -90,7 +92,9 @@ Automated Tests (CLI):
   - Store event triggers `refresh()` and table updates
   - Buttons invoke `removeSelected` and `clearAll`
 - Commands:
-  - `matlab -batch "addpath('tests'); results = runtests('tests/matlab/TestCaseTableView.m'); assertSuccess(results);"`
+  - `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m'}); assertSuccess(results);"`
+
+Latest run: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m'}); assertSuccess(results);"` (✅ passed)
 
 Screenshots (may require desktop session):
 - Script saves `images/case_table_view_smoke.png` using `exportapp` from the `uifigure`.
@@ -211,4 +215,3 @@ Note: Some UI tests may require desktop graphics. If CLI execution fails due to 
 
 ## Change Log
 - v0.1 (Planned): Initial multi-phase plan with CLI test strategy and screenshot artifacts.
-
