@@ -1,34 +1,44 @@
 function buildCaseManagementSection(app, casesGrid)
-%BUILDCASEMANAGEMENTSECTION Populate the Cases tab with table and controls.
+%BUILDCASEMANAGEMENTSECTION Populate the Cases tab with shared header and host panel.
 
-    app.CasesLabel = uilabel(casesGrid);
+    arguments
+        app conduction.gui.ProspectiveSchedulerApp
+        casesGrid matlab.ui.container.GridLayout
+    end
+
+    casesGrid.ColumnWidth = {'1x', 'fit'};
+    casesGrid.RowHeight = {24, '1x'};
+    casesGrid.Padding = [10 10 10 10];
+    casesGrid.RowSpacing = 6;
+    casesGrid.ColumnSpacing = 10;
+
+    header = uigridlayout(casesGrid);
+    header.Layout.Row = 1;
+    header.Layout.Column = [1 2];
+    header.RowHeight = {'fit'};
+    header.ColumnWidth = {'1x', 'fit'};
+    header.RowSpacing = 0;
+    header.ColumnSpacing = 8;
+    header.Padding = [0 0 0 0];
+
+    app.CasesLabel = uilabel(header);
     app.CasesLabel.Text = 'Added Cases';
     app.CasesLabel.FontWeight = 'bold';
     app.CasesLabel.Layout.Row = 1;
-    app.CasesLabel.Layout.Column = [1 2];
+    app.CasesLabel.Layout.Column = 1;
 
-    app.CasesTable = uitable(casesGrid);
-    caseTableStyle = uistyle('HorizontalAlignment', 'left');
-    addStyle(app.CasesTable, caseTableStyle);
-    app.CasesTable.ColumnName = {'', 'ID', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
-    app.CasesTable.ColumnWidth = {45, 50, 100, 140, 80, 100, 90, 80};
-    app.CasesTable.RowName = {};
-    app.CasesTable.Layout.Row = 2;
-    app.CasesTable.Layout.Column = [1 2];
-    app.CasesTable.SelectionType = 'row';
-    app.CasesTable.SelectionChangedFcn = @(src, event) app.CasesTableSelectionChanged(event);
+    app.CasesUndockButton = uibutton(header, 'push');
+    app.CasesUndockButton.Layout.Row = 1;
+    app.CasesUndockButton.Layout.Column = 2;
+    app.CasesUndockButton.Text = 'Open Window';
+    app.CasesUndockButton.Tooltip = 'Open cases in a separate window';
+    app.CasesUndockButton.ButtonPushedFcn = @(src, evt) app.handleCasesUndockRequest();
 
-    app.RemoveSelectedButton = uibutton(casesGrid, 'push');
-    app.RemoveSelectedButton.Text = 'Remove Selected';
-    app.RemoveSelectedButton.Layout.Row = 3;
-    app.RemoveSelectedButton.Layout.Column = 1;
-    app.RemoveSelectedButton.Enable = 'off';
-    app.RemoveSelectedButton.ButtonPushedFcn = @(src, event) app.RemoveSelectedButtonPushed(event);
-
-    app.ClearAllButton = uibutton(casesGrid, 'push');
-    app.ClearAllButton.Text = 'Clear All';
-    app.ClearAllButton.Layout.Row = 3;
-    app.ClearAllButton.Layout.Column = 2;
-    app.ClearAllButton.Enable = 'off';
-    app.ClearAllButton.ButtonPushedFcn = @(src, event) app.ClearAllButtonPushed(event);
+    container = uipanel(casesGrid);
+    container.Layout.Row = 2;
+    container.Layout.Column = [1 2];
+    container.BorderType = 'none';
+    container.BackgroundColor = casesGrid.BackgroundColor;
+    app.CasesEmbeddedContainer = container;
 end
+

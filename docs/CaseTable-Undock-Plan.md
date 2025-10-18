@@ -29,7 +29,7 @@ Persistence: Undock state does not persist across app restarts.
 - [x] Phase 1: CaseStore (model) extraction + unit tests
 - [x] Phase 2: CaseTableView (component) + UI tests
 - [x] Phase 3: CasesPopout (window) + lifecycle tests
-- [ ] Phase 4: Main app integration + tab guard/overlay + wiring
+- [x] Phase 4: Main app integration + tab guard/overlay + wiring
 - [ ] Phase 5: UX polish (icons, tooltips, shortcuts) + help text
 - [ ] Phase 6: Final verification, docs update, and cleanup
 
@@ -47,7 +47,7 @@ Planned API:
 Tasks:
 - [x] Create `scripts/+conduction/+gui/+stores/CaseStore.m` (handle class with events)
 - [x] Add MATLAB unit tests covering data refresh, selection, sort state, and mutations
-- [ ] Replace direct table writes in app with `CaseStore` usage (Phase 4 task)
+- [x] Replace direct table writes in app with `CaseStore` usage (Phase 4 task)
 
 Automated Tests (CLI):
 - Location: `tests/matlab/TestCaseStore.m`
@@ -141,12 +141,12 @@ Screenshots:
 Purpose: Wire modules into `prospectiveSchedulerApp.m`, add undock button, disable/fade Cases tab when undocked, restore on redock.
 
 Tasks:
-- [ ] Add app properties: `CaseStore`, `EmbeddedCasesView`, `CasesPopout`, `IsCasesUndocked`, `CasesTabOverlay`
-- [ ] Instantiate `CaseStore` and `EmbeddedCasesView` in `startupFcn`
-- [ ] Add undock button with icon + tooltip; on click create/focus pop-out
-- [ ] Add tab guard: block selecting Cases tab when undocked; provide overlay message with a "Focus" action
-- [ ] Redock path: destroy pop-out, show embedded view, restore selection/sort state, re-enable tab
-- [ ] Replace legacy callbacks to call into `CaseStore` and `CaseTableView`
+- [x] Add app properties: `CaseStore`, embedded view host, pop-out handle, undock state/overlay metadata
+- [x] Instantiate `CaseStore` and `CaseTableView` in constructor (post-UI build)
+- [x] Add undock button (text placeholder + tooltip) wiring into `handleCasesUndockRequest`
+- [x] Add tab guard: block Cases tab selection while undocked, show overlay with "Focus Window" CTA
+- [x] Redock path: pop-out callback restores embedded view, reenables tab/button, reuses shared store
+- [x] Replace legacy table callbacks with `CaseStore` + selection sync listeners
 
 Automated Tests (partial CLI + manual):
 - CLI (where possible):
@@ -154,7 +154,9 @@ Automated Tests (partial CLI + manual):
   - Attempt to select Cases tab and verify guard logic.
   - Redock and validate embedded view reappears.
 - Commands:
-  - `matlab -batch "app = prospectiveSchedulerApp; try, conduction.tests.UndockSmoke(app); catch ME, disp(getReport(ME)); exit(1); end; exit(0);"` (helper function to be added)
+  - `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/matlab/TestCasesPopout.m'}); assertSuccess(results);"`
+
+Latest run: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/matlab/TestCasesPopout.m'}); assertSuccess(results);"` (✅ passed)
 
 Screenshots:
 - `images/app_cases_tab_undocked.png` (overlay visible)

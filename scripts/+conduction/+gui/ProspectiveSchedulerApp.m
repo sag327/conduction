@@ -100,6 +100,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % List Tab Components
         CasesLabel                  matlab.ui.control.Label
+        CasesUndockButton           matlab.ui.control.Button
+        CasesEmbeddedContainer      matlab.ui.container.Panel
         CasesTable                  matlab.ui.control.Table
         RemoveSelectedButton        matlab.ui.control.Button
         ClearAllButton              matlab.ui.control.Button
@@ -140,9 +142,192 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI5                        matlab.ui.control.Label
     end
 
+    methods (Access = private)
+
+        function initializeCaseTableComponents(app)
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            if isempty(app.CaseStore) || ~isvalid(app.CaseStore)
+                app.CaseStore = conduction.gui.stores.CaseStore(app.CaseManager);
+            end
+
+            if ~isempty(app.CaseStoreListeners)
+                delete(app.CaseStoreListeners);
+            end
+            app.CaseStoreListeners = addlistener(app.CaseStore, 'SelectionChanged', ...
+                @(~, ~) app.onCaseStoreSelectionChanged());
+
+            app.createEmbeddedCaseView();
+        end
+
+        function createEmbeddedCaseView(app)
+            if isempty(app.CaseStore) || isempty(app.CasesEmbeddedContainer) || ...
+                    ~isvalid(app.CasesEmbeddedContainer)
+                return;
+            end
+
+            if ~isempty(app.CasesView) && isvalid(app.CasesView)
+                delete(app.CasesView);
+            end
+
+            options = struct(...
+                'Title', "Added Cases", ...
+                'RemoveHandler', @(view) app.handleCaseTableRemove(view), ...
+                'ClearHandler', @(view) app.handleCaseTableClear(view));
+
+            app.CasesView = conduction.gui.components.CaseTableView( ...
+                app.CasesEmbeddedContainer, app.CaseStore, options);
+
+            % Maintain legacy handles for existing logic
+            app.CasesTable = app.CasesView.Table;
+            app.RemoveSelectedButton = app.CasesView.RemoveButton;
+            app.ClearAllButton = app.CasesView.ClearButton;
+        end
+
+        function handleCaseTableRemove(app, ~)
+            app.RemoveSelectedButtonPushed([]);
+        end
+
+        function handleCaseTableClear(app, ~)
+            app.ClearAllButtonPushed([]);
+        end
+
+        function updateCaseSelectionVisuals(app)
+            selectedId = app.SelectedCaseId;
+
+            if strlength(selectedId) > 0
+                overlayApplied = false;
+                if ~isempty(app.CaseDragController)
+                    overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
+                end
+                if ~overlayApplied && ~isempty(app.OptimizedSchedule)
+                    conduction.gui.app.redrawSchedule(app);
+                end
+
+                app.DrawerCurrentCaseId = selectedId;
+                if ~isempty(app.DrawerController)
+                    if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                        app.DrawerController.populateDrawer(app, selectedId);
+                    elseif app.DrawerAutoOpenOnSelect && ...
+                            app.DrawerWidth <= conduction.gui.app.Constants.DrawerHandleWidth
+                        app.DrawerController.openDrawer(app, selectedId);
+                    end
+                end
+            else
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.hideSelectionOverlay(true);
+                elseif ~isempty(app.OptimizedSchedule)
+                    conduction.gui.app.redrawSchedule(app);
+                end
+                app.DrawerCurrentCaseId = "";
+            end
+        end
+
+        function applyCasesTabUndockedState(app, isUndocked)
+            if isUndocked
+                app.IsCasesUndocked = true;
+
+                if ~isempty(app.CasesEmbeddedContainer) && isvalid(app.CasesEmbeddedContainer)
+                    app.CasesEmbeddedContainer.Visible = 'off';
+                end
+
+                if ~isempty(app.CasesUndockButton) && isvalid(app.CasesUndockButton)
+                    app.CasesUndockButton.Text = 'Window Open';
+                    app.CasesUndockButton.Enable = 'off';
+                end
+
+                app.TabList.Title = 'Cases (Undocked)';
+                app.createCasesTabOverlay();
+
+                if ~isempty(app.TabGroup) && isvalid(app.TabGroup) && app.TabGroup.SelectedTab == app.TabList
+                    fallback = app.LastActiveMainTab;
+                    if isempty(fallback) || ~isvalid(fallback) || fallback == app.TabList
+                        fallback = app.TabAdd;
+                    end
+                    app.IsHandlingTabSelection = true;
+                    app.TabGroup.SelectedTab = fallback;
+                    app.LastActiveMainTab = fallback;
+                    app.IsHandlingTabSelection = false;
+                end
+            else
+                app.IsCasesUndocked = false;
+
+                if ~isempty(app.CasesEmbeddedContainer) && isvalid(app.CasesEmbeddedContainer)
+                    app.CasesEmbeddedContainer.Visible = 'on';
+                end
+
+                if ~isempty(app.CasesUndockButton) && isvalid(app.CasesUndockButton)
+                    app.CasesUndockButton.Text = 'Open Window';
+                    app.CasesUndockButton.Enable = 'on';
+                end
+
+                if ~isempty(app.CasesTabOverlay) && isvalid(app.CasesTabOverlay)
+                    delete(app.CasesTabOverlay);
+                end
+                app.CasesTabOverlay = matlab.ui.container.Panel.empty;
+                app.TabList.Title = 'Cases';
+
+                if isempty(app.CasesView) || ~isvalid(app.CasesView)
+                    app.createEmbeddedCaseView();
+                end
+            end
+        end
+
+        function createCasesTabOverlay(app)
+            if ~isempty(app.CasesTabOverlay) && isvalid(app.CasesTabOverlay)
+                delete(app.CasesTabOverlay);
+            end
+
+            overlay = uipanel(app.TabList);
+            overlay.Units = 'normalized';
+            overlay.Position = [0 0 1 1];
+            overlay.BackgroundColor = app.UIFigure.Color;
+            overlay.BorderType = 'none';
+            overlay.Tag = 'CasesUndockedOverlay';
+            overlay.HitTest = 'on';
+
+            grid = uigridlayout(overlay);
+            grid.RowHeight = {'1x', 'fit', 'fit', '1x'};
+            grid.ColumnWidth = {'1x'};
+            grid.Padding = [20 20 20 20];
+            grid.RowSpacing = 12;
+            grid.ColumnSpacing = 0;
+
+            message = uilabel(grid);
+            message.Layout.Row = 2;
+            message.Layout.Column = 1;
+            message.Text = 'Cases table is open in a separate window';
+            message.FontWeight = 'bold';
+            message.HorizontalAlignment = 'center';
+
+            focusButton = uibutton(grid, 'push');
+            focusButton.Layout.Row = 3;
+            focusButton.Layout.Column = 1;
+            focusButton.Text = 'Focus Window';
+            focusButton.ButtonPushedFcn = @(src, evt) app.focusCasesPopout(); %#ok<NASGU,INUSD>
+
+            app.CasesTabOverlay = overlay;
+            uistack(app.CasesTabOverlay, 'top');
+        end
+
+        function focusCasesPopout(app)
+            if ~isempty(app.CasesPopout) && isvalid(app.CasesPopout)
+                app.CasesPopout.focus();
+            else
+                app.handleCasesUndockRequest();
+            end
+        end
+
+    end
+
     % App state properties
     properties (Access = public)
         CaseManager conduction.gui.controllers.CaseManager
+        CaseStore conduction.gui.stores.CaseStore
+        CasesView conduction.gui.components.CaseTableView
+        CasesPopout conduction.gui.windows.CasesPopout
 
         % Controllers
         ScheduleRenderer conduction.gui.controllers.ScheduleRenderer
@@ -192,10 +377,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LastDraggedCaseId string = ""  % DRAG: last case moved by drag-and-drop to render narrowly when overlapped
         OverlappingCaseIds string = string.empty(0, 1)  % DRAG: cached list of all overlapping case IDs for lateral offset
         DebugShowCaseIds logical = false  % DEBUG: show case IDs on schedule for diagnostics
+        IsCasesUndocked logical = false
+        LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
     end
 
     properties (Access = private)
         IsSyncingAvailableLabSelection logical = false
+        CaseStoreListeners event.listener = event.listener.empty
+        CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
+        IsHandlingTabSelection logical = false
     end
 
 
@@ -316,6 +506,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TabGroup = uitabgroup(app.MiddleLayout);
             app.TabGroup.Layout.Row = 1;
             app.TabGroup.Layout.Column = 1;
+            app.TabGroup.SelectionChangedFcn = createCallbackFcn(app, @MainTabGroupSelectionChanged, true);
 
             app.TabAdd = uitab(app.TabGroup, 'Title', 'Add/Edit');
             app.TabList = uitab(app.TabGroup, 'Title', 'Cases');
@@ -562,6 +753,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create UIFigure and components
             app.setupUI();
             app.refreshSpecificLabDropdown();
+            app.LastActiveMainTab = app.TabGroup.SelectedTab;
 
             % Initialize case manager
             if isempty(historicalCollection)
@@ -569,6 +761,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 app.CaseManager = conduction.gui.controllers.CaseManager(targetDate, historicalCollection);
             end
+
+            % Initialize case table data store and embedded view
+            app.initializeCaseTableComponents();
 
             % Set up change listener
             app.CaseManager.addChangeListener(@() app.onCaseManagerChanged());
@@ -613,53 +808,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             % Normal single-click behavior: select case
-            app.SelectedCaseId = caseIdStr;
-
             % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
             [~, caseIndex] = app.CaseManager.findCaseById(caseId);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
-                app.CasesTable.Selection = caseIndex;
-            end
-
-            % Update selection overlay without forcing a full redraw
-            overlayApplied = false;
-            if ~isempty(app.CaseDragController)
-                overlayApplied = app.CaseDragController.showSelectionOverlay(caseId);
-            end
-
-            % Fallback for scenarios where overlay could not be drawn
-            if ~overlayApplied && ~isempty(app.OptimizedSchedule)
-                conduction.gui.app.redrawSchedule(app);
-            end
-
-            % Store the case ID and update drawer if it's open
-            app.DrawerCurrentCaseId = caseId;
-            if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
-                app.DrawerController.populateDrawer(app, caseId);
+                if ~isempty(app.CaseStore)
+                    app.CaseStore.setSelection(caseIndex);
+                end
             end
 
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
-            % This behavior was intentionally disabled to prevent unwanted automatic drawer opening
-            % If you need to change this, modify the DrawerAutoOpenOnSelect property (default: false)
-            % See: DrawerHandleButtonPushed callback for manual drawer opening
-            if app.DrawerAutoOpenOnSelect
-                app.DrawerController.openDrawer(app, caseId);
-            end
+            % This behavior remains managed centrally when selection changes.
         end
 
         function onScheduleBackgroundClicked(app)
             % Clear selection when clicking on empty schedule area
-            if strlength(app.SelectedCaseId) > 0
-                app.SelectedCaseId = "";
-
-                % Clear table selection
-                app.CasesTable.Selection = [];
-
-                if ~isempty(app.CaseDragController)
-                    app.CaseDragController.hideSelectionOverlay(true);
-                elseif ~isempty(app.OptimizedSchedule)
-                    conduction.gui.app.redrawSchedule(app);
-                end
+            if ~isempty(app.CaseStore)
+                app.CaseStore.clearSelection();
             end
         end
 
@@ -681,6 +845,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.stopAutoSaveTimer();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
+
+            if ~isempty(app.CaseStoreListeners)
+                delete(app.CaseStoreListeners);
+                app.CaseStoreListeners = event.listener.empty;
+            end
+
+            if ~isempty(app.CasesPopout) && isvalid(app.CasesPopout)
+                app.CasesPopout.destroy();
+            end
+
+            if ~isempty(app.CasesView) && isvalid(app.CasesView)
+                delete(app.CasesView);
+            end
+
             delete(app.UIFigure);
         end
     end
@@ -688,17 +866,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % Callbacks that handle component events
     methods (Access = public)
 
-        function CasesTableSelectionChanged(app, event)
-            % Highlight selected case on schedule when table row is clicked
-            selection = app.CasesTable.Selection;
+        function onCaseStoreSelectionChanged(app)
+            % Respond to selection updates in the shared CaseStore.
+            if isempty(app.CaseStore) || ~isa(app.CaseStore, 'conduction.gui.stores.CaseStore')
+                return;
+            end
+
+            selection = app.CaseStore.Selection;
 
             if isempty(selection)
-                % Clear selection
                 app.SelectedCaseId = "";
             else
-                % PERSISTENT-ID: Get the CaseId from the selected row
                 selectedIndex = selection(1);
-                if selectedIndex > 0 && selectedIndex <= app.CaseManager.CaseCount
+                if selectedIndex >= 1 && selectedIndex <= app.CaseManager.CaseCount
                     caseObj = app.CaseManager.getCase(selectedIndex);
                     app.SelectedCaseId = caseObj.CaseId;
                 else
@@ -706,29 +886,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            if strlength(app.SelectedCaseId) > 0
-                overlayApplied = false;
-                if ~isempty(app.CaseDragController)
-                    overlayApplied = app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
-                end
-                if ~overlayApplied && ~isempty(app.OptimizedSchedule)
-                    conduction.gui.app.redrawSchedule(app);
-                end
-            else
-                if ~isempty(app.CaseDragController)
-                    app.CaseDragController.hideSelectionOverlay(true);
-                elseif ~isempty(app.OptimizedSchedule)
-                    conduction.gui.app.redrawSchedule(app);
-                end
-            end
-
-            % Update drawer if it's open
-            if ~isempty(app.SelectedCaseId) && strlength(app.SelectedCaseId) > 0
-                app.DrawerCurrentCaseId = app.SelectedCaseId;
-                if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
-                    app.DrawerController.populateDrawer(app, app.SelectedCaseId);
-                end
-            end
+            app.updateCaseSelectionVisuals();
         end
 
         function DatePickerValueChanged(app, event)
@@ -816,40 +974,51 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function RemoveSelectedButtonPushed(app, event)
-            selection = app.CasesTable.Selection;
-            if ~isempty(selection)
-                % PERSISTENT-ID: Get persistent CaseId from the selected table row
-                selectedIndex = selection(1);
-                if selectedIndex < 1 || selectedIndex > app.CaseManager.CaseCount
-                    return;
-                end
+            %#ok<INUSD>
+            if isempty(app.CaseStore) || isempty(app.CaseManager)
+                return;
+            end
 
-                caseObj = app.CaseManager.getCase(selectedIndex);
-                caseId = caseObj.CaseId;
+            selection = app.CaseStore.Selection;
+            if isempty(selection)
+                return;
+            end
 
-                % Remove from case manager (using array index)
-                app.CaseManager.removeCase(selectedIndex);
+            selectedIndex = selection(1);
+            if selectedIndex < 1 || selectedIndex > app.CaseManager.CaseCount
+                return;
+            end
 
-                % Remove from visualized schedule if it exists (using persistent ID)
-                scheduleWasUpdated = false;
-                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                    app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseId);
-                    scheduleWasUpdated = true;
-                end
+            caseObj = app.CaseManager.getCase(selectedIndex);
+            caseId = caseObj.CaseId;
 
-                % Also remove from simulated schedule if time control is active
-                if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
-                    app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseId);
-                end
+            % Remove from case manager (using array index)
+            app.CaseManager.removeCase(selectedIndex);
 
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when case removed (Stage 7)
+            % Remove from visualized schedule if it exists (using persistent ID)
+            scheduleWasUpdated = false;
+            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseId);
+                scheduleWasUpdated = true;
+            end
 
-                % Re-render the schedule immediately to show removal with fade effect
-                if scheduleWasUpdated
-                    app.OptimizationController.markOptimizationDirty(app);
-                    % Explicitly re-render the updated schedule
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-                end
+            % Also remove from simulated schedule if time control is active
+            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
+                app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseId);
+            end
+
+            app.markDirty();  % SAVE/LOAD: Mark as dirty when case removed (Stage 7)
+
+            % Clear selection to avoid referencing removed row
+            if ~isempty(app.CaseStore)
+                app.CaseStore.clearSelection();
+            end
+
+            % Re-render the schedule immediately to show removal with fade effect
+            if scheduleWasUpdated
+                app.OptimizationController.markOptimizationDirty(app);
+                % Explicitly re-render the updated schedule
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
             end
         end
 
@@ -923,6 +1092,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
             scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
 
+            app.CaseStore.clearSelection();
             app.ensureDrawerSelectionValid();
             app.finalizeCaseMutation(scheduleWasUpdated);
         end
@@ -948,7 +1118,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TimeControlBaselineLockedIds = string.empty;
 
             app.SelectedCaseId = "";
-            app.CasesTable.Selection = [];
+            if ~isempty(app.CaseStore)
+                app.CaseStore.clearSelection();
+            end
             app.DrawerCurrentCaseId = "";
             app.DrawerController.closeDrawer(app);
 
@@ -1313,6 +1485,61 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function MainTabGroupSelectionChanged(app, event)
+            if isempty(event) || ~isprop(event, 'NewValue') || isempty(event.NewValue)
+                return;
+            end
+
+            if app.IsHandlingTabSelection
+                return;
+            end
+
+            newTab = event.NewValue;
+
+            if app.IsCasesUndocked && newTab == app.TabList
+                app.IsHandlingTabSelection = true;
+
+                fallback = app.LastActiveMainTab;
+                if isempty(fallback) || ~isvalid(fallback) || fallback == app.TabList
+                    fallback = app.TabAdd;
+                end
+
+                app.TabGroup.SelectedTab = fallback;
+                app.LastActiveMainTab = fallback;
+                app.IsHandlingTabSelection = false;
+
+                app.focusCasesPopout();
+                return;
+            end
+
+            app.LastActiveMainTab = newTab;
+        end
+
+        function handleCasesUndockRequest(app)
+            if isempty(app.CaseStore)
+                return;
+            end
+
+            if isempty(app.CasesPopout) || ~isvalid(app.CasesPopout)
+                app.CasesPopout = conduction.gui.windows.CasesPopout(app.CaseStore, ...
+                    @(popout) app.onCasesPopoutRedock(popout));
+            end
+
+            if ~app.IsCasesUndocked
+                app.applyCasesTabUndockedState(true);
+            elseif isempty(app.CasesTabOverlay) || ~isvalid(app.CasesTabOverlay)
+                app.createCasesTabOverlay();
+            end
+
+            app.CasesPopout.show();
+        end
+
+        function onCasesPopoutRedock(app, popout)
+            %#ok<INUSD>
+            app.applyCasesTabUndockedState(false);
+            app.CasesPopout = conduction.gui.windows.CasesPopout.empty;
+        end
+
     end
 
     % Helper methods
@@ -1429,57 +1656,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
 
         function updateCasesTable(app)
-            caseCount = app.CaseManager.CaseCount;
-
-            if caseCount == 0
-                app.CasesTable.Data = {};
-                app.RemoveSelectedButton.Enable = 'off';
-                app.ClearAllButton.Enable = 'off';
+            if isempty(app.CaseStore)
                 return;
             end
-
-            % Build table data
-            tableData = cell(caseCount, 8);
-            for i = 1:caseCount
-                caseObj = app.CaseManager.getCase(i);
-
-                % Status icons (column 1)
-                statusIcon = '';
-                if caseObj.IsLocked
-                    statusIcon = '🔒';
-                end
-                if caseObj.isCompleted()
-                    statusIcon = [statusIcon '✓'];
-                elseif caseObj.isInProgress()
-                    statusIcon = [statusIcon '▶'];
-                end
-                tableData{i, 1} = statusIcon;
-
-                % DUAL-ID: Display case number (not array index)
-                tableData{i, 2} = caseObj.CaseNumber;
-                tableData{i, 3} = char(caseObj.OperatorName);
-                tableData{i, 4} = char(caseObj.ProcedureName);
-                tableData{i, 5} = round(caseObj.EstimatedDurationMinutes);
-                tableData{i, 6} = char(caseObj.AdmissionStatus);
-
-                % Lab constraint
-                if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
-                    tableData{i, 7} = 'Any';
-                else
-                    tableData{i, 7} = char(caseObj.SpecificLab);
-                end
-
-                % First case constraint
-                if caseObj.IsFirstCaseOfDay
-                    tableData{i, 8} = 'Yes';
-                else
-                    tableData{i, 8} = 'No';
-                end
-            end
-
-            app.CasesTable.Data = tableData;
-            app.RemoveSelectedButton.Enable = 'on';
-            app.ClearAllButton.Enable = 'on';
+            app.CaseStore.refresh();
         end
 
 
