@@ -146,27 +146,34 @@ classdef ScheduleRenderer < handle
             obj.enableCaseDrag(app);
         end
 
-        function refreshResourceHighlights(obj, app)
-            if isempty(app) || ~isfield(app, 'ScheduleAxes') || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+        function refreshResourceHighlights(~, app)
+            % Ensure we have a valid axes to draw on
+            if isempty(app)
+                return;
+            end
+            if ~isprop(app, 'ScheduleAxes') || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
                 return;
             end
 
-            metadata = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
-                'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
-
-            if isfield(app, 'LastResourceMetadata') && ~isempty(app.LastResourceMetadata)
-                if isfield(app.LastResourceMetadata, 'resourceTypes') && ~isempty(app.LastResourceMetadata.resourceTypes)
-                    metadata.resourceTypes = app.LastResourceMetadata.resourceTypes;
+            % Gather resource types from app state (legend/store snapshot)
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            try
+                if ~isempty(app.LastResourceMetadata) && isfield(app.LastResourceMetadata, 'resourceTypes')
+                    resourceTypes = app.LastResourceMetadata.resourceTypes;
                 end
+            catch
+                % Ignore access issues; fall back to empty
             end
 
+            % Choose the correct schedule to overlay (respects time control)
             scheduleForRender = app.getScheduleForRendering();
             if isempty(scheduleForRender)
                 conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
                 return;
             end
 
-            conduction.gui.renderers.ResourceOverlayRenderer.draw(app, scheduleForRender, metadata.resourceTypes, app.ResourceHighlightIds);
+            % Draw overlays
+            conduction.gui.renderers.ResourceOverlayRenderer.draw(app, scheduleForRender, resourceTypes, app.ResourceHighlightIds);
         end
 
         % REALTIME-SCHEDULING: NOW Line Drag Functionality
