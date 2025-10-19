@@ -1667,9 +1667,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.IsDirty = false;
                 app.updateWindowTitle();
 
-                % Success message
-                uialert(app.UIFigure, sprintf('Session loaded from:\n%s', filepath), ...
-                    'Session Loaded', 'Icon', 'success');
+                % Success: log to console (avoid modal popups that can disrupt state)
+                fprintf('Session loaded from: %s\n', filepath);
 
             catch ME
                 % Error dialog
@@ -2196,6 +2195,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.refreshResourceLegend();
 
             % Re-render schedule
+            app.IsOptimizationDirty = false;  % Loaded schedules should not appear stale
             if ~isempty(app.OptimizedSchedule)
                 conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, ...
                     app.OptimizationOutcome);
