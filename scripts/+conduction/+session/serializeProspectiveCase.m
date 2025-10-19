@@ -47,5 +47,14 @@ function caseStruct = serializeProspectiveCase(caseObj)
         caseStruct(i).scheduledStartTime = c.ScheduledStartTime;
         caseStruct(i).scheduledProcStartTime = c.ScheduledProcStartTime;
         caseStruct(i).scheduledEndTime = c.ScheduledEndTime;
+
+        if strlength(c.CaseId) > 0
+            caseStruct(i).caseId = char(c.CaseId);
+        end
+        if ~isnan(c.CaseNumber)
+            caseStruct(i).caseNumber = c.CaseNumber;
+        end
+
+        caseStruct(i).requiredResourceIds = cellstr(c.RequiredResourceIds);
     end
 end

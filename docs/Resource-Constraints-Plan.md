@@ -49,7 +49,7 @@ Persistence: Included in session save/load once implemented
 ## Implementation Plan (Phased)
 
 - [x] Phase 0: Author plan and testing approach
-- [ ] Phase 1: Data model + persistence
+- [x] Phase 1: Data model + persistence
 - [ ] Phase 2: Case UI for resource assignment (Add/Edit, Drawer, Cases tab)
 - [ ] Phase 3: Resource Manager (create/edit/delete types, color/pattern, capacity)
 - [ ] Phase 4: Optimization constraints integration
@@ -58,7 +58,7 @@ Persistence: Included in session save/load once implemented
 
 ---
 
-## Phase 1: Data Model + Persistence
+## Phase 1: Data Model + Persistence *(complete)*
 
 - Components
   - `scripts/+conduction/+gui/+models/ResourceType.m`: lightweight handle class with immutable `Id`, mutable `Name`, `Capacity`, `Color`, `Pattern`, `Notes`, `IsTracked` flags.
@@ -74,7 +74,8 @@ Persistence: Included in session save/load once implemented
 - Tests
   - `tests/matlab/TestResourceStore.m`: CRUD, event notifications, color assignment fallback.
   - `tests/matlab/TestProspectiveCaseResources.m`: per-case assignment helpers + CaseManager propagation.
-  - CLI command: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m'}); assertSuccess(results);"`
+  - `tests/save_load/test_stage1_serialization.m`: updated to verify resource IDs survive roundtrip.
+  - Latest CLI run: `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
 ## Phase 2: Case UI (Assignment)
 

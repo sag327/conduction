@@ -17,6 +17,9 @@ classdef CaseManager < handle
         CompletedCases conduction.gui.models.ProspectiveCase  % Archive of completed cases
         CurrentTimeMinutes double = NaN  % Current time in minutes from midnight
 
+        % Shared resource store
+        ResourceStore conduction.gui.stores.ResourceStore = conduction.gui.stores.ResourceStore.empty
+
         % DUAL-ID: Counter for sequential case numbering
         NextCaseNumber double = 1  % Session-scoped counter, starts at 1
     end
@@ -38,6 +41,7 @@ classdef CaseManager < handle
             obj.TargetDate = targetDate;
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
             obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;  % REALTIME-SCHEDULING
+            obj.ResourceStore = conduction.gui.stores.ResourceStore();
 
             obj.resetClinicalDataState();
             obj.HistoricalCollection = historicalCollection;
@@ -47,6 +51,21 @@ classdef CaseManager < handle
                 obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
                 obj.computeProcedureAnalytics();
             end
+        end
+
+        function store = getResourceStore(obj)
+            if isempty(obj.ResourceStore) || ~isvalid(obj.ResourceStore)
+                obj.ResourceStore = conduction.gui.stores.ResourceStore();
+            end
+            store = obj.ResourceStore;
+        end
+
+        function setResourceStore(obj, store)
+            arguments
+                obj
+                store (1,1) conduction.gui.stores.ResourceStore
+            end
+            obj.ResourceStore = store;
         end
 
         function count = get.CaseCount(obj)
@@ -142,6 +161,42 @@ classdef CaseManager < handle
                     index = i;
                     return;
                 end
+            end
+        end
+
+        function result = casesRequiringResource(obj, resourceId)
+            arguments
+                obj
+                resourceId (1,1) string
+            end
+
+            if isempty(obj.Cases)
+                result = conduction.gui.models.ProspectiveCase.empty;
+                return;
+            end
+
+            mask = arrayfun(@(c) c.requiresResource(resourceId), obj.Cases);
+            result = obj.Cases(mask);
+        end
+
+        function summary = caseResourceSummary(obj)
+            if isempty(obj.ResourceStore) || ~isvalid(obj.ResourceStore)
+                summary = struct('ResourceId', {}, 'CaseIds', {});
+                return;
+            end
+
+            resourceIds = obj.ResourceStore.ids();
+            summary = struct('ResourceId', {}, 'CaseIds', {});
+
+            if isempty(resourceIds)
+                return;
+            end
+
+            for k = 1:numel(resourceIds)
+                resId = resourceIds(k);
+                cases = obj.casesRequiringResource(resId);
+                summary(k).ResourceId = resId; %#ok<*AGROW>
+                summary(k).CaseIds = string({cases.CaseId});
             end
         end
 

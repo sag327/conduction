@@ -16,6 +16,10 @@ try
     testCase.IsLocked = true;
     testCase.CaseStatus = "in_progress";
     testCase.SpecificLab = "Lab 3";
+    testCase.CaseId = "case_test_001";
+    testCase.CaseNumber = 42;
+    testCase.assignResource("resource_affera");
+    testCase.assignResource("resource_mapping");
 
     % Serialize
     caseStruct = conduction.session.serializeProspectiveCase(testCase);
@@ -30,6 +34,10 @@ try
     assert(reconstructed.IsLocked == testCase.IsLocked, 'IsLocked mismatch');
     assert(reconstructed.CaseStatus == testCase.CaseStatus, 'CaseStatus mismatch');
     assert(reconstructed.SpecificLab == testCase.SpecificLab, 'SpecificLab mismatch');
+    assert(reconstructed.CaseId == testCase.CaseId, 'CaseId mismatch');
+    assert(reconstructed.CaseNumber == testCase.CaseNumber, 'CaseNumber mismatch');
+    assert(reconstructed.requiresResource("resource_affera"), 'Missing resource affera after roundtrip');
+    assert(reconstructed.requiresResource("resource_mapping"), 'Missing resource mapping after roundtrip');
 
     fprintf('  ✓ ProspectiveCase roundtrip works\n');
 catch ME
@@ -45,6 +53,9 @@ try
         createTestCase('Dr. B', 'Proc 2', 90);
         createTestCase('Dr. C', 'Proc 3', 120)
     ];
+    cases(1).assignResource("resource_A");
+    cases(2).assignResource("resource_B");
+    cases(2).assignResource("resource_A");
 
     % Serialize
     casesStruct = conduction.session.serializeProspectiveCase(cases);
@@ -57,6 +68,8 @@ try
     assert(reconstructed(1).OperatorName == "Dr. A", 'First operator name mismatch');
     assert(reconstructed(2).EstimatedDurationMinutes == 90, 'Second duration mismatch');
     assert(reconstructed(3).ProcedureName == "Proc 3", 'Third procedure name mismatch');
+    assert(reconstructed(1).requiresResource("resource_A"), 'First case resource not persisted');
+    assert(reconstructed(2).requiresResource("resource_B"), 'Second case resource not persisted');
 
     fprintf('  ✓ Case array roundtrip works\n');
 catch ME
