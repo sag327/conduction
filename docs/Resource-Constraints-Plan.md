@@ -142,13 +142,14 @@ Persistence: Included in session save/load once implemented
 ## Phase 6: Save/Load + Acceptance
 
 - Serialization
-  - Update session struct version; on load, detect older versions and inject empty ResourceStore with default palette.
-  - Ensure auto-save (Stage 8 timers) includes resources; extend Stage 6 load tests for coverage.
+  - Persist ResourceStore snapshot (color/capacity/etc.), per-case resource assignments, and legend highlight ids alongside existing session data.
+  - Restore resources before case hydration so drawer/add checklists immediately reflect saved types and case assignments.
+  - Maintain backward compatibility by falling back to an empty store/highlight set when snapshot fields are absent.
 
 - Acceptance & Regression
-  - `tests/matlab/AcceptanceResourceConstraints.m`: complete workflow (define → assign → run optimizer → highlight → save/load) using headless automation.
-  - Extend existing acceptance tests (e.g., scheduling conflict detection) to respect resources for regression safety.
-  - Manual QA checklist: screenshot overlays, conflict highlight, delete resource while cases pending (ensuring prompts).
+  - `tests/matlab/TestResourcePersistence.m`: round-trip app export/import to ensure resources, assignments, and highlights survive.
+  - Extend targeted unit suites (legend/overlay/checklist) to guard new behavior; ensure MATLAB CLI tests exercised after changes.
+  - Manual QA checklist: confirm resource highlights remain active immediately after load and after inline assignment (no optimize required).
 
 ## Open Questions
 - Do any resources require per-case quantity (e.g., requires 2 of a resource), or is it always 1 per case per type?
