@@ -82,6 +82,7 @@ classdef ResourceOverlayRenderer
 
             delete(findobj(ax, 'Tag', 'ResourceBadge'));
             delete(findobj(ax, 'Tag', 'ResourceHighlightMask'));
+            delete(findobj(ax, 'Tag', 'ResourceHighlightOutline'));
         end
     end
 
@@ -239,11 +240,19 @@ classdef ResourceOverlayRenderer
             end
 
             if caseHasHighlight
+                outline = rectangle(ax, 'Position', position, ...
+                    'FaceColor', 'none', 'EdgeColor', [1 1 1], 'LineWidth', 2.2, ...
+                    'Tag', 'ResourceHighlightOutline', 'HitTest', 'off');
+                if isprop(outline, 'PickableParts')
+                    outline.PickableParts = 'none';
+                end
+                outline.UserData = struct('caseId', caseId);
+                uistack(outline, 'top');
                 return;
             end
 
             mask = rectangle(ax, 'Position', position, ...
-                'FaceColor', [0 0 0], 'FaceAlpha', 0.35, 'EdgeColor', 'none', ...
+                'FaceColor', [0 0 0], 'FaceAlpha', 0.55, 'EdgeColor', 'none', ...
                 'Tag', 'ResourceHighlightMask', 'HitTest', 'off');
             if isprop(mask, 'PickableParts')
                 mask.PickableParts = 'none';
