@@ -134,6 +134,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
+        ResourceLegendPanel        matlab.ui.container.Panel
+        ResourceLegend             conduction.gui.components.ResourceLegend = conduction.gui.components.ResourceLegend.empty
         UtilAxes                    matlab.ui.control.UIAxes
         FlipAxes                    matlab.ui.control.UIAxes
         IdleAxes                    matlab.ui.control.UIAxes
@@ -487,6 +489,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DrawerResourcesChecklist.refresh();
                 app.DrawerResourcesChecklist.setSelection(current);
             end
+
+            app.refreshResourceLegend();
         end
 
         function onResourceManagerClosed(app)
@@ -531,6 +535,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
         ResourceManagerWindow conduction.gui.windows.ResourceManager = conduction.gui.windows.ResourceManager.empty
         PendingAddResourceIds string = string.empty(0, 1)
+        ResourceHighlightIds string = string.empty(0, 1)
+        LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+            'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}))
 
         % Controllers
         ScheduleRenderer conduction.gui.controllers.ScheduleRenderer
@@ -747,10 +754,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
             app.CanvasScheduleLayout.RowHeight = {'1x'};
-            app.CanvasScheduleLayout.ColumnWidth = {'1x'};
+            app.CanvasScheduleLayout.ColumnWidth = {'1x', 180};
             app.CanvasScheduleLayout.Padding = [0 0 0 0];
             app.CanvasScheduleLayout.RowSpacing = 0;
-            app.CanvasScheduleLayout.ColumnSpacing = 0;
+            app.CanvasScheduleLayout.ColumnSpacing = 8;
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
             app.ScheduleAxes.Layout.Row = 1;
@@ -761,6 +768,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Box = 'on';
             app.ScheduleAxes.Color = [0 0 0];
             app.ScheduleAxes.Toolbar.Visible = 'off';
+
+            app.ResourceLegendPanel = uipanel(app.CanvasScheduleLayout);
+            app.ResourceLegendPanel.Layout.Row = 1;
+            app.ResourceLegendPanel.Layout.Column = 2;
+            app.ResourceLegendPanel.BorderType = 'none';
+            app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
+            app.ResourceLegendPanel.Scrollable = 'on';
+
+            app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
+                'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
             app.CanvasAnalyzeLayout.RowHeight = {'1.5x', '1x', '1.3x'};
@@ -967,6 +984,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CaseManager = conduction.gui.controllers.CaseManager(targetDate, historicalCollection);
             end
 
+            app.initializeResourceLegend();
+
             % Initialize case table data store and embedded view
             app.initializeCaseTableComponents();
 
@@ -1065,6 +1084,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if ~isempty(app.ResourceManagerWindow) && isvalid(app.ResourceManagerWindow)
                 delete(app.ResourceManagerWindow);
+            end
+
+            if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                delete(app.ResourceLegend);
             end
 
             if ~isempty(app.CaseStoreListeners)
@@ -1790,6 +1813,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateCasesTable();
             app.OptimizationController.markOptimizationDirty(app);
             app.TestingModeController.updateTestingInfoText(app);
+            app.refreshResourceLegend();
         end
 
 
@@ -1832,6 +1856,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Initialize empty schedule visualization for the target date
 
             app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            app.LastResourceMetadata = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+                'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
+            app.refreshResourceLegend();
+            conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
         end
 
         function initializeOptimizationState(app)
@@ -1873,6 +1901,70 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
             conduction.gui.app.analytics.resetSummaries(app);
+        end
+
+        function initializeResourceLegend(app)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+            app.refreshResourceLegend();
+        end
+
+        function refreshResourceLegend(app)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
+
+            if ~isempty(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    resourceTypes = store.snapshot();
+                end
+                resourceSummary = app.CaseManager.caseResourceSummary();
+            end
+
+            app.updateResourceLegendContents(resourceTypes, resourceSummary);
+        end
+
+        function updateResourceLegendContents(app, resourceTypes, resourceSummary)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+
+            if nargin < 2 || isempty(resourceTypes)
+                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            end
+            if nargin < 3 || isempty(resourceSummary)
+                resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
+            end
+
+            app.LastResourceMetadata = struct('resourceTypes', resourceTypes, 'resourceSummary', resourceSummary);
+
+            allowedIds = string({resourceTypes.Id});
+            if isempty(allowedIds)
+                trimmedHighlight = string.empty(0, 1);
+            else
+                trimmedHighlight = intersect(app.ResourceHighlightIds, allowedIds, 'stable');
+            end
+
+            highlightChanged = ~isequal(trimmedHighlight, app.ResourceHighlightIds);
+            app.ResourceHighlightIds = trimmedHighlight;
+
+            app.ResourceLegend.setData(resourceTypes, resourceSummary);
+            app.ResourceLegend.setHighlights(trimmedHighlight, true);
+
+            app.ScheduleRenderer.refreshResourceHighlights(app);
+        end
+
+        function onResourceLegendHighlightChanged(app, highlightIds)
+            highlightIds = unique(string(highlightIds(:)), 'stable');
+            if ~isequal(highlightIds, app.ResourceHighlightIds)
+                app.ResourceHighlightIds = highlightIds;
+            end
+            app.ScheduleRenderer.refreshResourceHighlights(app);
         end
 
 
