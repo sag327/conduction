@@ -55,6 +55,7 @@ Persistence: Included in session save/load once implemented
 - [ ] Phase 4: Optimization constraints integration
 - [ ] Phase 5: Visualization (legend, badges, conflict highlighting, filters)
 - [ ] Phase 6: Save/Load, validation, and acceptance tests
+- [ ] Phase 7: Multi-case resource editing & drawer enhancements
 
 ---
 
@@ -193,3 +194,9 @@ This scenario demonstrates defining a limited resource, assigning it to multiple
 
 - Save/Load
   - Sessions persist resource types (name, capacity, color/pattern) and per-case assignments; loading restores constraints and visuals.
+- Phase 7: Multi-Case Resource Editing *(planned)*
+  - Extend CaseTableView/CaseStore to support multi-row selection with visual highlighting of all selected cases (background shading in table and schedule highlights via existing selection overlay hooks).
+  - Add command actions (e.g., “Apply Resources to Selected”) that apply checklist assignments to every selected case simultaneously; ensure pending selections in Add/Edit propagate to all when multiple cases are selected.
+  - Drawer behavior: when multiple cases are selected, show a condensed summary panel (case count, shared resources) and multi-edit controls (checkboxes indicate mixed state with tri-state UI); drawer should revert to single-case inspector when selection collapses.
+  - Update resource checklists/drilldowns to handle tri-state selections (checked = all cases have resource, indeterminate = some cases have it, unchecked = none).
+  - Tests: adapt CaseStore/TableView tests for multi-select, add drawer multi-edit scenarios, regression on resources column after bulk edits.
