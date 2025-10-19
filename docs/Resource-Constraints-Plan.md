@@ -60,72 +60,97 @@ Persistence: Included in session save/load once implemented
 
 ## Phase 1: Data Model + Persistence
 
-- Entities
-  - `conduction.gui.models.ResourceType` (handle/class): `Id`, `Name`, `Capacity`, `Color`, `Pattern`, `Notes`.
-  - Store: `conduction.gui.stores.ResourceStore` managing types, uniqueness, and events: `TypesChanged`.
-  - Extend `ProspectiveCase` with `RequiredResourceIds` (string array) and helpers: `addResource(id)`, `removeResource(id)`.
-  - CaseManager: propagate changes, support querying cases by resource.
+- Components
+  - `scripts/+conduction/+gui/+models/ResourceType.m`: lightweight handle class with immutable `Id`, mutable `Name`, `Capacity`, `Color`, `Pattern`, `Notes`, `IsTracked` flags.
+  - `scripts/+conduction/+gui/+stores/ResourceStore.m`: evented store exposing CRUD methods, duplicate checking, palette management, and typed APIs for batch updates.
+  - Extend `ProspectiveCase` with `RequiredResourceIds` + helper methods (`requiresResource(id)`, `assignResource(id)`, `removeResource(id)`), placed in existing model file to avoid duplication.
+  - `CaseManager`: add delegation to `ResourceStore` (subscribe for change notifications), and helper queries `casesRequiringResource(resourceId)` and `caseResourceSummary()`.
 
-- Serialization
-  - Update session save/load to include resource types and per-case resource requirements.
+- Persistence & Integration
+  - Update `conduction.session.serializeProspectiveCase`/`deserializeProspectiveCase` to persist `RequiredResourceIds`.
+  - Add ResourceStore to session serialization block (new version bump, backward compatibility shim for missing resources).
+  - Provide fixture factory under `tests/helpers` to create ResourceStore with seeded types for reuse.
 
 - Tests
-  - Unit: create/update/delete resource types, ensure uniqueness and events.
-  - Unit: per-case resource assignment add/remove/query.
-  - CLI: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests/matlab/TestResourceStore.m'); assertSuccess(results);"`
+  - `tests/matlab/TestResourceStore.m`: CRUD, event notifications, color assignment fallback.
+  - `tests/matlab/TestProspectiveCaseResources.m`: per-case assignment helpers + CaseManager propagation.
+  - CLI command: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m'}); assertSuccess(results);"`
 
 ## Phase 2: Case UI (Assignment)
 
-- Add/Edit tab: new section with multi-select checklist of resource types, plus “Create new type…”.
-- Drawer: same checklist mirrored.
-- Cases Tab: new “Resources” column with badges.
+- Components
+  - `scripts/+conduction/+gui/+components/ResourceChecklist.m`: reusable UI component (parent, ResourceStore, Case reference) producing multi-select checklist with search, “Create new type…” callback.
+  - Add/Edit tab builder (`buildCaseDetailsSection`) integrates `ResourceChecklist` component into new “Resources” panel without expanding main app class footprint.
+  - Drawer controller uses `ResourceChecklist` in its grid cell; reuse component to avoid duplicate logic.
+  - Case table display: extend `CaseTableView` with optional badge renderer via hook method `renderResourceBadges(caseObj)` drawing from a shared formatter (`conduction.gui.components.ResourceBadges.format(...)`).
+
+- Interaction
+  - `ResourceChecklist` listens to `ResourceStore` events for dynamic updates.
+  - Case selection changes propagate through store helpers, so only the store and component talk—no direct main app wiring.
 
 - Tests
-  - UI: instantiate with two resource types; select for a case; verify chips shown and CaseStore reflects assignment.
-  - CLI smoke: save screenshot of case row with resource badges.
+  - `tests/matlab/TestResourceChecklist.m`: instantiate component with dummy figure, toggle selections, ensure callbacks fired and CaseStore updated.
+  - `tests/matlab/TestCaseTableView.m`: extend coverage to verify resource badges rendering when provider function returns non-empty list.
+  - CLI smoke screenshot script `tests/matlab/helpers/resource_case_badges_smoke.m` exports `images/resource_case_badges_smoke.png` for documentation.
 
 ## Phase 3: Resource Manager (Dialog)
 
-- `uifigure` modal dialog with table + add/edit form.
-- Capacity editing: natural numbers; color/pattern pickers (fallback to generated palette).
-- Emits `TypesChanged` so UI refreshes checklists and badges.
+- Components
+  - `scripts/+conduction/+gui/+windows/ResourceManager.m`: modal class encapsulating UI, referencing ResourceStore; form layout built via local helpers to keep main app slim.
+  - Subcomponent `ResourceTypeForm` (local function or component) handling validation, color/pattern pickers (leveraging existing palette utilities if available).
+  - Bulk operations (delete with reassignment) implemented via `ResourceStore.applyPatch(...)` to centralize logic.
+
+- Integration
+  - Main app exposes `openResourceManager()` method that instantiates manager on-demand, passing callbacks for “Create new type…” from `ResourceChecklist` through a promise/future pattern.
 
 - Tests
-  - Create resource type, edit capacity, delete type in isolation.
-  - CLI: run modal open programmatically and verify store update (headless fallback without screenshots as needed).
+  - `tests/matlab/TestResourceManager.m`: open window headlessly, simulate create/edit/delete using programmatic button callbacks, assert ResourceStore changes.
+  - Check validation: attempt duplicate names, negative capacities, ensure error dialogs raised (trap warnings in test).
+  - Optional manual screenshot script `tests/matlab/helpers/resource_manager_smoke.m` → `images/resource_manager_smoke.png`.
 
 ## Phase 4: Optimization Constraints Integration
 
-- Constraint: For each resource type r and time t, `activeCasesRequiring(r,t) <= Capacity(r)`.
-- Implementation: integrate into existing optimization formulation (MILP/heuristic). If MILP:
-  - Add resource-specific cumulative constraints across time discretization or via interval overlap binarys.
-- Feasibility: when infeasible, surface which resource/time windows are over-subscribed.
+- Modules
+  - Extend optimization configuration (`scripts/+conduction/+gui/+optimization/Config.m`) to carry ResourceStore snapshot and resource usage flags.
+  - Implement new constraint builder `scripts/+conduction/+optimization/+constraints/applyResourceCapacities.m` returning constraint structs usable by both MILP and heuristic solvers.
+  - For MILP path: introduce binary overlap indicators per resource (reuse existing time-indexed arrays) to avoid duplicating solver glue.
+  - For heuristic scheduler: refactor slot-assignment routine into modular function allowing plug-in capacity checks; reuse across resource types to prevent branching logic.
+
+- Diagnostics
+  - Extend optimization outcome struct with `ResourceViolations` array (resource id, time window, involved case ids) for UI warnings.
+  - Update OptimizationController to convert violations into banners/tooltips in summary card.
 
 - Tests
-  - Synthetic day with 3 concurrent cases needing a resource with capacity 2 → solver prevents triple overlap.
-  - With capacity 0 → no overlaps allowed (resource usage disallowed).
-  - CLI: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests/matlab/TestResourceConstraints.m'); assertSuccess(results);"`
+  - `tests/matlab/TestResourceConstraints.m`: synthetic cases verifying solver respects capacity (MILP + heuristic scenarios if both exist).
+  - `tests/matlab/TestResourceDiagnostics.m`: ensure violation messages populated when capacity intentionally broken (simulate by overriding constraint builder in test harness).
+  - CLI command (once implemented) updated accordingly.
 
 ## Phase 5: Visualization
 
-- Legend with resource swatches showing `(Capacity)`.
-- Case block overlays showing resource badges; multi-resource stacked overlays.
-- Conflict indicator overlay for capacity breaches during manual edits or infeasible states.
-- Filters to highlight by resource type.
+- Components
+  - `scripts/+conduction/+gui/+components/ResourceLegend.m`: legend widget bound to ResourceStore, with highlight toggle events.
+  - Overlay renderer `scripts/+conduction/+gui/+renderers/ResourceOverlayRenderer.m`: draws badges on case blocks (called by ScheduleRenderer); returns bounding boxes for hover tooltips to avoid inline duplication.
+  - Conflict highlighter `scripts/+conduction/+gui/+renderers/ResourceConflictHighlighter.m`: reusable for both optimization results and manual-edit detection.
+
+- Interaction
+  - Legend toggles dispatch highlight events consumed by ScheduleRenderer to dim/un-dim cases (`ScheduleRenderer.applyResourceHighlight(filterIds)`).
+  - Case tooltip formatting uses shared helper `conduction.gui.formatters.resourceSummary(caseObj)`.
 
 - Tests
-  - Smoke: render schedule with resource overlays and export `images/resource_overlay_smoke.png`.
-  - Verify legend entries match store and capacities.
+  - `tests/matlab/TestResourceLegend.m`: ensure toggles reflect ResourceStore updates, highlight callbacks invoked.
+  - `tests/matlab/TestResourceOverlayRenderer.m`: verify badge placement for single/multi-resource cases (pixel tests tolerant via bounding boxes).
+  - Smoke export script `tests/matlab/helpers/resource_overlay_smoke.m` to generate `images/resource_overlay_smoke.png` for docs.
 
 ## Phase 6: Save/Load + Acceptance
 
-- Save/Load
-  - Include ResourceStore and cases’ `RequiredResourceIds` in session serialization.
-  - Backward compatibility: if absent, initialize empty store.
+- Serialization
+  - Update session struct version; on load, detect older versions and inject empty ResourceStore with default palette.
+  - Ensure auto-save (Stage 8 timers) includes resources; extend Stage 6 load tests for coverage.
 
-- Acceptance
-  - Flow: define types → assign to cases → run optimization → verify no-capacity breaches → visualize overlays → save → reload → verify state.
-  - CLI: `matlab -batch "addpath('scripts'); addpath('tests'); results = runtests('tests/matlab/AcceptanceResourceConstraints.m'); assertSuccess(results);"`
+- Acceptance & Regression
+  - `tests/matlab/AcceptanceResourceConstraints.m`: complete workflow (define → assign → run optimizer → highlight → save/load) using headless automation.
+  - Extend existing acceptance tests (e.g., scheduling conflict detection) to respect resources for regression safety.
+  - Manual QA checklist: screenshot overlays, conflict highlight, delete resource while cases pending (ensuring prompts).
 
 ## Open Questions
 - Do any resources require per-case quantity (e.g., requires 2 of a resource), or is it always 1 per case per type?
