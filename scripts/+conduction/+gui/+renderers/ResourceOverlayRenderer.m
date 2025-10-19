@@ -53,12 +53,20 @@ classdef ResourceOverlayRenderer
 
                     rectHandle = conduction.gui.renderers.ResourceOverlayRenderer.locateCaseBlockHandle(ax, caseId);
                     if isempty(rectHandle) || ~isgraphics(rectHandle)
-                        continue;
-                    end
-
-                    position = get(rectHandle, 'Position');
-                    if numel(position) ~= 4 || position(3) <= 0 || position(4) <= 0
-                        continue;
+                        % Fallback: compute approximate rectangle from schedule data
+                        position = conduction.gui.renderers.ResourceOverlayRenderer.computeCaseRectPosition(ax, caseStruct);
+                        if isempty(position)
+                            continue;
+                        end
+                    else
+                        position = get(rectHandle, 'Position');
+                        if numel(position) ~= 4 || position(3) <= 0 || position(4) <= 0
+                            % Use fallback if existing rectangle invalid
+                            position = conduction.gui.renderers.ResourceOverlayRenderer.computeCaseRectPosition(ax, caseStruct);
+                            if isempty(position)
+                                continue;
+                            end
+                        end
                     end
 
                     resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(caseStruct);
@@ -284,6 +292,53 @@ classdef ResourceOverlayRenderer
             end
             mask.UserData = struct('caseId', caseId);
             uistack(mask, 'top');
+        end
+
+        function pos = computeCaseRectPosition(ax, caseStruct)
+            pos = [];
+            if isempty(ax) || ~isgraphics(ax)
+                return;
+            end
+            % Determine lab index (x center)
+            labIndex = NaN;
+            if isfield(caseStruct, 'lab') && ~isempty(caseStruct.lab)
+                labIndex = double(caseStruct.lab);
+            elseif isfield(caseStruct, 'labIndex') && ~isempty(caseStruct.labIndex)
+                labIndex = double(caseStruct.labIndex);
+            end
+            if ~isfinite(labIndex)
+                return;
+            end
+
+            % Determine times (minutes), then convert to hours (y axis units)
+            startMinutes = NaN;
+            endMinutes = NaN;
+            if isfield(caseStruct, 'startTime') && ~isempty(caseStruct.startTime)
+                startMinutes = double(caseStruct.startTime);
+            elseif isfield(caseStruct, 'setupStartTime') && ~isempty(caseStruct.setupStartTime)
+                startMinutes = double(caseStruct.setupStartTime);
+            end
+            if isfield(caseStruct, 'endTime') && ~isempty(caseStruct.endTime)
+                endMinutes = double(caseStruct.endTime);
+            elseif isfield(caseStruct, 'turnoverEnd') && ~isempty(caseStruct.turnoverEnd)
+                endMinutes = double(caseStruct.turnoverEnd);
+            elseif isfield(caseStruct, 'procEndTime') && ~isempty(caseStruct.procEndTime)
+                % Use procedure end if nothing else
+                endMinutes = double(caseStruct.procEndTime);
+            end
+            if ~isfinite(startMinutes) || ~isfinite(endMinutes) || endMinutes <= startMinutes
+                return;
+            end
+
+            startHour = startMinutes / 60;
+            endHour = endMinutes / 60;
+            height = max(endHour - startHour, eps);
+
+            % Choose a reasonable bar width centered at lab index
+            barWidth = 0.9;
+            x = labIndex - barWidth/2;
+            y = startHour;
+            pos = [x, y, barWidth, height];
         end
 
         function rectHandle = locateCaseBlockHandle(ax, caseId)
