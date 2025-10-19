@@ -51,7 +51,7 @@ Persistence: Included in session save/load once implemented
 - [x] Phase 0: Author plan and testing approach
 - [x] Phase 1: Data model + persistence
 - [x] Phase 2: Case UI for resource assignment (Add/Edit, Drawer, Cases tab)
-- [ ] Phase 3: Resource Manager (create/edit/delete types, color/pattern, capacity)
+- [x] Phase 3: Resource Manager (create/edit/delete types, color/pattern, capacity)
 - [ ] Phase 4: Optimization constraints integration
 - [ ] Phase 5: Visualization (legend, badges, conflict highlighting, filters)
 - [ ] Phase 6: Save/Load, validation, and acceptance tests
@@ -96,20 +96,15 @@ Persistence: Included in session save/load once implemented
   - `tests/matlab/TestCaseStore.m`: verifies resource column data generation.
   - CLI run (Phase 2): `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/matlab/TestResourceChecklist.m','tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
-## Phase 3: Resource Manager (Dialog)
+## Phase 3: Resource Manager (Dialog) *(complete)*
 
 - Components
-  - `scripts/+conduction/+gui/+windows/ResourceManager.m`: modal class encapsulating UI, referencing ResourceStore; form layout built via local helpers to keep main app slim.
-  - Subcomponent `ResourceTypeForm` (local function or component) handling validation, color/pattern pickers (leveraging existing palette utilities if available).
-  - Bulk operations (delete with reassignment) implemented via `ResourceStore.applyPatch(...)` to centralize logic.
-
-- Integration
-  - Main app exposes `openResourceManager()` method that instantiates manager on-demand, passing callbacks for “Create new type…” from `ResourceChecklist` through a promise/future pattern.
+  - `scripts/+conduction/+gui/+windows/ResourceManager.m`: modal window with table + form (color picker, pattern dropdown, notes, tracking toggle) bound to ResourceStore for create/update/delete actions.
+  - `ProspectiveSchedulerApp.openResourceManagementDialog` now instantiates a single manager window and reuses it; store listeners keep Add/Edit and drawer checklists in sync.
 
 - Tests
-  - `tests/matlab/TestResourceManager.m`: open window headlessly, simulate create/edit/delete using programmatic button callbacks, assert ResourceStore changes.
-  - Check validation: attempt duplicate names, negative capacities, ensure error dialogs raised (trap warnings in test).
-  - Optional manual screenshot script `tests/matlab/helpers/resource_manager_smoke.m` → `images/resource_manager_smoke.png`.
+  - `tests/matlab/TestResourceManager.m`: headless coverage for create/update/delete using helper methods.
+  - Latest CLI run: `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/matlab/TestResourceChecklist.m','tests/matlab/TestResourceManager.m','tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
 ## Phase 4: Optimization Constraints Integration
 

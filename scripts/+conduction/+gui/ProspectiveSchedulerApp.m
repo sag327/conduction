@@ -168,6 +168,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 caseObj.assignResource(toAdd(k));
             end
         end
+
+        function openResourceManagementDialog(app)
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            if isempty(app.ResourceManagerWindow) || ~isvalid(app.ResourceManagerWindow)
+                app.ResourceManagerWindow = conduction.gui.windows.ResourceManager(store, ...
+                    'Visible', 'on', 'OnClose', @(mgr) app.onResourceManagerClosed());
+            end
+
+            app.ResourceManagerWindow.show();
+        end
     end
 
     methods (Access = private)
@@ -447,6 +465,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function onResourceManagerClosed(app)
+            app.ResourceManagerWindow = conduction.gui.windows.ResourceManager.empty;
+        end
+
         function onAddResourcesSelectionChanged(app, resourceIds)
             app.PendingAddResourceIds = string(resourceIds(:));
         end
@@ -471,17 +493,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % (moved applyResourcesToCase to a public methods block below)
 
-        function openResourceManagementDialog(app)
-            % Placeholder until Resource Manager dialog is implemented (Phase 3)
-            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
-                return;
-            end
-            uialert(app.UIFigure, ...
-                ['Resource manager will be available in a later phase.' newline ...
-                 'Please define resources via upcoming dialog.'], ...
-                'Resource Manager Pending');
-        end
-
     end
 
     % App state properties
@@ -494,6 +505,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         AddResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
         DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
+        ResourceManagerWindow conduction.gui.windows.ResourceManager = conduction.gui.windows.ResourceManager.empty
         PendingAddResourceIds string = string.empty(0, 1)
 
         % Controllers
@@ -1025,6 +1037,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
                 delete(app.DrawerResourcesChecklist);
+            end
+
+            if ~isempty(app.ResourceManagerWindow) && isvalid(app.ResourceManagerWindow)
+                delete(app.ResourceManagerWindow);
             end
 
             if ~isempty(app.CaseStoreListeners)
