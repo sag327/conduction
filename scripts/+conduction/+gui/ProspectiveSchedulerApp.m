@@ -218,6 +218,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        function debugLog(app, where, message)
+            if ~isprop(app, 'DebugScheduling') || ~app.DebugScheduling
+                return;
+            end
+            try
+                ts = char(datetime('now','Format','HH:mm:ss.SSS'));
+                fprintf('[DEBUG][%s] %s: %s\n', ts, where, message);
+            catch
+            end
+        end
 
         function onGlobalKeyPress(app, event)
             if isempty(event) || ~isprop(event, 'Key')
@@ -494,6 +504,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.refreshResourceLegend();
+            if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
         end
 
         function onResourceManagerClosed(app)
@@ -1866,6 +1877,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
             app.refreshResourceLegend();
             conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+            if ismethod(app, 'debugLog'); app.debugLog('initializeEmptySchedule', 'empty schedule drawn'); end
         end
 
         function initializeOptimizationState(app)
@@ -1966,6 +1978,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ResourceLegend.setHighlights(trimmedHighlight, true);
 
             app.ScheduleRenderer.refreshResourceHighlights(app);
+            if ismethod(app, 'debugLog'); app.debugLog('updateResourceLegendContents', sprintf('highlights=%s', strjoin(app.ResourceHighlightIds,','))); end
         end
 
         function onResourceLegendHighlightChanged(app, highlightIds)
@@ -2023,7 +2036,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty;
-
+            app.IsRestoringSession = true;
+            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'begin'); end
             app.IsRestoringSession = true;
             try
             % Restore resource definitions before adding cases
@@ -2230,13 +2244,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 fprintf('Session loaded successfully\n');
             end
-
+            app.IsRestoringSession = false;
+            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'end'); end
             catch ME
                 app.IsRestoringSession = false;
                 rethrow(ME);
             end
-
-            app.IsRestoringSession = false;
+            
         end
 
         function sessionData = exportAppState(app)
