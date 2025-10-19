@@ -109,11 +109,22 @@ classdef ResourceOverlayRenderer
                 return;
             end
 
-            if isstruct(appOrAxes) || isobject(appOrAxes)
+            if isstruct(appOrAxes)
                 if isfield(appOrAxes, 'ScheduleAxes')
                     candidate = appOrAxes.ScheduleAxes;
                     if ~isempty(candidate)
                         ax = candidate;
+                    end
+                end
+            elseif isobject(appOrAxes)
+                if isprop(appOrAxes, 'ScheduleAxes')
+                    try
+                        candidate = appOrAxes.ScheduleAxes;
+                        if ~isempty(candidate)
+                            ax = candidate;
+                        end
+                    catch
+                        % Ignore property access issues
                     end
                 end
             end
