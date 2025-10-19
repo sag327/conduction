@@ -541,6 +541,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ResourceHighlightIds string = string.empty(0, 1)
         LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
             'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}))
+        IsRestoringSession logical = false
 
         % Controllers
         ScheduleRenderer conduction.gui.controllers.ScheduleRenderer
@@ -1815,7 +1816,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.updateCasesTable();
-            app.OptimizationController.markOptimizationDirty(app);
+            if ~app.IsRestoringSession
+                app.OptimizationController.markOptimizationDirty(app);
+            end
             app.TestingModeController.updateTestingInfoText(app);
             app.refreshResourceLegend();
         end
@@ -2022,6 +2025,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty;
 
+            app.IsRestoringSession = true;
+            try
             % Restore resource definitions before adding cases
             snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
             if isfield(sessionData, 'resourceTypes') && ~isempty(sessionData.resourceTypes)
@@ -2207,10 +2212,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
                     app.ResourceLegend.setHighlights(app.ResourceHighlightIds, true);
                 end
-                app.ScheduleRenderer.refreshResourceHighlights(app);
             else
                 app.ResourceHighlightIds = string.empty(0, 1);
+                if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                    app.ResourceLegend.setHighlights(string.empty(0, 1), true);
+                end
             end
+            app.ScheduleRenderer.refreshResourceHighlights(app);
 
             % Clear timeline position (time control is OFF)
             app.CaseManager.setCurrentTime(NaN);
@@ -2222,6 +2230,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 fprintf('Session loaded successfully\n');
             end
+
+            catch ME
+                app.IsRestoringSession = false;
+                rethrow(ME);
+            end
+
+            app.IsRestoringSession = false;
         end
 
         function sessionData = exportAppState(app)
@@ -2474,7 +2489,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CaseManager.setResourceStore(store);
             app.onResourceStoreChanged();
             if ~isempty(app.ResourceLegendPanel) && isvalid(app.ResourceLegendPanel)
-                app.ResourceLegendPanel.Visible = 'on';
+                if isempty(resourceTypes)
+                    app.ResourceLegendPanel.Visible = 'off';
+                else
+                    app.ResourceLegendPanel.Visible = 'on';
+                end
             end
         end
 
