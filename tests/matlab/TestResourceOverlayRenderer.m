@@ -60,8 +60,7 @@ classdef TestResourceOverlayRenderer < matlab.unittest.TestCase
 
             conduction.gui.renderers.ResourceOverlayRenderer.draw(testCase.AppStub, schedule, resourceTypes, string.empty(0, 1));
 
-            badges = findobj(testCase.Axes, 'Tag', 'ResourceBadge');
-            testCase.verifyEqual(numel(badges), 3, 'Expected three resource badges (two for caseA, one for caseB).');
+            testCase.verifyEmpty(findobj(testCase.Axes, 'Tag', 'ResourceBadge'), 'Badges should not be rendered.');
 
             % Apply highlight filter and ensure non-matching case is dimmed
             conduction.gui.renderers.ResourceOverlayRenderer.draw(testCase.AppStub, schedule, resourceTypes, "res1");
@@ -70,6 +69,11 @@ classdef TestResourceOverlayRenderer < matlab.unittest.TestCase
             testCase.verifyEqual(numel(masks), 1, 'Only one case should be dimmed when highlighting res1.');
             maskHandle = masks(1);
             testCase.verifyEqual(string(maskHandle.UserData.caseId), "caseB");
+
+            outlines = findobj(testCase.Axes, 'Tag', 'ResourceHighlightOutline');
+            testCase.verifyEqual(numel(outlines), 1, 'Highlighted case should have an outline.');
+            outlineColor = get(outlines(1), 'EdgeColor');
+            testCase.verifyEqual(outlineColor, resourceTypes(1).Color, 'Outline color should match resource color.');
         end
     end
 end

@@ -69,12 +69,8 @@ classdef ResourceOverlayRenderer
                         end
                     end
 
-                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(caseStruct);
+                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(app, caseStruct, caseId);
                     conduction.gui.renderers.ResourceOverlayRenderer.attachResourceMetadata(rectHandle, resources);
-
-                    if ~isempty(resources)
-                        conduction.gui.renderers.ResourceOverlayRenderer.drawBadges(ax, caseId, position, resources, resourceMap);
-                    end
 
                     caseHasHighlight = false;
                     outlineColor = [1 1 1];
@@ -195,7 +191,7 @@ classdef ResourceOverlayRenderer
             end
         end
 
-        function resources = extractResourceIds(caseStruct)
+        function resources = extractResourceIds(app, caseStruct, caseId)
             resources = string.empty(0, 1);
             candidates = {"requiredResources", "requiredResourceIds", "RequiredResourceIds"};
             for idx = 1:numel(candidates)
@@ -216,6 +212,19 @@ classdef ResourceOverlayRenderer
 
             mask = strlength(resources) > 0;
             resources = unique(resources(mask), 'stable');
+
+            if isempty(resources) && nargin >= 3 && ~isempty(app)
+                try
+                    if isprop(app, 'CaseManager') && ~isempty(app.CaseManager)
+                        [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                        if ~isempty(caseObj)
+                            resources = caseObj.listRequiredResources();
+                        end
+                    end
+                catch
+                    % ignore lookup failures
+                end
+            end
         end
 
         function attachResourceMetadata(rectHandle, resources)
@@ -229,39 +238,6 @@ classdef ResourceOverlayRenderer
             end
             payload.resourceIds = resources;
             set(rectHandle, 'UserData', payload);
-        end
-
-        function drawBadges(ax, caseId, position, resources, resourceMap)
-            if isempty(resources)
-                return;
-            end
-
-            numResources = numel(resources);
-            badgeHeight = position(4) * 0.3;
-            badgeHeight = min(badgeHeight, 0.35);
-            badgeHeight = max(badgeHeight, min(position(4), 0.06));
-            badgeHeight = min(badgeHeight, position(4));
-            badgeY = position(2) + position(4) - badgeHeight;
-
-            for rIdx = 1:numResources
-                resourceId = resources(rIdx);
-                color = [0.45 0.45 0.45];
-                if isKey(resourceMap, char(resourceId))
-                    color = resourceMap(char(resourceId)).Color;
-                end
-
-                badgeWidth = position(3) / numResources;
-                badgeX = position(1) + (rIdx - 1) * badgeWidth;
-
-                badge = rectangle(ax, 'Position', [badgeX, badgeY, badgeWidth, badgeHeight], ...
-                    'FaceColor', color, 'FaceAlpha', 0.85, 'EdgeColor', 'none', ...
-                    'Tag', 'ResourceBadge', 'HitTest', 'off');
-                if isprop(badge, 'PickableParts')
-                    badge.PickableParts = 'none';
-                end
-                badge.UserData = struct('caseId', caseId, 'resourceId', resourceId);
-                uistack(badge, 'top');
-            end
         end
 
         function drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight, outlineColor)

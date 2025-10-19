@@ -193,6 +193,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             for k = 1:numel(toAdd)
                 caseObj.assignResource(toAdd(k));
             end
+
+            app.refreshResourceLegend();
+            app.ScheduleRenderer.refreshResourceHighlights(app);
         end
 
         function openResourceManagementDialog(app)
