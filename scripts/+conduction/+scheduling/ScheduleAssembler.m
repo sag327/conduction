@@ -226,6 +226,7 @@ classdef ScheduleAssembler
             if isfield(rawCase, 'caseNumber')
                 caseInfo.caseNumber = rawCase.caseNumber;
             end
+            caseInfo.requiredResources = string.empty(0, 1);
             if isfield(rawCase, 'requiredResourceIds') && ~isempty(rawCase.requiredResourceIds)
                 resources = string(rawCase.requiredResourceIds);
                 resources = resources(strlength(resources) > 0);
