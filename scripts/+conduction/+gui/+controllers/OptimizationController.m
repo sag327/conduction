@@ -683,8 +683,10 @@ classdef OptimizationController < handle
                     constraints = constraint;
                 else
                     constraints(end+1) = constraint; %#ok<AGROW>
+                end
             end
         end
+
         function displayResourceViolations(~, app, violations)
             if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
                 return;
