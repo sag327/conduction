@@ -777,7 +777,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ResourceLegendPanel.Layout.Column = 2;
             app.ResourceLegendPanel.BorderType = 'none';
             app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
-            app.ResourceLegendPanel.Scrollable = 'on';
+                app.ResourceLegendPanel.Scrollable = 'on';
+                app.ResourceLegendPanel.Visible = 'on';
 
             app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
                 'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
@@ -1953,6 +1954,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 trimmedHighlight = intersect(app.ResourceHighlightIds, allowedIds, 'stable');
             end
 
+            if numel(trimmedHighlight) > 1
+                trimmedHighlight = trimmedHighlight(1);
+            end
             highlightChanged = ~isequal(trimmedHighlight, app.ResourceHighlightIds);
             app.ResourceHighlightIds = trimmedHighlight;
 
@@ -2196,6 +2200,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if isfield(sessionData, 'resourceHighlights') && ~isempty(sessionData.resourceHighlights)
                 highlights = string(sessionData.resourceHighlights);
+                if numel(highlights) > 1
+                    highlights = highlights(1);
+                end
                 app.ResourceHighlightIds = highlights(:);
                 if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
                     app.ResourceLegend.setHighlights(app.ResourceHighlightIds, true);
@@ -2466,6 +2473,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             store = conduction.gui.stores.ResourceStore(resourceTypes);
             app.CaseManager.setResourceStore(store);
             app.onResourceStoreChanged();
+            if ~isempty(app.ResourceLegendPanel) && isvalid(app.ResourceLegendPanel)
+                app.ResourceLegendPanel.Visible = 'on';
+            end
         end
 
     end

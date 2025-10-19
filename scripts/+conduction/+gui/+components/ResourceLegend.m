@@ -80,6 +80,10 @@ classdef ResourceLegend < handle
                 resourceIds = resourceIds(ismember(resourceIds, keys));
             end
 
+            if numel(resourceIds) > 1
+                resourceIds = resourceIds(1);
+            end
+
             changed = ~isequal(resourceIds, obj.Highlights);
             obj.Highlights = resourceIds;
 
@@ -202,11 +206,9 @@ classdef ResourceLegend < handle
             end
 
             if checkbox.Value
-                combined = unique([obj.Highlights; resourceId], 'stable');
-                obj.setHighlights(combined, true);
+                obj.setHighlights(resourceId, true);
             else
-                remaining = obj.Highlights(obj.Highlights ~= resourceId);
-                obj.setHighlights(remaining, true);
+                obj.setHighlights(string.empty(0, 1), true);
             end
 
             obj.fireHighlightChanged();

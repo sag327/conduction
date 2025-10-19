@@ -56,15 +56,25 @@ classdef TestResourceLegend < matlab.unittest.TestCase
             testCase.Legend.setData(resourceTypes, summary);
             testCase.verifyEmpty(testCase.Legend.getHighlights());
 
-            changed = testCase.Legend.setHighlights("res1");
+            changed = testCase.Legend.setHighlights(["res1", "res2"]);
             testCase.verifyTrue(changed);
+            highlights = testCase.Legend.getHighlights();
+            testCase.verifyEqual(highlights, "res1");
             testCase.verifyEqual(testCase.LastHighlight, "res1");
 
-            toggleDisabled = findobj(testCase.UIFigure, 'Type', 'uicheckbox', 'Tag', 'res2');
-            testCase.assertNotEmpty(toggleDisabled);
-            testCase.verifyEqual(toggleDisabled.Enable, matlab.lang.OnOffSwitchState.off);
+            toggleRes1 = findobj(testCase.UIFigure, 'Type', 'uicheckbox', 'Tag', 'res1');
+            toggleRes2 = findobj(testCase.UIFigure, 'Type', 'uicheckbox', 'Tag', 'res2');
+            testCase.assertNotEmpty(toggleRes1);
+            testCase.assertNotEmpty(toggleRes2);
+            testCase.verifyEqual(toggleRes2.Enable, matlab.lang.OnOffSwitchState.off);
 
-            % Simulate removal of resource and ensure highlight trims silently
+            % Toggle res1 off -> highlight cleared
+            toggleRes1.Value = true; % ensure initial state
+            toggleRes1.Value = false;
+            toggleRes1.ValueChangedFcn(toggleRes1, []);
+            testCase.verifyEmpty(testCase.Legend.getHighlights());
+
+            % Manually set data to only resource 2 (capacity 0) ensures highlight trimmed silently
             testCase.LastHighlight = string.empty(0, 1);
             testCase.Legend.setData(resourceTypes(2), summary(2));
             testCase.verifyEmpty(testCase.Legend.getHighlights());
