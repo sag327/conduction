@@ -2018,6 +2018,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty;
 
+            % Restore resource definitions before adding cases
+            snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            if isfield(sessionData, 'resourceTypes') && ~isempty(sessionData.resourceTypes)
+                snapshot = sessionData.resourceTypes;
+            end
+            app.restoreResourceStoreFromSnapshot(snapshot);
+
             % Restore target date
             app.TargetDate = sessionData.targetDate;
             if ~isempty(app.DatePicker) && isvalid(app.DatePicker)
@@ -2050,6 +2057,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                     % Reset case status to "pending" - session loads fresh
                     caseObj.CaseStatus = "pending";
+
+                    % Restore resource assignments
+                    try
+                        caseObj.clearResources();
+                        resourceIds = restoredCases(i).listRequiredResources();
+                        if isempty(resourceIds)
+                            resourceIds = restoredCases(i).RequiredResourceIds;
+                        end
+                        resourceIds = string(resourceIds(:));
+                        resourceIds = resourceIds(strlength(resourceIds) > 0);
+                        for rid = resourceIds(:)'
+                            caseObj.assignResource(rid);
+                        end
+                    catch
+                        % best effort
+                    end
 
                     % Clear actual times - no execution data on load
                     caseObj.ActualStartTime = NaN;
@@ -2161,6 +2184,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.updateOptimizationOptionsSummary(app);
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
+            app.refreshResourceLegend();
 
             % Re-render schedule
             if ~isempty(app.OptimizedSchedule)
@@ -2168,6 +2192,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.OptimizationOutcome);
             else
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            end
+
+            if isfield(sessionData, 'resourceHighlights') && ~isempty(sessionData.resourceHighlights)
+                highlights = string(sessionData.resourceHighlights);
+                app.ResourceHighlightIds = highlights(:);
+                if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                    app.ResourceLegend.setHighlights(app.ResourceHighlightIds, true);
+                end
+                app.ScheduleRenderer.refreshResourceHighlights(app);
+            else
+                app.ResourceHighlightIds = string.empty(0, 1);
             end
 
             % Clear timeline position (time control is OFF)
@@ -2256,6 +2291,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Operator colors
             sessionData.operatorColors = ...
                 conduction.session.serializeOperatorColors(app.OperatorColors);
+
+            % Resource model
+            resourceStore = app.CaseManager.getResourceStore();
+            if isempty(resourceStore)
+                sessionData.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            else
+                sessionData.resourceTypes = resourceStore.snapshot();
+            end
+            sessionData.resourceHighlights = app.ResourceHighlightIds;
 
             % Historical data reference
             historicalCollection = app.CaseManager.getHistoricalCollection();
@@ -2386,5 +2430,53 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function restoreResourceStoreFromSnapshot(app, snapshot)
+            if nargin < 2 || isempty(snapshot)
+                store = conduction.gui.stores.ResourceStore();
+                app.CaseManager.setResourceStore(store);
+                app.onResourceStoreChanged();
+                return;
+            end
+
+            if ~isstruct(snapshot)
+                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            end
+
+            resourceTypes = conduction.gui.models.ResourceType.empty;
+            for idx = 1:numel(snapshot)
+                entry = snapshot(idx);
+                try
+                    id = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Id', sprintf('resource_%03d', idx)));
+                    name = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Name', sprintf('Resource %d', idx)));
+                    capacity = double(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Capacity', 0));
+                    colorValue = conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Color', [0.45 0.45 0.45]);
+                    colorValue = double(colorValue(:)');
+                    if numel(colorValue) ~= 3 || any(~isfinite(colorValue))
+                        colorValue = [0.45 0.45 0.45];
+                    end
+                    pattern = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Pattern', "solid"));
+                    isTracked = logical(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'IsTracked', true));
+
+                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue, pattern, "", isTracked); %#ok<AGROW>
+                catch
+                    % Skip malformed entries
+                end
+            end
+
+            store = conduction.gui.stores.ResourceStore(resourceTypes);
+            app.CaseManager.setResourceStore(store);
+            app.onResourceStoreChanged();
+        end
+
+    end
+
+    methods (Static, Access = private)
+        function value = safeField(entry, fieldName, defaultValue)
+            if isstruct(entry) && isfield(entry, fieldName)
+                value = entry.(fieldName);
+            else
+                value = defaultValue;
+            end
+        end
     end
 end
