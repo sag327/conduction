@@ -50,7 +50,7 @@ Persistence: Included in session save/load once implemented
 
 - [x] Phase 0: Author plan and testing approach
 - [x] Phase 1: Data model + persistence
-- [ ] Phase 2: Case UI for resource assignment (Add/Edit, Drawer, Cases tab)
+- [x] Phase 2: Case UI for resource assignment (Add/Edit, Drawer, Cases tab)
 - [ ] Phase 3: Resource Manager (create/edit/delete types, color/pattern, capacity)
 - [ ] Phase 4: Optimization constraints integration
 - [ ] Phase 5: Visualization (legend, badges, conflict highlighting, filters)
@@ -77,22 +77,23 @@ Persistence: Included in session save/load once implemented
   - `tests/save_load/test_stage1_serialization.m`: updated to verify resource IDs survive roundtrip.
   - Latest CLI run: `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
-## Phase 2: Case UI (Assignment)
+## Phase 2: Case UI (Assignment) *(complete)*
 
 - Components
-  - `scripts/+conduction/+gui/+components/ResourceChecklist.m`: reusable UI component (parent, ResourceStore, Case reference) producing multi-select checklist with search, “Create new type…” callback.
-  - Add/Edit tab builder (`buildCaseDetailsSection`) integrates `ResourceChecklist` component into new “Resources” panel without expanding main app class footprint.
-  - Drawer controller uses `ResourceChecklist` in its grid cell; reuse component to avoid duplicate logic.
-  - Case table display: extend `CaseTableView` with optional badge renderer via hook method `renderResourceBadges(caseObj)` drawing from a shared formatter (`conduction.gui.components.ResourceBadges.format(...)`).
+  - `scripts/+conduction/+gui/+components/ResourceChecklist.m`: reusable scrollable checklist with optional “create” action, listening to store events.
+  - Add/Edit tab (`buildCaseDetailsSection`) hosts checklist in new panel; selection persisted via `PendingAddResourceIds` and assigned when cases are created.
+  - Drawer integrates same component for live editing; CaseManager updates go through shared helper `applyResourcesToCase` to avoid duplicated logic.
+  - Case table display: `CaseStore` adds a “Resources” column and `CaseTableView` exposes it with updated column names/widths.
 
 - Interaction
-  - `ResourceChecklist` listens to `ResourceStore` events for dynamic updates.
-  - Case selection changes propagate through store helpers, so only the store and component talk—no direct main app wiring.
+  - `ResourceChecklist` reflects store changes automatically and emits selection change callbacks consumed by app handlers.
+  - Drawer selection updates underlying `ProspectiveCase` resources and refreshes CaseStore for immediate UI sync.
 
 - Tests
-  - `tests/matlab/TestResourceChecklist.m`: instantiate component with dummy figure, toggle selections, ensure callbacks fired and CaseStore updated.
-  - `tests/matlab/TestCaseTableView.m`: extend coverage to verify resource badges rendering when provider function returns non-empty list.
-  - CLI smoke screenshot script `tests/matlab/helpers/resource_case_badges_smoke.m` exports `images/resource_case_badges_smoke.png` for documentation.
+  - `tests/matlab/TestResourceChecklist.m`: component coverage for selection, store updates.
+  - `tests/matlab/TestCaseTableView.m`: ensures table reflects resource column.
+  - `tests/matlab/TestCaseStore.m`: verifies resource column data generation.
+  - CLI run (Phase 2): `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/matlab/TestResourceChecklist.m','tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
 ## Phase 3: Resource Manager (Dialog)
 

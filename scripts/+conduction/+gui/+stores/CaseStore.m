@@ -166,7 +166,8 @@ classdef CaseStore < handle
                 return;
             end
 
-            tableData = cell(caseCount, 8);
+            tableData = cell(caseCount, 9);
+            resourceStore = obj.CaseManager.getResourceStore();
             for i = 1:caseCount
                 caseObj = obj.CaseManager.getCase(i);
 
@@ -193,13 +194,22 @@ classdef CaseStore < handle
                     tableData{i, 7} = char(caseObj.SpecificLab);
                 end
 
-                if caseObj.IsFirstCaseOfDay
-                    tableData{i, 8} = 'Yes';
+                resourceNames = string.empty(0, 1);
+                if ~isempty(resourceStore) && isa(resourceStore, 'conduction.gui.stores.ResourceStore') && isvalid(resourceStore)
+                    resourceNames = resourceStore.namesForIds(caseObj.RequiredResourceIds);
+                end
+                if isempty(resourceNames)
+                    tableData{i, 8} = '--';
                 else
-                    tableData{i, 8} = 'No';
+                    tableData{i, 8} = strjoin(resourceNames, ', ');
+                end
+
+                if caseObj.IsFirstCaseOfDay
+                    tableData{i, 9} = 'Yes';
+                else
+                    tableData{i, 9} = 'No';
                 end
             end
         end
     end
 end
-

@@ -41,6 +41,32 @@ classdef ResourceStore < handle
             end
         end
 
+        function type = getByName(obj, resourceName)
+            key = char(strtrim(string(resourceName)));
+            if obj.NameIndex.isKey(key)
+                index = obj.NameIndex(key);
+                type = obj.Types(index);
+            else
+                type = conduction.gui.models.ResourceType.empty;
+            end
+        end
+
+        function names = namesForIds(obj, resourceIds)
+            if isempty(resourceIds)
+                names = string.empty(0, 1);
+                return;
+            end
+            names = strings(numel(resourceIds), 1);
+            for k = 1:numel(resourceIds)
+                idx = obj.findIndexById(resourceIds(k));
+                if isnan(idx)
+                    names(k) = resourceIds(k);
+                else
+                    names(k) = obj.Types(idx).Name;
+                end
+            end
+        end
+
         function exists = has(obj, resourceId)
             exists = obj.IdIndex.isKey(char(resourceId));
         end

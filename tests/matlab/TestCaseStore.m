@@ -51,11 +51,12 @@ classdef TestCaseStore < matlab.unittest.TestCase
             testCase.verifyEqual(testCase.Store.caseCount(), 1);
 
             data = testCase.Store.Data;
-            testCase.verifySize(data, [1, 8]);
+            testCase.verifySize(data, [1, 9]);
             testCase.verifyEqual(data{1, 3}, 'Dr. Adams');
             testCase.verifyEqual(data{1, 4}, 'Ablation');
             testCase.verifyEqual(data{1, 7}, 'Any');
-            testCase.verifyEqual(data{1, 8}, 'No');
+            testCase.verifyEqual(data{1, 8}, '--');
+            testCase.verifyEqual(data{1, 9}, 'No');
 
             function flagDataChanged()
                 wasNotified = true;
@@ -154,4 +155,3 @@ classdef TestCaseStore < matlab.unittest.TestCase
         end
     end
 end
-

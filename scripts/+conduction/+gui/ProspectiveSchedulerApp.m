@@ -177,6 +177,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CaseStoreListeners = addlistener(app.CaseStore, 'SelectionChanged', ...
                 @(~, ~) app.onCaseStoreSelectionChanged());
 
+            app.ensureResourceStoreListener();
+
+            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                app.AddResourcesChecklist.refresh();
+                app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+            end
+
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                app.DrawerResourcesChecklist.refresh();
+            end
+
             app.createEmbeddedCaseView();
         end
 
@@ -351,6 +362,97 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function ensureResourceStoreListener(app)
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
+                delete(app.ResourceStoreListener);
+            end
+
+            app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) app.onResourceStoreChanged());
+        end
+
+        function onResourceStoreChanged(app)
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.refresh();
+            end
+
+            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                app.AddResourcesChecklist.refresh();
+                app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+            end
+
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                current = string.empty(0,1);
+                if ~isempty(app.DrawerCurrentCaseId)
+                    [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+                    if ~isempty(caseObj)
+                        current = caseObj.listRequiredResources();
+                    end
+                end
+                app.DrawerResourcesChecklist.refresh();
+                app.DrawerResourcesChecklist.setSelection(current);
+            end
+        end
+
+        function onAddResourcesSelectionChanged(app, resourceIds)
+            app.PendingAddResourceIds = string(resourceIds(:));
+        end
+
+        function onDrawerResourcesSelectionChanged(app, resourceIds)
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+
+            [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+            if isempty(caseObj)
+                return;
+            end
+
+            newSelection = string(resourceIds(:));
+            app.applyResourcesToCase(caseObj, newSelection);
+            app.markDirty();
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.refresh();
+            end
+        end
+
+        function applyResourcesToCase(app, caseObj, desiredIds)
+            arguments
+                app
+                caseObj conduction.gui.models.ProspectiveCase
+                desiredIds string
+            end
+
+            currentIds = caseObj.listRequiredResources();
+            desiredIds = string(desiredIds(:));
+
+            toRemove = setdiff(currentIds, desiredIds);
+            toAdd = setdiff(desiredIds, currentIds);
+
+            for k = 1:numel(toRemove)
+                caseObj.removeResource(toRemove(k));
+            end
+
+            for k = 1:numel(toAdd)
+                caseObj.assignResource(toAdd(k));
+            end
+        end
+
+        function openResourceManagementDialog(app)
+            % Placeholder until Resource Manager dialog is implemented (Phase 3)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            uialert(app.UIFigure, ...
+                ['Resource manager will be available in a later phase.' newline ...
+                 'Please define resources via upcoming dialog.'], ...
+                'Resource Manager Pending');
+        end
+
     end
 
     % App state properties
@@ -359,6 +461,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStore conduction.gui.stores.CaseStore
         CasesView conduction.gui.components.CaseTableView
         CasesPopout conduction.gui.windows.CasesPopout
+        AddResourcesChecklist conduction.gui.components.ResourceChecklist
+        DrawerResourcesChecklist conduction.gui.components.ResourceChecklist
+        PendingAddResourceIds string = string.empty(0, 1)
 
         % Controllers
         ScheduleRenderer conduction.gui.controllers.ScheduleRenderer
@@ -417,6 +522,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStoreListeners event.listener = event.listener.empty
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         IsHandlingTabSelection logical = false
+        ResourceStoreListener event.listener = event.listener.empty
     end
 
 
@@ -877,6 +983,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.stopAutoSaveTimer();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
+
+            if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
+                delete(app.ResourceStoreListener);
+            end
+
+            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                delete(app.AddResourcesChecklist);
+            end
+
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                delete(app.DrawerResourcesChecklist);
+            end
 
             if ~isempty(app.CaseStoreListeners)
                 delete(app.CaseStoreListeners);

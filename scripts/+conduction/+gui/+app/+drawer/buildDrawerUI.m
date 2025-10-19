@@ -45,7 +45,7 @@ function buildDrawerUI(app)
     contentPanel.BorderType = 'line';
 
     contentGrid = uigridlayout(contentPanel);
-    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 140, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
     contentGrid.ColumnWidth = {'1x'};
     contentGrid.Padding = [16 18 16 18];
     contentGrid.RowSpacing = 12;
@@ -91,16 +91,29 @@ function buildDrawerUI(app)
     createInspectorRow(app, 5, 'Start', 'DrawerStartValueLabel');
     createInspectorRow(app, 6, 'End', 'DrawerEndValueLabel');
 
+    resourcesPanel = uipanel(contentGrid);
+    resourcesPanel.Layout.Row = 5;
+    resourcesPanel.Layout.Column = 1;
+    resourcesPanel.BorderType = 'none';
+    resourcesPanel.BackgroundColor = contentGrid.BackgroundColor;
+
+    resourceStore = app.CaseManager.getResourceStore();
+    app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist(resourcesPanel, resourceStore, ...
+        'Title', "Resources", ...
+        'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
+        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+        'ShowCreateButton', false);
+
     % DURATION-EDITING: Add durations section
     app.DrawerDurationsTitle = uilabel(contentGrid);
     app.DrawerDurationsTitle.Text = 'Case Durations (minutes)';
     app.DrawerDurationsTitle.FontWeight = 'bold';
     app.DrawerDurationsTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerDurationsTitle.Layout.Row = 5;
+    app.DrawerDurationsTitle.Layout.Row = 6;
     app.DrawerDurationsTitle.Layout.Column = 1;
 
     app.DrawerDurationsGrid = uigridlayout(contentGrid);
-    app.DrawerDurationsGrid.Layout.Row = 6;
+    app.DrawerDurationsGrid.Layout.Row = 7;
     app.DrawerDurationsGrid.Layout.Column = 1;
     app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 3);
     app.DrawerDurationsGrid.ColumnWidth = {90, 82, '1x'};  % Label + spinner take ~half width (90 + 12 spacing + 82 ≈ 184px of 368px available)
@@ -117,11 +130,11 @@ function buildDrawerUI(app)
     app.DrawerOptimizationTitle.Text = 'Optimization Details';
     app.DrawerOptimizationTitle.FontWeight = 'bold';
     app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerOptimizationTitle.Layout.Row = 7;
+    app.DrawerOptimizationTitle.Layout.Row = 8;
     app.DrawerOptimizationTitle.Layout.Column = 1;
 
     app.DrawerOptimizationGrid = uigridlayout(contentGrid);
-    app.DrawerOptimizationGrid.Layout.Row = 8;
+    app.DrawerOptimizationGrid.Layout.Row = 9;
     app.DrawerOptimizationGrid.Layout.Column = 1;
     app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
     app.DrawerOptimizationGrid.ColumnWidth = {90, '1x'};
@@ -138,11 +151,11 @@ function buildDrawerUI(app)
     app.DrawerHistogramTitle.Text = 'Historical Durations';
     app.DrawerHistogramTitle.FontWeight = 'bold';
     app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerHistogramTitle.Layout.Row = 9;
+    app.DrawerHistogramTitle.Layout.Row = 10;
     app.DrawerHistogramTitle.Layout.Column = 1;
 
     app.DrawerHistogramPanel = uipanel(contentGrid);
-    app.DrawerHistogramPanel.Layout.Row = 10;
+    app.DrawerHistogramPanel.Layout.Row = 11;
     app.DrawerHistogramPanel.Layout.Column = 1;
     app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
     app.DrawerHistogramPanel.BorderType = 'none';
