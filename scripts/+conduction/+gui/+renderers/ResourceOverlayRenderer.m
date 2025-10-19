@@ -68,8 +68,19 @@ classdef ResourceOverlayRenderer
                         conduction.gui.renderers.ResourceOverlayRenderer.drawBadges(ax, caseId, position, resources, resourceMap);
                     end
 
-                    caseHasHighlight = highlightActive && any(ismember(resources, highlightIds));
-                    conduction.gui.renderers.ResourceOverlayRenderer.drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight);
+                    caseHasHighlight = false;
+                    outlineColor = [1 1 1];
+                    if highlightActive
+                        matchIds = intersect(resources, highlightIds, 'stable');
+                        if ~isempty(matchIds)
+                            caseHasHighlight = true;
+                            key = char(matchIds(1));
+                            if isKey(resourceMap, key)
+                                outlineColor = resourceMap(key).Color;
+                            end
+                        end
+                    end
+                    conduction.gui.renderers.ResourceOverlayRenderer.drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight, outlineColor);
                 end
             end
         end
@@ -234,14 +245,17 @@ classdef ResourceOverlayRenderer
             end
         end
 
-        function drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight)
+        function drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight, outlineColor)
             if ~highlightActive
                 return;
             end
 
             if caseHasHighlight
+                if nargin < 6 || isempty(outlineColor)
+                    outlineColor = [1 1 1];
+                end
                 outline = rectangle(ax, 'Position', position, ...
-                    'FaceColor', 'none', 'EdgeColor', [1 1 1], 'LineWidth', 2.2, ...
+                    'FaceColor', 'none', 'EdgeColor', outlineColor, 'LineWidth', 2.2, ...
                     'Tag', 'ResourceHighlightOutline', 'HitTest', 'off');
                 if isprop(outline, 'PickableParts')
                     outline.PickableParts = 'none';
