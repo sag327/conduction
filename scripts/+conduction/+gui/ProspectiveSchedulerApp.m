@@ -144,6 +144,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
+        % Debugging controls
+        DebugScheduling             logical = true
+        DebugLogFile                string = "logs/debug-schedule.log"
     end
 
     methods (Access = public, Hidden = true)
@@ -219,12 +222,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     methods (Access = private)
         function debugLog(app, where, message)
-            if ~isprop(app, 'DebugScheduling') || ~app.DebugScheduling
-                return;
-            end
             try
                 ts = char(datetime('now','Format','HH:mm:ss.SSS'));
-                fprintf('[DEBUG][%s] %s: %s\n', ts, where, message);
+                line = sprintf('[DEBUG][%s] %s: %s\n', ts, where, message);
+                % Always print to console during debug
+                fprintf('%s', line);
+                % Append to log file
+                logPath = string(app.DebugLogFile);
+                if strlength(logPath) > 0
+                    [logDir,~,~] = fileparts(logPath);
+                    if ~isempty(logDir) && ~isfolder(logDir)
+                        mkdir(logDir);
+                    end
+                    fid = fopen(logPath, 'a');
+                    if fid > 0
+                        fprintf(fid, '%s', line);
+                        fclose(fid);
+                    end
+                end
             catch
             end
         end
