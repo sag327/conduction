@@ -176,6 +176,26 @@ classdef ResourceStore < handle
             names = string({obj.Types.Name});
         end
 
+        function snapshot = snapshot(obj)
+            %SNAPSHOT Return resource types as struct array for serialization/optimization
+            types = obj.list();
+            if isempty(types)
+                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                return;
+            end
+
+            snapshot = repmat(struct('Id', "", 'Name', "", 'Capacity', 0, ...
+                'Color', zeros(1, 3), 'Pattern', "", 'IsTracked', true), 1, numel(types));
+            for k = 1:numel(types)
+                snapshot(k).Id = types(k).Id;
+                snapshot(k).Name = types(k).Name;
+                snapshot(k).Capacity = double(types(k).Capacity);
+                snapshot(k).Color = double(types(k).Color);
+                snapshot(k).Pattern = string(types(k).Pattern);
+                snapshot(k).IsTracked = logical(types(k).IsTracked);
+            end
+        end
+
         function paletteReset(obj)
             obj.PaletteIndex = 0;
         end

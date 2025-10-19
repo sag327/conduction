@@ -839,6 +839,15 @@ classdef CaseManager < handle
 
             metadata = struct();
             metadata.labIds = labIds;
+            if nargout > 1
+                resourceStore = obj.getResourceStore();
+                if isempty(resourceStore) || ~isvalid(resourceStore)
+                    metadata.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                else
+                    metadata.resourceTypes = resourceStore.snapshot();
+                end
+                metadata.resourceSummary = obj.caseResourceSummary();
+            end
 
             if obj.CaseCount == 0
                 casesStruct = struct([]);
@@ -863,7 +872,8 @@ classdef CaseManager < handle
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
-                'date', NaT);
+                'date', NaT, ...
+                'requiredResourceIds', string.empty(0, 1));
             casesStruct = repmat(template, obj.CaseCount, 1);
 
             dateValue = obj.TargetDate;
@@ -898,6 +908,7 @@ classdef CaseManager < handle
                 casesStruct(idx).admissionStatus = char(statusValue);
                 casesStruct(idx).caseStatus = char(caseObj.CaseStatus);  % REALTIME-SCHEDULING
                 casesStruct(idx).date = dateValue;
+                casesStruct(idx).requiredResourceIds = caseObj.listRequiredResources();
             end
         end
     end

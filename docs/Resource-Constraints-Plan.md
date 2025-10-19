@@ -1,7 +1,7 @@
 # Resource Constraints: UX and Implementation Plan
 
 Owner: Conduction Prospective Scheduler (feature/resource-constraints)
-Status: Planned (Phase 0 complete)
+Status: In Progress (Phase 4 complete)
 Persistence: Included in session save/load once implemented
 
 ## Objectives
@@ -52,7 +52,7 @@ Persistence: Included in session save/load once implemented
 - [x] Phase 1: Data model + persistence
 - [x] Phase 2: Case UI for resource assignment (Add/Edit, Drawer, Cases tab)
 - [x] Phase 3: Resource Manager (create/edit/delete types, color/pattern, capacity)
-- [ ] Phase 4: Optimization constraints integration
+- [x] Phase 4: Optimization constraints integration
 - [ ] Phase 5: Visualization (legend, badges, conflict highlighting, filters)
 - [ ] Phase 6: Save/Load, validation, and acceptance tests
 - [ ] Phase 7: Multi-case resource editing & drawer enhancements
@@ -106,22 +106,21 @@ Persistence: Included in session save/load once implemented
   - `tests/matlab/TestResourceManager.m`: headless coverage for create/update/delete using helper methods.
   - Latest CLI run: `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/matlab/TestResourceChecklist.m','tests/matlab/TestResourceManager.m','tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
-## Phase 4: Optimization Constraints Integration
+## Phase 4: Optimization Constraints Integration *(complete)*
 
 - Modules
-  - Extend optimization configuration (`scripts/+conduction/+gui/+optimization/Config.m`) to carry ResourceStore snapshot and resource usage flags.
-  - Implement new constraint builder `scripts/+conduction/+optimization/+constraints/applyResourceCapacities.m` returning constraint structs usable by both MILP and heuristic solvers.
-  - For MILP path: introduce binary overlap indicators per resource (reuse existing time-indexed arrays) to avoid duplicating solver glue.
-  - For heuristic scheduler: refactor slot-assignment routine into modular function allowing plug-in capacity checks; reuse across resource types to prevent branching logic.
+  - Extended `conduction.scheduling.SchedulingOptions` to carry normalized `ResourceTypes` snapshots supplied from the GUI (`OptimizationController.buildSchedulingOptions`).
+  - Augmented `SchedulingPreprocessor` to emit `caseResourceMatrix`, `resourceCapacities`, and per-case resource id lists for downstream use.
+  - Added resource capacity inequalities to `OptimizationModelBuilder`, reusing the existing MILP indexer to constrain overlapping procedure windows across labs.
+  - Captured assignments and capacity metadata in `ScheduleAssembler`, exposing `ResourceAssignments` and injecting diagnostics via `ResourceViolations`.
 
-- Diagnostics
-  - Extend optimization outcome struct with `ResourceViolations` array (resource id, time window, involved case ids) for UI warnings.
-  - Update OptimizationController to convert violations into banners/tooltips in summary card.
+- Diagnostics & UI wiring
+  - `ScheduleAssembler.computeResourceDiagnostics` verifies generated schedules against declared capacities and records detailed violation windows when limits are exceeded.
+  - `OptimizationController.displayResourceViolations` surfaces warnings in the GUI when `Outcome.ResourceViolations` is non-empty, ensuring operators are alerted after optimization runs.
 
 - Tests
-  - `tests/matlab/TestResourceConstraints.m`: synthetic cases verifying solver respects capacity (MILP + heuristic scenarios if both exist).
-  - `tests/matlab/TestResourceDiagnostics.m`: ensure violation messages populated when capacity intentionally broken (simulate by overriding constraint builder in test harness).
-  - CLI command (once implemented) updated accordingly.
+  - `tests/matlab/TestResourceConstraints.m`: validates enforced capacities and diagnostic reporting (including an induced violation scenario).
+  - CLI run: `matlab -batch "addpath('scripts'); addpath('tests'); addpath('tests/save_load'); addpath('tests/save_load/helpers'); results = runtests({'tests/matlab/TestResourceStore.m','tests/matlab/TestProspectiveCaseResources.m','tests/matlab/TestResourceChecklist.m','tests/matlab/TestResourceManager.m','tests/matlab/TestCaseStore.m','tests/matlab/TestCaseTableView.m','tests/matlab/TestResourceConstraints.m','tests/save_load/test_stage1_serialization.m'}); assertSuccess(results);"`
 
 ## Phase 5: Visualization
 

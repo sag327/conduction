@@ -111,6 +111,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptMetricDropDown           matlab.ui.control.DropDown
         OptLabsLabel                matlab.ui.control.Label
         OptLabsSpinner              matlab.ui.control.Spinner
+        OptResourcesLabel           matlab.ui.control.Label
+        OptResourcesButton          matlab.ui.control.Button
         OptAvailableLabsLabel       matlab.ui.control.Label
         OptAvailableSelectAll       matlab.ui.control.CheckBox
         OptAvailableLabsPanel       matlab.ui.container.Panel

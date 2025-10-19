@@ -134,6 +134,9 @@ classdef OptimizationController < handle
                 end
 
                 app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, metadata);
+                if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
+                    app.OptimizationController.displayResourceViolations(app, outcome.ResourceViolations);
+                end
             catch ME
                 app.OptimizedSchedule = conduction.DailySchedule.empty;
                 app.OptimizationOutcome = struct();
@@ -238,6 +241,14 @@ classdef OptimizationController < handle
             numLabs = max(1, round(app.Opts.labs));
             startTimes = repmat({'08:00'}, 1, numLabs);
 
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    resourceTypes = store.snapshot();
+                end
+            end
+
             scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
                 'NumLabs', numLabs, ...
                 'LabStartTimes', startTimes, ...
@@ -248,7 +259,8 @@ classdef OptimizationController < handle
                 'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
                 'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt), ...
                 'AvailableLabs', app.AvailableLabIds, ...
-                'LockedCaseConstraints', lockedConstraints);
+                'LockedCaseConstraints', lockedConstraints, ...
+                'ResourceTypes', resourceTypes);
         end
 
         function showOptimizationOptionsDialog(~, app)
@@ -671,7 +683,49 @@ classdef OptimizationController < handle
                     constraints = constraint;
                 else
                     constraints(end+1) = constraint; %#ok<AGROW>
+            end
+        end
+        function displayResourceViolations(~, app, violations)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            if isempty(violations)
+                return;
+            end
+
+            maxMessages = min(3, numel(violations));
+            lines = strings(maxMessages, 1);
+            for idx = 1:maxMessages
+                violation = violations(idx);
+                startText = localFormatMinutes(violation.StartTime);
+                endText = localFormatMinutes(violation.EndTime);
+                caseIds = violation.CaseIds;
+                if isempty(caseIds)
+                    caseSummary = 'unspecified cases';
+                else
+                    caseSummary = strjoin(caseIds, ', ');
                 end
+                lines(idx) = sprintf('%s capacity %.0f exceeded between %s-%s (%s)', ...
+                    char(violation.ResourceName), violation.Capacity, startText, endText, caseSummary);
+            end
+
+            message = strjoin(lines, newline);
+            remaining = numel(violations) - maxMessages;
+            if remaining > 0
+                message = sprintf('%s\n...and %d additional warning(s).', message, remaining);
+            end
+
+            uialert(app.UIFigure, message, 'Resource Constraint Warning', 'Icon', 'warning');
+
+            function text = localFormatMinutes(value)
+                if isempty(value) || ~isfinite(value)
+                    text = 'N/A';
+                    return;
+                end
+                hours = floor(value / 60);
+                minutes = floor(mod(value, 60));
+                text = sprintf('%02d:%02d', hours, minutes);
             end
         end
 

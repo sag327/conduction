@@ -30,13 +30,25 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptLabsSpinner.Layout.Column = 2;
     app.OptLabsSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
+    app.OptResourcesLabel = uilabel(optimizationGrid);
+    app.OptResourcesLabel.Text = 'Resources:';
+    app.OptResourcesLabel.Layout.Row = 3;
+    app.OptResourcesLabel.Layout.Column = 1;
+
+    app.OptResourcesButton = uibutton(optimizationGrid, 'push');
+    app.OptResourcesButton.Text = 'Manage...';
+    app.OptResourcesButton.Layout.Row = 3;
+    app.OptResourcesButton.Layout.Column = 2;
+    app.OptResourcesButton.Tooltip = 'Add, edit, or remove shared resources';
+    app.OptResourcesButton.ButtonPushedFcn = @(~, ~) app.openResourceManagementDialog();
+
     app.OptAvailableLabsLabel = uilabel(optimizationGrid);
     app.OptAvailableLabsLabel.Text = 'Available labs:';
-    app.OptAvailableLabsLabel.Layout.Row = 3;
+    app.OptAvailableLabsLabel.Layout.Row = 4;
     app.OptAvailableLabsLabel.Layout.Column = 1;
 
     availableWrapper = uigridlayout(optimizationGrid);
-    availableWrapper.Layout.Row = 4;
+    availableWrapper.Layout.Row = 5;
     availableWrapper.Layout.Column = 2;
     availableWrapper.RowHeight = {24, '1x'};
     availableWrapper.ColumnWidth = {'1x'};
@@ -59,91 +71,91 @@ function buildOptimizationTab(app, optimizationGrid)
 
     app.OptFilterLabel = uilabel(optimizationGrid);
     app.OptFilterLabel.Text = 'Case filter:';
-    app.OptFilterLabel.Layout.Row = 5;
+    app.OptFilterLabel.Layout.Row = 6;
     app.OptFilterLabel.Layout.Column = 1;
 
     app.OptFilterDropDown = uidropdown(optimizationGrid);
     app.OptFilterDropDown.Items = {'all', 'outpatient', 'inpatient'};
     app.OptFilterDropDown.Value = char(app.Opts.caseFilter);
-    app.OptFilterDropDown.Layout.Row = 5;
+    app.OptFilterDropDown.Layout.Row = 6;
     app.OptFilterDropDown.Layout.Column = 2;
     app.OptFilterDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptDefaultStatusLabel = uilabel(optimizationGrid);
     app.OptDefaultStatusLabel.Text = 'Default status:';
-    app.OptDefaultStatusLabel.Layout.Row = 6;
+    app.OptDefaultStatusLabel.Layout.Row = 7;
     app.OptDefaultStatusLabel.Layout.Column = 1;
 
     app.OptDefaultStatusDropDown = uidropdown(optimizationGrid);
     app.OptDefaultStatusDropDown.Items = {'outpatient', 'inpatient'};
     app.OptDefaultStatusDropDown.Value = char(app.TestingAdmissionDefault);
-    app.OptDefaultStatusDropDown.Layout.Row = 6;
+    app.OptDefaultStatusDropDown.Layout.Row = 7;
     app.OptDefaultStatusDropDown.Layout.Column = 2;
     app.OptDefaultStatusDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptTurnoverLabel = uilabel(optimizationGrid);
     app.OptTurnoverLabel.Text = 'Turnover (minutes):';
-    app.OptTurnoverLabel.Layout.Row = 7;
+    app.OptTurnoverLabel.Layout.Row = 8;
     app.OptTurnoverLabel.Layout.Column = 1;
 
     app.OptTurnoverSpinner = uispinner(optimizationGrid);
     app.OptTurnoverSpinner.Limits = [0 240];
     app.OptTurnoverSpinner.Step = 5;
     app.OptTurnoverSpinner.Value = app.Opts.turnover;
-    app.OptTurnoverSpinner.Layout.Row = 7;
+    app.OptTurnoverSpinner.Layout.Row = 8;
     app.OptTurnoverSpinner.Layout.Column = 2;
     app.OptTurnoverSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptSetupLabel = uilabel(optimizationGrid);
     app.OptSetupLabel.Text = 'Setup (minutes):';
-    app.OptSetupLabel.Layout.Row = 8;
+    app.OptSetupLabel.Layout.Row = 9;
     app.OptSetupLabel.Layout.Column = 1;
 
     app.OptSetupSpinner = uispinner(optimizationGrid);
     app.OptSetupSpinner.Limits = [0 120];
     app.OptSetupSpinner.Step = 5;
     app.OptSetupSpinner.Value = app.Opts.setup;
-    app.OptSetupSpinner.Layout.Row = 8;
+    app.OptSetupSpinner.Layout.Row = 9;
     app.OptSetupSpinner.Layout.Column = 2;
     app.OptSetupSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptPostLabel = uilabel(optimizationGrid);
     app.OptPostLabel.Text = 'Post-procedure (min):';
-    app.OptPostLabel.Layout.Row = 9;
+    app.OptPostLabel.Layout.Row = 10;
     app.OptPostLabel.Layout.Column = 1;
 
     app.OptPostSpinner = uispinner(optimizationGrid);
     app.OptPostSpinner.Limits = [0 120];
     app.OptPostSpinner.Step = 5;
     app.OptPostSpinner.Value = app.Opts.post;
-    app.OptPostSpinner.Layout.Row = 9;
+    app.OptPostSpinner.Layout.Row = 10;
     app.OptPostSpinner.Layout.Column = 2;
     app.OptPostSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptMaxOperatorLabel = uilabel(optimizationGrid);
     app.OptMaxOperatorLabel.Text = 'Max operator (min):';
-    app.OptMaxOperatorLabel.Layout.Row = 10;
+    app.OptMaxOperatorLabel.Layout.Row = 11;
     app.OptMaxOperatorLabel.Layout.Column = 1;
 
     app.OptMaxOperatorSpinner = uispinner(optimizationGrid);
     app.OptMaxOperatorSpinner.Limits = [60 1440];
     app.OptMaxOperatorSpinner.Step = 15;
     app.OptMaxOperatorSpinner.Value = app.Opts.maxOpMin;
-    app.OptMaxOperatorSpinner.Layout.Row = 10;
+    app.OptMaxOperatorSpinner.Layout.Row = 11;
     app.OptMaxOperatorSpinner.Layout.Column = 2;
     app.OptMaxOperatorSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptEnforceMidnightCheckBox = uicheckbox(optimizationGrid);
     app.OptEnforceMidnightCheckBox.Text = 'Enforce midnight cutoff';
     app.OptEnforceMidnightCheckBox.Value = logical(app.Opts.enforceMidnight);
-    app.OptEnforceMidnightCheckBox.Layout.Row = 11;
+    app.OptEnforceMidnightCheckBox.Layout.Row = 12;
     app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
     app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptPrioritizeOutpatientCheckBox = uicheckbox(optimizationGrid);
     app.OptPrioritizeOutpatientCheckBox.Text = 'Prioritize outpatient';
     app.OptPrioritizeOutpatientCheckBox.Value = logical(app.Opts.prioritizeOutpt);
-    app.OptPrioritizeOutpatientCheckBox.Layout.Row = 12;
+    app.OptPrioritizeOutpatientCheckBox.Layout.Row = 13;
     app.OptPrioritizeOutpatientCheckBox.Layout.Column = [1 2];
     app.OptPrioritizeOutpatientCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 end
