@@ -113,6 +113,7 @@ Persistence: Included in session save/load once implemented
   - Augmented `SchedulingPreprocessor` to emit `caseResourceMatrix`, `resourceCapacities`, and per-case resource id lists for downstream use.
   - Added resource capacity inequalities to `OptimizationModelBuilder`, reusing the existing MILP indexer to constrain overlapping procedure windows across labs.
   - Captured assignments and capacity metadata in `ScheduleAssembler`, exposing `ResourceAssignments` and injecting diagnostics via `ResourceViolations`.
+  - Resource types with zero capacity are treated as non-assignable across the UI and optimization inputs; case selections are scrubbed automatically when capacity is set to zero, avoiding infeasible scenarios.
 
 - Diagnostics & UI wiring
   - `ScheduleAssembler.computeResourceDiagnostics` verifies generated schedules against declared capacities and records detailed violation windows when limits are exceeded.

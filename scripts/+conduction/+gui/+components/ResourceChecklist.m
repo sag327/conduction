@@ -61,6 +61,7 @@ classdef ResourceChecklist < handle
 
         function setSelection(obj, resourceIds)
             resourceIds = unique(string(resourceIds(:)), 'stable');
+            resourceIds = obj.filterAssignable(resourceIds);
             if isempty(obj.CheckboxMap)
                 obj.Selection = resourceIds;
             else
@@ -144,7 +145,8 @@ classdef ResourceChecklist < handle
 
         function rebuildCheckboxes(obj)
             % Preserve current selection
-            currentSelection = obj.Selection;
+            currentSelection = obj.filterAssignable(obj.Selection);
+            previousSelection = obj.Selection;
 
             % Delete existing controls
             keys = obj.CheckboxMap.keys;
@@ -186,13 +188,21 @@ classdef ResourceChecklist < handle
                 type = types(idx);
                 checkbox = uicheckbox(obj.ListGrid);
                 checkbox.Text = char(type.Name);
-                checkbox.Value = any(currentSelection == type.Id);
                 checkbox.Layout.Row = idx;
                 checkbox.Layout.Column = 1;
                 checkbox.ValueChangedFcn = @(src, evt) obj.onCheckboxChanged(src);
                 checkbox.Tag = char(type.Id);
+                isAssignable = type.Capacity > 0;
+                shouldSelect = isAssignable && any(currentSelection == type.Id);
+                checkbox.Value = shouldSelect;
+                checkbox.Enable = matlab.lang.OnOffSwitchState(isAssignable);
+                if isAssignable
+                    checkbox.Tooltip = '';
+                else
+                    checkbox.Tooltip = 'Capacity is 0 – increase capacity to enable assignment';
+                end
                 obj.CheckboxMap(char(type.Id)) = checkbox;
-                if checkbox.Value
+                if shouldSelect
                     validSelection(end+1, 1) = type.Id; %#ok<AGROW>
                 end
             end
@@ -200,6 +210,10 @@ classdef ResourceChecklist < handle
             obj.Selection = validSelection;
             obj.CreateButton.Enable = matlab.lang.OnOffSwitchState(~isempty(obj.Options.CreateCallback));
             obj.syncCheckboxes();
+
+            if ~isequal(sort(previousSelection), sort(obj.Selection))
+                obj.fireSelectionChanged();
+            end
         end
 
         function syncCheckboxes(obj)
@@ -226,6 +240,10 @@ classdef ResourceChecklist < handle
             end
 
             resourceId = string(checkbox.Tag);
+            if strcmpi(checkbox.Enable, 'off')
+                checkbox.Value = false;
+                return;
+            end
             if checkbox.Value
                 if ~any(obj.Selection == resourceId)
                     obj.Selection(end+1, 1) = resourceId;
@@ -262,6 +280,20 @@ classdef ResourceChecklist < handle
             else
                 color = ancestorPanel.Color;
             end
+        end
+
+        function ids = filterAssignable(obj, candidateIds)
+            ids = string(candidateIds(:));
+            if isempty(obj.Store) || ~isvalid(obj.Store)
+                ids = string.empty(0, 1);
+                return;
+            end
+            allowed = obj.Store.assignableIds();
+            if isempty(allowed)
+                ids = string.empty(0, 1);
+                return;
+            end
+            ids = ids(ismember(ids, allowed));
         end
     end
 end

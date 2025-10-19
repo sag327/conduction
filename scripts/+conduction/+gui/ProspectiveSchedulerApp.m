@@ -159,7 +159,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             currentIds = caseObj.listRequiredResources();
             desiredIds = string(desiredIds(:));
 
+            assignableIds = string.empty(0, 1);
+            if ~isempty(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    assignableIds = store.assignableIds();
+                end
+            end
+
+            if isempty(assignableIds)
+                desiredIds = string.empty(0, 1);
+            else
+                filtered = intersect(desiredIds, assignableIds, 'stable');
+                desiredIds = string(filtered(:));
+            end
+
             toRemove = setdiff(currentIds, desiredIds);
+            if ~isempty(assignableIds)
+                disallowedCurrent = setdiff(currentIds, assignableIds, 'stable');
+                toRemove = unique([toRemove(:); disallowedCurrent(:)], 'stable');
+            else
+                toRemove = currentIds;
+            end
+
             toAdd = setdiff(desiredIds, currentIds);
 
             for k = 1:numel(toRemove)

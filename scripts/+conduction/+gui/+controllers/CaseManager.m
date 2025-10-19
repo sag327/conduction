@@ -849,6 +849,12 @@ classdef CaseManager < handle
                 metadata.resourceSummary = obj.caseResourceSummary();
             end
 
+            resourceStore = obj.getResourceStore();
+            assignableIds = string.empty(0, 1);
+            if ~isempty(resourceStore) && isvalid(resourceStore)
+                assignableIds = resourceStore.assignableIds();
+            end
+
             if obj.CaseCount == 0
                 casesStruct = struct([]);
                 return;
@@ -908,7 +914,19 @@ classdef CaseManager < handle
                 casesStruct(idx).admissionStatus = char(statusValue);
                 casesStruct(idx).caseStatus = char(caseObj.CaseStatus);  % REALTIME-SCHEDULING
                 casesStruct(idx).date = dateValue;
-                casesStruct(idx).requiredResourceIds = caseObj.listRequiredResources();
+                rawRequiredIds = caseObj.listRequiredResources();
+                if isempty(assignableIds)
+                    filteredRequiredIds = string.empty(0, 1);
+                else
+                    filteredRequiredIds = rawRequiredIds(ismember(rawRequiredIds, assignableIds));
+                end
+                if numel(filteredRequiredIds) ~= numel(rawRequiredIds)
+                    caseObj.clearResources();
+                    for rid = filteredRequiredIds(:)'
+                        caseObj.assignResource(rid);
+                    end
+                end
+                casesStruct(idx).requiredResourceIds = filteredRequiredIds;
             end
         end
     end

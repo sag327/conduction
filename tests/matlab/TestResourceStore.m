@@ -67,6 +67,23 @@ classdef TestResourceStore < matlab.unittest.TestCase
             testCase.verifyTrue(all(ids ~= ""));
             testCase.verifyEqual(testCase.LastEventCount, 2);
         end
+
+        function testAssignableIdsReflectCapacity(testCase)
+            a = testCase.Store.create("A", 1);
+            b = testCase.Store.create("B", 0);
+
+            assignable = testCase.Store.assignableIds();
+            testCase.verifyTrue(any(assignable == a.Id));
+            testCase.verifyFalse(any(assignable == b.Id));
+
+            testCase.Store.update(b.Id, 'Capacity', 2);
+            assignable = testCase.Store.assignableIds();
+            testCase.verifyTrue(all(ismember([a.Id, b.Id], assignable)));
+
+            testCase.Store.update(a.Id, 'Capacity', 0);
+            assignable = testCase.Store.assignableIds();
+            testCase.verifyFalse(any(assignable == a.Id));
+        end
     end
 
     methods (Access = private)
@@ -75,4 +92,3 @@ classdef TestResourceStore < matlab.unittest.TestCase
         end
     end
 end
-

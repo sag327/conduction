@@ -66,6 +66,24 @@ classdef TestResourceChecklist < matlab.unittest.TestCase
             testCase.Checklist.setSelection(ids(3));
             testCase.verifyEqual(testCase.Checklist.getSelection(), ids(3));
         end
+
+        function testZeroCapacityDisablesSelection(testCase)
+            drawnow limitrate;
+            ids = testCase.Store.ids();
+            targetId = ids(1);
+
+            testCase.Checklist.setSelection(targetId);
+            testCase.verifyEqual(testCase.Checklist.getSelection(), targetId);
+
+            testCase.Store.update(targetId, 'Capacity', 0);
+            drawnow limitrate;
+
+            testCase.verifyEmpty(testCase.Checklist.getSelection());
+            testCase.verifyEmpty(testCase.LastSelection);
+
+            testCase.Checklist.setSelection(targetId);
+            testCase.verifyEmpty(testCase.Checklist.getSelection());
+        end
     end
 
     methods (Access = private)

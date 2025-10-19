@@ -19,7 +19,7 @@ classdef ResourceType < handle
             arguments
                 id (1,1) string
                 name (1,1) string
-                capacity (1,1) double {mustBeNonnegative} = 0
+                capacity (1,1) double {mustBeNonnegative} = 1
                 color (1,3) double {mustBeGreaterThanOrEqual(color,0), mustBeLessThanOrEqual(color,1)} = [0.5 0.5 0.5]
                 pattern (1,1) string = "solid"
                 notes (1,1) string = ""

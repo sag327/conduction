@@ -476,7 +476,7 @@ classdef ResourceManager < handle
         function clearForm(obj)
             obj.SelectedResourceId = "";
             obj.NameField.Value = '';
-            obj.CapacitySpinner.Value = 0;
+            obj.CapacitySpinner.Value = 1;
             obj.PatternDropDown.Value = 'solid';
             obj.NotesArea.Value = {''};
             obj.TrackedCheckBox.Value = true;

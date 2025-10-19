@@ -176,6 +176,16 @@ classdef ResourceStore < handle
             names = string({obj.Types.Name});
         end
 
+        function ids = assignableIds(obj)
+            types = obj.list();
+            if isempty(types)
+                ids = string.empty(0, 1);
+                return;
+            end
+            mask = arrayfun(@(t) t.Capacity > 0, types);
+            ids = string({types(mask).Id});
+        end
+
         function snapshot = snapshot(obj)
             %SNAPSHOT Return resource types as struct array for serialization/optimization
             types = obj.list();
