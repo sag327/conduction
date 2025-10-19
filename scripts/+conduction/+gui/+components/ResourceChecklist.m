@@ -8,7 +8,7 @@ classdef ResourceChecklist < handle
     properties (SetAccess = private)
         Parent
         Store conduction.gui.stores.ResourceStore
-        Options struct
+        Options struct = struct()
         Selection string = string.empty(0, 1)
     end
 
@@ -24,15 +24,22 @@ classdef ResourceChecklist < handle
     end
 
     methods
-        function obj = ResourceChecklist(parent, store, opts)
-            arguments
-                parent
-                store (1,1) conduction.gui.stores.ResourceStore
-                opts.Title (1,1) string = "Resources"
-                opts.SelectionChangedFcn = []
-                opts.CreateCallback = []
-                opts.ShowCreateButton (1,1) logical = true
+        function obj = ResourceChecklist(parent, store, varargin)
+            if nargin < 2
+                error('ResourceChecklist:InvalidInputs', 'Parent and store are required.');
             end
+            if ~isa(store, 'conduction.gui.stores.ResourceStore')
+                error('ResourceChecklist:InvalidStore', 'Second argument must be a ResourceStore.');
+            end
+
+            parser = inputParser;
+            addParameter(parser, 'Title', "Resources", @(v) isstring(v) || ischar(v));
+            addParameter(parser, 'SelectionChangedFcn', [], @(v) isempty(v) || isa(v, 'function_handle'));
+            addParameter(parser, 'CreateCallback', [], @(v) isempty(v) || isa(v, 'function_handle'));
+            addParameter(parser, 'ShowCreateButton', true, @(v) islogical(v) && isscalar(v));
+            parse(parser, varargin{:});
+            opts = parser.Results;
+            opts.Title = string(opts.Title);
 
             obj.Parent = parent;
             obj.Store = store;

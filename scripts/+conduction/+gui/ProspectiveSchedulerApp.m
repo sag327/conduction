@@ -142,6 +142,34 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI5                        matlab.ui.control.Label
     end
 
+    methods (Access = public, Hidden = true)
+        function applyResourcesToCase(app, caseObj, desiredIds)
+            arguments
+                app
+                caseObj conduction.gui.models.ProspectiveCase
+                desiredIds string
+            end
+
+            if isempty(caseObj) || ~isa(caseObj, 'conduction.gui.models.ProspectiveCase')
+                return;
+            end
+
+            currentIds = caseObj.listRequiredResources();
+            desiredIds = string(desiredIds(:));
+
+            toRemove = setdiff(currentIds, desiredIds);
+            toAdd = setdiff(desiredIds, currentIds);
+
+            for k = 1:numel(toRemove)
+                caseObj.removeResource(toRemove(k));
+            end
+
+            for k = 1:numel(toAdd)
+                caseObj.assignResource(toAdd(k));
+            end
+        end
+    end
+
     methods (Access = private)
 
         function onGlobalKeyPress(app, event)
@@ -179,12 +207,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.ensureResourceStoreListener();
 
-            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+            % Create checklists now that CaseManager exists
+            store = app.CaseManager.getResourceStore();
+            if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel) && ...
+                    (isempty(app.AddResourcesChecklist) || ~isvalid(app.AddResourcesChecklist))
+                app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                    app.AddResourcesPanel, store, ...
+                    'Title', "Resources", ...
+                    'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
+                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'ShowCreateButton', false);
+                if ~isempty(app.PendingAddResourceIds)
+                    app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+                end
+            elseif ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
                 app.AddResourcesChecklist.refresh();
                 app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
             end
 
-            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+            if ~isempty(app.DrawerResourcesPanel) && isvalid(app.DrawerResourcesPanel) && ...
+                    (isempty(app.DrawerResourcesChecklist) || ~isvalid(app.DrawerResourcesChecklist))
+                app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                    app.DrawerResourcesPanel, store, ...
+                    'Title', "Resources", ...
+                    'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
+                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'ShowCreateButton', false);
+            elseif ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
                 app.DrawerResourcesChecklist.refresh();
             end
 
@@ -420,27 +469,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
-        function applyResourcesToCase(app, caseObj, desiredIds)
-            arguments
-                app
-                caseObj conduction.gui.models.ProspectiveCase
-                desiredIds string
-            end
-
-            currentIds = caseObj.listRequiredResources();
-            desiredIds = string(desiredIds(:));
-
-            toRemove = setdiff(currentIds, desiredIds);
-            toAdd = setdiff(desiredIds, currentIds);
-
-            for k = 1:numel(toRemove)
-                caseObj.removeResource(toRemove(k));
-            end
-
-            for k = 1:numel(toAdd)
-                caseObj.assignResource(toAdd(k));
-            end
-        end
+        % (moved applyResourcesToCase to a public methods block below)
 
         function openResourceManagementDialog(app)
             % Placeholder until Resource Manager dialog is implemented (Phase 3)
@@ -461,8 +490,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStore conduction.gui.stores.CaseStore
         CasesView conduction.gui.components.CaseTableView
         CasesPopout conduction.gui.windows.CasesPopout
-        AddResourcesChecklist conduction.gui.components.ResourceChecklist
-        DrawerResourcesChecklist conduction.gui.components.ResourceChecklist
+        AddResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
+        DrawerResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
+        AddResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
+        DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
         PendingAddResourceIds string = string.empty(0, 1)
 
         % Controllers

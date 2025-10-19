@@ -97,12 +97,7 @@ function buildDrawerUI(app)
     resourcesPanel.BorderType = 'none';
     resourcesPanel.BackgroundColor = contentGrid.BackgroundColor;
 
-    resourceStore = app.CaseManager.getResourceStore();
-    app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist(resourcesPanel, resourceStore, ...
-        'Title', "Resources", ...
-        'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
-        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
-        'ShowCreateButton', false);
+    app.DrawerResourcesPanel = resourcesPanel;
 
     % DURATION-EDITING: Add durations section
     app.DrawerDurationsTitle = uilabel(contentGrid);
