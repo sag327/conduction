@@ -133,3 +133,36 @@ Persistence: Included in session save/load once implemented
 - Should resources be grouped (e.g., ‘RF Console A/B’ belong to ‘RF Console’ type) and drawn randomly or evenly?
 - Any existing color palette constraints/brand colors to reuse for resource swatches?
 
+---
+
+## Example Usage: “Affera” Resource
+
+This scenario demonstrates defining a limited resource, assigning it to multiple cases, and using it during optimization.
+
+- Define resource
+  - Open Resource Manager (Optimization tab → Resources).
+  - Add type: Name “Affera”, Available Quantity 3, choose a distinct color/pattern, optional notes.
+  - Save. The legend will show “Affera (3)”; “Affera” appears in resource checklists.
+
+- Assign to cases
+  - In Add/Edit (or Drawer) → Resources, check “Affera” for each case that requires it.
+  - Assigned resources render as badges in the form and in the Cases tab “Resources” column.
+  - Use the Cases tab resource filter to view only Affera cases if needed.
+
+- Pre-run validation
+  - Optimization panel shows a Resources summary (e.g., 1 type, Affera (3)).
+  - Warnings appear for clearly invalid configs (e.g., capacity 0 with dependent cases).
+
+- Run optimization
+  - Constraint: concurrent cases requiring Affera never exceed 3 at any time.
+  - If 4 would overlap, the solver staggers at least one; if infeasible, diagnostics indicate “Affera capacity (3) exceeded” with a time window.
+
+- Visual feedback
+  - Legend entry “Affera (3)” with its swatch and a toggle to highlight Affera cases.
+  - Case blocks needing Affera show a small badge/strip; capacity breaches (e.g., from manual drag) outline affected blocks and show a banner.
+
+- What‑if tuning
+  - Edit capacity in Resource Manager (e.g., 3 → 2) and re-run optimization to tighten overlaps.
+
+- Save/Load
+  - Sessions persist resource types (name, capacity, color/pattern) and per-case assignments; loading restores constraints and visuals.
