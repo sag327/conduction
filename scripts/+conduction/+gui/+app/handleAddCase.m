@@ -25,7 +25,11 @@ function handleAddCase(app)
 
         % Assign selected resources to the new case
         newCase = app.CaseManager.getCase(app.CaseManager.CaseCount);
-        app.applyResourcesToCase(newCase, app.PendingAddResourceIds);
+        selectedIds = app.PendingAddResourceIds;
+        if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+            selectedIds = app.AddResourcesChecklist.getSelection();
+        end
+        app.applyResourcesToCase(newCase, selectedIds);
 
         if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
             app.CaseStore.refresh();

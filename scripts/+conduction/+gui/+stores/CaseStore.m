@@ -201,7 +201,7 @@ classdef CaseStore < handle
                 if isempty(resourceNames)
                     tableData{i, 8} = '--';
                 else
-                    tableData{i, 8} = strjoin(resourceNames, ', ');
+                    tableData{i, 8} = char(strjoin(resourceNames, ', '));
                 end
 
                 if caseObj.IsFirstCaseOfDay
