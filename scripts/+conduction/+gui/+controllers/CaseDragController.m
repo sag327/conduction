@@ -233,6 +233,12 @@ classdef CaseDragController < handle
             if nargin < 2
                 clearCaseId = false;
             end
+            fprintf('[DEBUG] CaseDragController.hideSelectionOverlay() - clearCaseId: %d, current SelectionCaseId: %s\n', ...
+                clearCaseId, obj.SelectionCaseId);
+            st = dbstack;
+            if length(st) > 1
+                fprintf('         Called from: %s (line %d)\n', st(2).name, st(2).line);
+            end
             if ~isempty(obj.SelectionRect) && isgraphics(obj.SelectionRect)
                 delete(obj.SelectionRect);
             end
@@ -255,7 +261,16 @@ classdef CaseDragController < handle
             end
 
             caseId = string(caseId);
+            fprintf('[DEBUG] CaseDragController.showSelectionOverlay() - caseId: %s\n', caseId);
+            st = dbstack;
+            if length(st) > 1
+                fprintf('         Called from: %s (line %d)\n', st(2).name, st(2).line);
+                if length(st) > 2
+                    fprintf('         Call chain: %s (line %d)\n', st(3).name, st(3).line);
+                end
+            end
             if strlength(caseId) == 0
+                fprintf('[DEBUG] CaseDragController.showSelectionOverlay() - caseId empty, hiding overlay\n');
                 obj.hideSelectionOverlay(true);
                 return;
             end
@@ -263,6 +278,7 @@ classdef CaseDragController < handle
             obj.SelectionCaseId = caseId;
             [entry, ~] = obj.findCaseById(caseId);
             if isempty(entry) || ~isfield(entry, 'rectHandle') || ~isgraphics(entry.rectHandle)
+                fprintf('[DEBUG] CaseDragController.showSelectionOverlay() - case not found in registry, hiding overlay\n');
                 obj.hideSelectionOverlay(false);
                 return;
             end
@@ -381,6 +397,7 @@ classdef CaseDragController < handle
             end
             obj.enableSelectionHoverWatcher();
             success = true;
+            fprintf('[DEBUG] CaseDragController.showSelectionOverlay() - SUCCESS, overlay drawn for caseId: %s\n', caseId);
         end
 
         function hideSoftHighlight(obj)

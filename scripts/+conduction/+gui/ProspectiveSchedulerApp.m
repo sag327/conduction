@@ -347,12 +347,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function updateCaseSelectionVisuals(app)
             selectedId = app.SelectedCaseId;
 
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] updateCaseSelectionVisuals - selectedId: %s\n', selectedId);
+            end
+
             if strlength(selectedId) > 0
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
                     overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
+                    if app.DebugShowCaseIds
+                        fprintf('[DEBUG] updateCaseSelectionVisuals - showSelectionOverlay returned: %d\n', overlayApplied);
+                    end
                 end
                 if ~overlayApplied && ~isempty(app.OptimizedSchedule)
+                    if app.DebugShowCaseIds
+                        fprintf('[DEBUG] updateCaseSelectionVisuals - overlay not applied, triggering full redraw\n');
+                    end
                     conduction.gui.app.redrawSchedule(app);
                 end
 
@@ -366,6 +376,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     end
                 end
             else
+                if app.DebugShowCaseIds
+                    fprintf('[DEBUG] updateCaseSelectionVisuals - clearing selection (selectedId empty)\n');
+                end
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(true);
                 elseif ~isempty(app.OptimizedSchedule)
@@ -497,29 +510,67 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function onResourceStoreChanged(app)
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.refresh();
+            % Prevent re-entrant calls during resource store updates
+            if app.IsUpdatingResourceStore
+                fprintf('[DEBUG] onResourceStoreChanged - BLOCKED (already updating)\n');
+                return;
             end
 
-            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
-                app.AddResourcesChecklist.refresh();
-                app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
-            end
+            app.IsUpdatingResourceStore = true;
+            try
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.refresh();
+                end
 
-            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
-                current = string.empty(0,1);
-                if ~isempty(app.DrawerCurrentCaseId)
-                    [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
-                    if ~isempty(caseObj)
-                        current = caseObj.listRequiredResources();
+                % Get the new/current ResourceStore
+                store = app.CaseManager.getResourceStore();
+
+                % Recreate AddResourcesChecklist with new store
+                if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel)
+                    if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                        delete(app.AddResourcesChecklist);
+                    end
+                    app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                        app.AddResourcesPanel, store, ...
+                        'Title', "Resources", ...
+                        'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
+                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'ShowCreateButton', false);
+                    if ~isempty(app.PendingAddResourceIds)
+                        app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
                     end
                 end
-                app.DrawerResourcesChecklist.refresh();
-                app.DrawerResourcesChecklist.setSelection(current);
-            end
 
-            app.refreshResourceLegend();
-            if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
+                % Recreate DrawerResourcesChecklist with new store
+                if ~isempty(app.DrawerResourcesPanel) && isvalid(app.DrawerResourcesPanel)
+                    % Preserve current selection before recreating
+                    current = string.empty(0,1);
+                    if ~isempty(app.DrawerCurrentCaseId)
+                        [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+                        if ~isempty(caseObj)
+                            current = caseObj.listRequiredResources();
+                        end
+                    end
+
+                    if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                        delete(app.DrawerResourcesChecklist);
+                    end
+                    app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                        app.DrawerResourcesPanel, store, ...
+                        'Title', "Resources", ...
+                        'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
+                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'ShowCreateButton', false);
+                    app.DrawerResourcesChecklist.setSelection(current);
+                end
+
+                app.refreshResourceLegend();
+                if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
+            catch ME
+                app.IsUpdatingResourceStore = false;
+                rethrow(ME);
+            end
+            app.IsUpdatingResourceStore = false;
         end
 
         function onResourceManagerClosed(app)
@@ -531,6 +582,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function onDrawerResourcesSelectionChanged(app, resourceIds)
+            % Don't apply changes during session restore
+            if app.IsRestoringSession
+                return;
+            end
+
             if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
                 return;
             end
@@ -543,9 +599,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             newSelection = string(resourceIds(:));
             app.applyResourcesToCase(caseObj, newSelection);
             app.markDirty();
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.refresh();
-            end
+            % CaseStore auto-refreshes via CaseManager listener - explicit refresh
+            % here causes cascading events that clear the selection overlay
         end
 
         % (moved applyResourcesToCase to a public methods block below)
@@ -623,6 +678,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     properties (Access = private)
         IsSyncingAvailableLabSelection logical = false
+        IsUpdatingResourceStore logical = false  % Guard against re-entrant calls
         CaseStoreListeners event.listener = event.listener.empty
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         IsHandlingTabSelection logical = false
@@ -1045,13 +1101,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function onScheduleBlockClicked(app, caseId)
+            fprintf('[DEBUG] onScheduleBlockClicked - CALLED with nargin=%d\n', nargin);
             if nargin < 2
+                fprintf('[DEBUG] onScheduleBlockClicked - EARLY RETURN (nargin < 2)\n');
                 return;
             end
+
+            fprintf('[DEBUG] onScheduleBlockClicked - caseId: %s\n', caseId);
 
             % Check if this is a lock-toggle request from double-click
             caseIdStr = string(caseId);
             if startsWith(caseIdStr, 'lock-toggle:')
+                fprintf('[DEBUG] onScheduleBlockClicked - lock-toggle detected\n');
                 % Extract the actual caseId from the prefix
                 actualCaseId = extractAfter(caseIdStr, 'lock-toggle:');
                 if strlength(actualCaseId) > 0
@@ -1064,11 +1125,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Normal single-click behavior: select case
             % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
+            fprintf('[DEBUG] onScheduleBlockClicked - finding case by ID: %s\n', caseId);
+            fprintf('[DEBUG] onScheduleBlockClicked - CaseManager has %d cases\n', app.CaseManager.CaseCount);
+            % Log all case IDs in CaseManager for debugging
+            for i = 1:app.CaseManager.CaseCount
+                caseObj = app.CaseManager.getCase(i);
+                fprintf('[DEBUG]   Case %d: CaseId = "%s"\n', i, caseObj.CaseId);
+            end
             [~, caseIndex] = app.CaseManager.findCaseById(caseId);
+            fprintf('[DEBUG] onScheduleBlockClicked - found caseIndex: %d\n', caseIndex);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
+                fprintf('[DEBUG] onScheduleBlockClicked - valid index, setting selection\n');
                 if ~isempty(app.CaseStore)
                     app.CaseStore.setSelection(caseIndex);
+                else
+                    fprintf('[DEBUG] onScheduleBlockClicked - CaseStore is empty!\n');
                 end
+            else
+                fprintf('[DEBUG] onScheduleBlockClicked - invalid caseIndex (nan or out of range)\n');
             end
 
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
@@ -1143,11 +1217,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function onCaseStoreSelectionChanged(app)
             % Respond to selection updates in the shared CaseStore.
+            % Skip during session restore to avoid premature UI updates
+            if app.IsRestoringSession
+                if app.DebugShowCaseIds
+                    fprintf('[DEBUG] onCaseStoreSelectionChanged - BLOCKED (IsRestoringSession=true)\n');
+                end
+                return;
+            end
+
             if isempty(app.CaseStore) || ~isa(app.CaseStore, 'conduction.gui.stores.CaseStore')
                 return;
             end
 
             selection = app.CaseStore.Selection;
+
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] onCaseStoreSelectionChanged - Selection: [%s], IsRestoringSession: %d\n', ...
+                    num2str(selection), app.IsRestoringSession);
+            end
 
             if isempty(selection)
                 app.SelectedCaseId = "";
@@ -1159,6 +1246,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     app.SelectedCaseId = "";
                 end
+            end
+
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] onCaseStoreSelectionChanged - SelectedCaseId set to: %s\n', app.SelectedCaseId);
             end
 
             app.updateCaseSelectionVisuals();
@@ -2085,10 +2176,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     caseObj.IsLocked = restoredCases(i).IsLocked;
 
                     % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
-                    if isfield(restoredCases(i), 'CaseId') && strlength(restoredCases(i).CaseId) > 0
+                    % restoredCases(i) is a ProspectiveCase object, not a struct, so use property access
+                    if strlength(restoredCases(i).CaseId) > 0
+                        fprintf('[DEBUG] importAppState - Restoring CaseId for case %d: %s -> %s\n', ...
+                            i, caseObj.CaseId, restoredCases(i).CaseId);
                         caseObj.CaseId = restoredCases(i).CaseId;
+                    else
+                        fprintf('[DEBUG] importAppState - NO CaseId to restore for case %d (CaseId is empty)\n', i);
                     end
-                    if isfield(restoredCases(i), 'CaseNumber') && ~isnan(restoredCases(i).CaseNumber)
+                    if ~isnan(restoredCases(i).CaseNumber)
                         caseObj.CaseNumber = restoredCases(i).CaseNumber;
                     end
 
@@ -2216,7 +2312,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     sessionData.operatorColors);
             end
 
-            % Trigger UI updates
+            % Trigger UI updates (while IsRestoringSession is still true)
             app.updateCasesTable();
             app.OptimizationController.updateOptimizationOptionsSummary(app);
             app.OptimizationController.updateOptimizationStatus(app);
@@ -2252,6 +2348,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Clear timeline position (time control is OFF)
             app.CaseManager.setCurrentTime(NaN);
 
+            % End session restore mode - all UI updates complete
+            app.IsRestoringSession = false;
+            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'session restore complete'); end
+
             % Notify user
             if isfield(sessionData, 'savedDate')
                 fprintf('Session loaded successfully from %s\n', ...
@@ -2259,8 +2359,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 fprintf('Session loaded successfully\n');
             end
-            app.IsRestoringSession = false;
-            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'end'); end
             catch ME
                 app.IsRestoringSession = false;
                 rethrow(ME);

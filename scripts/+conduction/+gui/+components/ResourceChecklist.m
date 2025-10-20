@@ -62,6 +62,10 @@ classdef ResourceChecklist < handle
         function setSelection(obj, resourceIds)
             resourceIds = unique(string(resourceIds(:)), 'stable');
             resourceIds = obj.filterAssignable(resourceIds);
+
+            % Store previous selection to detect actual changes
+            previousSelection = obj.Selection;
+
             if isempty(obj.CheckboxMap)
                 obj.Selection = resourceIds;
             else
@@ -69,7 +73,11 @@ classdef ResourceChecklist < handle
                 obj.Selection = resourceIds(ismember(resourceIds, keys));
             end
             obj.syncCheckboxes();
-            obj.fireSelectionChanged();
+
+            % Only fire SelectionChanged if selection actually changed
+            if ~isequal(sort(previousSelection), sort(obj.Selection))
+                obj.fireSelectionChanged();
+            end
         end
 
         function ids = getSelection(obj)
