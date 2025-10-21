@@ -37,6 +37,7 @@ classdef ResourceChecklist < handle
             addParameter(parser, 'SelectionChangedFcn', [], @(v) isempty(v) || isa(v, 'function_handle'));
             addParameter(parser, 'CreateCallback', [], @(v) isempty(v) || isa(v, 'function_handle'));
             addParameter(parser, 'ShowCreateButton', true, @(v) islogical(v) && isscalar(v));
+            addParameter(parser, 'HorizontalLayout', false, @(v) islogical(v) && isscalar(v));
             parse(parser, varargin{:});
             opts = parser.Results;
             opts.Title = string(opts.Title);
@@ -98,42 +99,67 @@ classdef ResourceChecklist < handle
                 error('ResourceChecklist:InvalidParent', 'Parent must be a UI container.');
             end
 
-            obj.Grid = uigridlayout(parent);
-            obj.Grid.RowHeight = {'fit', '1x', 'fit'};
-            obj.Grid.ColumnWidth = {'1x'};
-            obj.Grid.Padding = [0 0 0 0];
-            obj.Grid.RowSpacing = 6;
-            obj.Grid.ColumnSpacing = 0;
+            isHorizontal = obj.Options.HorizontalLayout;
 
-            titleLabel = uilabel(obj.Grid);
-            titleLabel.Text = char(obj.Options.Title);
-            titleLabel.FontWeight = 'bold';
-            titleLabel.Layout.Row = 1;
-            titleLabel.Layout.Column = 1;
+            obj.Grid = uigridlayout(parent);
+            if isHorizontal
+                % Horizontal layout: no title, no create button, just checkboxes
+                obj.Grid.RowHeight = {'fit'};
+                obj.Grid.ColumnWidth = {'1x'};
+                obj.Grid.Padding = [0 0 0 0];
+                obj.Grid.RowSpacing = 0;
+                obj.Grid.ColumnSpacing = 0;
+            else
+                % Vertical layout: title, checkboxes, create button
+                obj.Grid.RowHeight = {'fit', '1x', 'fit'};
+                obj.Grid.ColumnWidth = {'1x'};
+                obj.Grid.Padding = [0 0 0 0];
+                obj.Grid.RowSpacing = 6;
+                obj.Grid.ColumnSpacing = 0;
+
+                titleLabel = uilabel(obj.Grid);
+                titleLabel.Text = char(obj.Options.Title);
+                titleLabel.FontWeight = 'bold';
+                titleLabel.Layout.Row = 1;
+                titleLabel.Layout.Column = 1;
+            end
 
             obj.ScrollPanel = uipanel(obj.Grid);
-            obj.ScrollPanel.Layout.Row = 2;
+            if isHorizontal
+                obj.ScrollPanel.Layout.Row = 1;
+            else
+                obj.ScrollPanel.Layout.Row = 2;
+            end
             obj.ScrollPanel.Layout.Column = 1;
             obj.ScrollPanel.BorderType = 'none';
             obj.ScrollPanel.Scrollable = 'on';
             obj.ScrollPanel.BackgroundColor = obj.inferBackground();
 
             obj.ListGrid = uigridlayout(obj.ScrollPanel);
-            obj.ListGrid.ColumnWidth = {'1x'};
-            obj.ListGrid.RowHeight = {};
-            obj.ListGrid.RowSpacing = 2;
-            obj.ListGrid.ColumnSpacing = 0;
+            if isHorizontal
+                obj.ListGrid.ColumnWidth = {};
+                obj.ListGrid.RowHeight = {'fit'};
+                obj.ListGrid.RowSpacing = 0;
+                obj.ListGrid.ColumnSpacing = 8;  % Horizontal spacing between checkboxes
+            else
+                obj.ListGrid.ColumnWidth = {'1x'};
+                obj.ListGrid.RowHeight = {};
+                obj.ListGrid.RowSpacing = 2;
+                obj.ListGrid.ColumnSpacing = 0;
+            end
             obj.ListGrid.Padding = [0 0 0 0];
             obj.ListGrid.BackgroundColor = obj.ScrollPanel.BackgroundColor;
 
-            obj.CreateButton = uibutton(obj.Grid, 'push');
-            obj.CreateButton.Text = 'Create New Resource…';
-            obj.CreateButton.Layout.Row = 3;
-            obj.CreateButton.Layout.Column = 1;
-            obj.CreateButton.ButtonPushedFcn = @(src, evt) obj.onCreatePressed();
-            obj.CreateButton.Visible = matlab.lang.OnOffSwitchState(obj.Options.ShowCreateButton);
-            if isempty(obj.Options.CreateCallback)
-                obj.CreateButton.Enable = 'off';
+            if ~isHorizontal
+                obj.CreateButton = uibutton(obj.Grid, 'push');
+                obj.CreateButton.Text = 'Create New Resource…';
+                obj.CreateButton.Layout.Row = 3;
+                obj.CreateButton.Layout.Column = 1;
+                obj.CreateButton.ButtonPushedFcn = @(src, evt) obj.onCreatePressed();
+                obj.CreateButton.Visible = matlab.lang.OnOffSwitchState(obj.Options.ShowCreateButton);
+                if isempty(obj.Options.CreateCallback)
+                    obj.CreateButton.Enable = 'off';
+                end
             end
         end
 
@@ -171,33 +197,48 @@ classdef ResourceChecklist < handle
             end
             obj.EmptyLabel = matlab.ui.control.Label.empty;
 
-            types = obj.Store.list();
+            types = obj.Store.list();  % Already sorted alphabetically by ResourceStore
             if isempty(types)
-                obj.ListGrid.RowHeight = {'fit'};
-                obj.EmptyLabel = uilabel(obj.ListGrid);
-                obj.EmptyLabel.Text = 'No resources defined';
-                obj.EmptyLabel.FontColor = [0.65 0.65 0.65];
-                obj.EmptyLabel.HorizontalAlignment = 'center';
-                obj.EmptyLabel.Layout.Row = 1;
-                obj.EmptyLabel.Layout.Column = 1;
-                obj.CreateButton.Enable = matlab.lang.OnOffSwitchState(~isempty(obj.Options.CreateCallback));
-                obj.Selection = string.empty(0, 1);
-                return;
+                if obj.Options.HorizontalLayout
+                    % Horizontal mode: no empty label displayed
+                    obj.Selection = string.empty(0, 1);
+                    return;
+                else
+                    obj.ListGrid.RowHeight = {'fit'};
+                    obj.EmptyLabel = uilabel(obj.ListGrid);
+                    obj.EmptyLabel.Text = 'No resources defined';
+                    obj.EmptyLabel.FontColor = [0.65 0.65 0.65];
+                    obj.EmptyLabel.HorizontalAlignment = 'center';
+                    obj.EmptyLabel.Layout.Row = 1;
+                    obj.EmptyLabel.Layout.Column = 1;
+                    obj.CreateButton.Enable = matlab.lang.OnOffSwitchState(~isempty(obj.Options.CreateCallback));
+                    obj.Selection = string.empty(0, 1);
+                    return;
+                end
             end
 
-            % Sort by name for stable display
-            names = string({types.Name});
-            [~, order] = sort(lower(names));
-            types = types(order);
+            isHorizontal = obj.Options.HorizontalLayout;
+            if isHorizontal
+                % Horizontal layout: one column per resource, single row
+                obj.ListGrid.ColumnWidth = repmat({'fit'}, 1, numel(types));
+                obj.ListGrid.RowHeight = {'fit'};
+            else
+                % Vertical layout: one row per resource, single column
+                obj.ListGrid.RowHeight = repmat({'fit'}, 1, numel(types));
+            end
 
-            obj.ListGrid.RowHeight = repmat({'fit'}, 1, numel(types));
             validSelection = string.empty(0, 1);
             for idx = 1:numel(types)
                 type = types(idx);
                 checkbox = uicheckbox(obj.ListGrid);
                 checkbox.Text = char(type.Name);
-                checkbox.Layout.Row = idx;
-                checkbox.Layout.Column = 1;
+                if isHorizontal
+                    checkbox.Layout.Row = 1;
+                    checkbox.Layout.Column = idx;
+                else
+                    checkbox.Layout.Row = idx;
+                    checkbox.Layout.Column = 1;
+                end
                 checkbox.ValueChangedFcn = @(src, evt) obj.onCheckboxChanged(src);
                 checkbox.Tag = char(type.Id);
                 isAssignable = type.Capacity > 0;

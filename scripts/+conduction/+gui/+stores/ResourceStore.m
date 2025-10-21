@@ -30,6 +30,12 @@ classdef ResourceStore < handle
 
         function types = list(obj)
             types = obj.Types;
+            % Sort alphabetically by name for consistent display everywhere
+            if ~isempty(types)
+                names = string({types.Name});
+                [~, order] = sort(lower(names));
+                types = types(order);
+            end
         end
 
         function type = get(obj, resourceId)
@@ -65,6 +71,8 @@ classdef ResourceStore < handle
                     names(k) = obj.Types(idx).Name;
                 end
             end
+            % Sort alphabetically for consistent display
+            names = sort(names);
         end
 
         function exists = has(obj, resourceId)
