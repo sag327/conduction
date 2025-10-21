@@ -257,7 +257,12 @@ classdef ResourceChecklist < handle
             end
 
             obj.Selection = validSelection;
-            obj.CreateButton.Enable = matlab.lang.OnOffSwitchState(~isempty(obj.Options.CreateCallback));
+
+            % Only update CreateButton if it exists (not in horizontal mode)
+            if ~isempty(obj.CreateButton) && isvalid(obj.CreateButton)
+                obj.CreateButton.Enable = matlab.lang.OnOffSwitchState(~isempty(obj.Options.CreateCallback));
+            end
+
             obj.syncCheckboxes();
 
             if ~isequal(sort(previousSelection), sort(obj.Selection))
