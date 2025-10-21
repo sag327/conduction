@@ -319,10 +319,27 @@ classdef ResourceManager < handle
         end
 
         function onStoreChanged(obj)
+            if ~isvalid(obj)
+                return;
+            end
+
             obj.refreshTable();
         end
 
         function refreshTable(obj)
+            % Validate object state before proceeding
+            if ~isvalid(obj)
+                return;
+            end
+
+            if isempty(obj.UIFigure) || ~isvalid(obj.UIFigure)
+                return;
+            end
+
+            if isempty(obj.Table) || ~isvalid(obj.Table)
+                return;
+            end
+
             types = obj.Store.list();
             if isempty(types)
                 obj.Table.Data = {};
@@ -343,6 +360,7 @@ classdef ResourceManager < handle
                 data{k,3} = obj.colorToHex(t.Color);
                 data{k,4} = char(t.Notes);
             end
+
             obj.Table.Data = data;
             obj.TableData = struct('Ids', ids, 'Names', string(data(:,1)));
 
@@ -399,7 +417,6 @@ classdef ResourceManager < handle
         function onSavePressed(obj)
             try
                 obj.commitForm();
-                obj.refreshTable();
             catch ME
                 uialert(obj.UIFigure, ME.message, 'Save Failed');
             end
@@ -428,7 +445,6 @@ classdef ResourceManager < handle
                 resource = obj.Store.get(obj.SelectedResourceId);
             end
 
-            obj.refreshTable();
             obj.selectResource(obj.SelectedResourceId);
         end
 
