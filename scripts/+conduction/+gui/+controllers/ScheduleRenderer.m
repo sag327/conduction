@@ -750,14 +750,16 @@ classdef ScheduleRenderer < handle
                 if isfield(resize, 'handleRect') && isgraphics(resize.handleRect)
                     set(resize.handleRect, 'Position', resize.originalHandlePos);
                 end
+                % Restore overlay after failed resize (no re-render happened)
+                obj.restoreSelectionOverlay(app);
             else
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                     app.DrawerController.populateDrawer(app, caseId);
                 end
+                % Note: restoreSelectionOverlay not needed here because applyCaseResize
+                % calls markOptimizationDirty which triggers full re-render → registerCaseBlocks → showSelectionOverlay
             end
-
-            obj.restoreSelectionOverlay(app);
         end
 
         function updateCaseDragDebugLabel(~, app, textValue)
