@@ -39,7 +39,6 @@ classdef CaseStore < handle
         end
 
         function refresh(obj)
-            fprintf('[DEBUG] CaseStore.refresh() called\n');
             newData = obj.buildTableData();
             if ~isequal(newData, obj.Data)
                 obj.Data = newData;
@@ -82,19 +81,12 @@ classdef CaseStore < handle
             end
 
             if ~isequal(newSelection, obj.Selection)
-                fprintf('[DEBUG] CaseStore.setSelection() - old: [%s], new: [%s]\n', ...
-                    num2str(obj.Selection), num2str(newSelection));
                 obj.Selection = newSelection;
                 notify(obj, 'SelectionChanged');
             end
         end
 
         function clearSelection(obj)
-            fprintf('[DEBUG] CaseStore.clearSelection() called\n');
-            st = dbstack;
-            if length(st) > 1
-                fprintf('         Called from: %s (line %d)\n', st(2).name, st(2).line);
-            end
             obj.setSelection(double.empty(1, 0));
         end
 
@@ -192,8 +184,6 @@ classdef CaseStore < handle
             maxIndex = obj.caseCount();
             trimmed = obj.Selection(obj.Selection >= 1 & obj.Selection <= maxIndex);
             if ~isequal(trimmed, obj.Selection)
-                fprintf('[DEBUG] CaseStore.trimSelection() - before: [%s], after: [%s], maxIndex: %d\n', ...
-                    num2str(obj.Selection), num2str(trimmed), maxIndex);
                 obj.Selection = trimmed;
                 notify(obj, 'SelectionChanged');
             end

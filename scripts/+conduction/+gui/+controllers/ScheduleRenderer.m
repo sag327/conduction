@@ -1717,7 +1717,6 @@ classdef ScheduleRenderer < handle
 
         function invokeCaseBlockClick(~, app, rectHandle)
             if isempty(rectHandle) || ~isgraphics(rectHandle)
-                fprintf('[DEBUG] invokeCaseBlockClick - rectHandle is empty or invalid\n');
                 return;
             end
 
@@ -1725,22 +1724,12 @@ classdef ScheduleRenderer < handle
             callback = [];
             caseId = "";
 
-            fprintf('[DEBUG] invokeCaseBlockClick - userData is struct: %d\n', isstruct(userData));
             if isstruct(userData)
-                fprintf('[DEBUG] invokeCaseBlockClick - userData fields: %s\n', strjoin(fieldnames(userData), ', '));
                 if isfield(userData, 'caseClickedFcn')
                     callback = userData.caseClickedFcn;
-                    fprintf('[DEBUG] invokeCaseBlockClick - caseClickedFcn exists, type: %s, isempty: %d\n', ...
-                        class(callback), isempty(callback));
-                    if isa(callback, 'function_handle')
-                        fprintf('[DEBUG] invokeCaseBlockClick - callback function: %s\n', func2str(callback));
-                    end
                 end
                 if isfield(userData, 'caseId')
                     caseId = string(userData.caseId);
-                    fprintf('[DEBUG] invokeCaseBlockClick - extracted caseId: %s\n', caseId);
-                else
-                    fprintf('[DEBUG] invokeCaseBlockClick - NO caseId field in UserData!\n');
                 end
             end
 
@@ -1772,19 +1761,12 @@ classdef ScheduleRenderer < handle
 
                 if isempty(callback)
                     if strlength(callbackArg) > 0
-                        fprintf('[DEBUG] invokeCaseBlockClick - calling onScheduleBlockClicked with: %s\n', callbackArg);
                         app.onScheduleBlockClicked(callbackArg);
-                    else
-                        fprintf('[DEBUG] invokeCaseBlockClick - callbackArg is EMPTY, NOT calling onScheduleBlockClicked\n');
                     end
                 else
-                    fprintf('[DEBUG] invokeCaseBlockClick - calling custom callback with arg: %s\n', callbackArg);
                     try
                         callback(callbackArg);
-                        fprintf('[DEBUG] invokeCaseBlockClick - custom callback completed\n');
-                    catch cbME
-                        fprintf('[DEBUG] invokeCaseBlockClick - custom callback FAILED: %s\n', cbME.message);
-                        fprintf('[DEBUG] invokeCaseBlockClick - falling back to onScheduleBlockClicked\n');
+                    catch
                         if strlength(callbackArg) > 0
                             app.onScheduleBlockClicked(callbackArg);
                         end
