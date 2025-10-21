@@ -539,11 +539,15 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
                 end
+                % Note: restoreSelectionOverlay not needed here because markOptimizationDirty
+                % triggers full re-render which calls registerCaseBlocks -> showSelectionOverlay
             else
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 if isprop(drag.rectHandle, 'FaceAlpha')
                     drag.rectHandle.FaceAlpha = 0;
                 end
+                % Restore overlay after failed drag (no re-render happened)
+                obj.restoreSelectionOverlay(app);
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
                 end
@@ -552,8 +556,6 @@ classdef ScheduleRenderer < handle
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
                 drag.rectHandle.FaceAlpha = 0;
             end
-
-            obj.restoreSelectionOverlay(app);
         end
 
         function onCaseResizeMouseDown(obj, app, handle)
