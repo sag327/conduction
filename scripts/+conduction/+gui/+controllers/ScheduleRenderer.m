@@ -496,7 +496,8 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
                 end
-                obj.restoreSelectionOverlay(app);
+                % Note: restoreSelectionOverlay not needed here because invokeCaseBlockClick
+                % triggers selection change which calls updateCaseSelectionVisuals -> showSelectionOverlay
                 return;
             end
 
@@ -521,7 +522,8 @@ classdef ScheduleRenderer < handle
             if isnan(newSetupStartMinutes)
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
-                obj.restoreSelectionOverlay(app);
+                % Note: restoreSelectionOverlay not needed here because invokeCaseBlockClick
+                % triggers selection change which calls updateCaseSelectionVisuals -> showSelectionOverlay
                 return;
             end
 
