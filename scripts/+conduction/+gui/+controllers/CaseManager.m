@@ -239,6 +239,18 @@ classdef CaseManager < handle
             obj.ChangeListeners{end+1} = wrapped;
         end
 
+        function notifyChange(obj)
+            %NOTIFYCHANGE Notify all registered listeners that cases have changed
+            for i = 1:numel(obj.ChangeListeners)
+                try
+                    obj.ChangeListeners{i}();
+                catch ME
+                    warning('CaseManager:ListenerError', ...
+                        'Error in change listener: %s', ME.message);
+                end
+            end
+        end
+
         function clearAllCases(obj)
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
             obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;  % REALTIME-SCHEDULING
@@ -1068,17 +1080,6 @@ classdef CaseManager < handle
         function resetClinicalDataState(obj)
             obj.ClinicalDataPath = "";
             obj.DailySummary = conduction.gui.controllers.CaseManager.createEmptyDailySummary();
-        end
-
-        function notifyChange(obj)
-            for i = 1:numel(obj.ChangeListeners)
-                try
-                    obj.ChangeListeners{i}();
-                catch ME
-                    warning('CaseManager:ListenerError', ...
-                        'Error in change listener: %s', ME.message);
-                end
-            end
         end
 
         function labIndex = resolvePreferredLab(~, specificLab, labIds)
