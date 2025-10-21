@@ -9,7 +9,6 @@ classdef AnalyticsRenderer < handle
             end
 
             app.KPI1.Text = 'Cases: --';
-            app.KPI2.Text = 'Makespan: --';
             app.KPI3.Text = 'Op idle: --';
             app.KPI4.Text = 'Lab idle: --';
             app.KPI5.Text = 'Flip ratio: --';
@@ -39,9 +38,6 @@ classdef AnalyticsRenderer < handle
 
             caseCount = obj.safeField(dailyMetrics, 'caseCount', numel(dailySchedule.cases()));
             app.KPI1.Text = sprintf('Cases: %d', caseCount);
-
-            lastOut = obj.safeField(dailyMetrics, 'lastCaseEnd', NaN);
-            app.KPI2.Text = sprintf('Makespan: %s', obj.formatMinutesClock(lastOut));
 
             totalOpIdle = NaN;
             if isfield(operatorMetrics, 'departmentMetrics') && isfield(operatorMetrics.departmentMetrics, 'totalOperatorIdleMinutes')

@@ -140,7 +140,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         FlipAxes                    matlab.ui.control.UIAxes
         IdleAxes                    matlab.ui.control.UIAxes
         KPI1                        matlab.ui.control.Label
-        KPI2                        matlab.ui.control.Label
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
@@ -840,10 +839,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
             app.CanvasScheduleLayout.RowHeight = {'1x'};
-            app.CanvasScheduleLayout.ColumnWidth = {'1x', 180};
+            app.CanvasScheduleLayout.ColumnWidth = {'1x'};  % Single column - schedule fills width
             app.CanvasScheduleLayout.Padding = [0 0 0 0];
             app.CanvasScheduleLayout.RowSpacing = 0;
-            app.CanvasScheduleLayout.ColumnSpacing = 8;
+            app.CanvasScheduleLayout.ColumnSpacing = 0;
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
             app.ScheduleAxes.Layout.Row = 1;
@@ -855,16 +854,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Color = [0 0 0];
             app.ScheduleAxes.Toolbar.Visible = 'off';
 
-            app.ResourceLegendPanel = uipanel(app.CanvasScheduleLayout);
-            app.ResourceLegendPanel.Layout.Row = 1;
-            app.ResourceLegendPanel.Layout.Column = 2;
-            app.ResourceLegendPanel.BorderType = 'none';
-            app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
-                app.ResourceLegendPanel.Scrollable = 'on';
-                app.ResourceLegendPanel.Visible = 'on';
-
-            app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
-                'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
+            % ResourceLegend now moved to BottomBarLayout (created later)
+            app.ResourceLegendPanel = matlab.ui.container.Panel.empty;  % No longer used
+            app.ResourceLegend = conduction.gui.components.ResourceLegend.empty;  % Created in BottomBarLayout
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
             app.CanvasAnalyzeLayout.RowHeight = {'1.5x', '1x', '1.3x'};
@@ -923,22 +915,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.Layout.Row = 3;
             app.BottomBarLayout.Layout.Column = 2;
             app.BottomBarLayout.RowHeight = {'fit'};
-            app.BottomBarLayout.ColumnWidth = {'3x','fit','fit','fit','fit','fit'};
+            app.BottomBarLayout.ColumnWidth = {'3x','fit','fit','fit','fit'};  % 5 columns (removed Makespan)
             app.BottomBarLayout.ColumnSpacing = 11;
             app.BottomBarLayout.Padding = [0 12 4 0];
+
+            % Create ResourceLegend in Column 1 (horizontal layout)
+            app.ResourceLegendPanel = uipanel(app.BottomBarLayout);
+            app.ResourceLegendPanel.Layout.Column = 1;
+            app.ResourceLegendPanel.BorderType = 'none';
+            app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
+
+            app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
+                'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
 
             sharedKpiStyle = {'HorizontalAlignment','right','VerticalAlignment','top'};
 
             app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --', sharedKpiStyle{:});
             app.KPI1.Layout.Column = 2;
-            app.KPI2 = uilabel(app.BottomBarLayout, 'Text', 'Makespan: --', sharedKpiStyle{:});
-            app.KPI2.Layout.Column = 3;
             app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --', sharedKpiStyle{:});
-            app.KPI3.Layout.Column = 4;
+            app.KPI3.Layout.Column = 3;
             app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --', sharedKpiStyle{:});
-            app.KPI4.Layout.Column = 5;
+            app.KPI4.Layout.Column = 4;
             app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --', sharedKpiStyle{:});
-            app.KPI5.Layout.Column = 6;
+            app.KPI5.Layout.Column = 5;
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
