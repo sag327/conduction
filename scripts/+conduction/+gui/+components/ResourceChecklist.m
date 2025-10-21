@@ -132,8 +132,20 @@ classdef ResourceChecklist < handle
             end
             obj.ScrollPanel.Layout.Column = 1;
             obj.ScrollPanel.BorderType = 'none';
-            obj.ScrollPanel.Scrollable = 'on';
-            obj.ScrollPanel.BackgroundColor = obj.inferBackground();
+
+            % Configure scrolling and background based on layout mode
+            if isHorizontal
+                obj.ScrollPanel.Scrollable = 'off';  % No scrolling needed for single row
+                % In horizontal mode, inherit from immediate parent panel (drawer)
+                if isa(parent, 'matlab.ui.container.Panel')
+                    obj.ScrollPanel.BackgroundColor = parent.BackgroundColor;
+                else
+                    obj.ScrollPanel.BackgroundColor = obj.inferBackground();
+                end
+            else
+                obj.ScrollPanel.Scrollable = 'on';
+                obj.ScrollPanel.BackgroundColor = obj.inferBackground();
+            end
 
             obj.ListGrid = uigridlayout(obj.ScrollPanel);
             if isHorizontal
