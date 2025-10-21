@@ -35,13 +35,6 @@ function applySelection(app, selectedLabs, suppressDirty)
     end
 
     if ~suppressDirty && changed
-        try
-            if isprop(app, 'DebugScheduling') && app.DebugScheduling
-                fprintf('[DEBUG][%s] availableLabs.applySelection changed: marking dirty, selected=%s\n', ...
-                    char(datetime('now','Format','HH:mm:ss.SSS')), mat2str(selectedLabs));
-            end
-        catch
-        end
         app.OptimizationController.updateOptimizationOptionsSummary(app);
         app.OptimizationController.markOptimizationDirty(app);
         app.markDirty();  % SAVE/LOAD: Mark as dirty when available labs change (Stage 7)

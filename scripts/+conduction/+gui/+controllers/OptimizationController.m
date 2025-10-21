@@ -179,7 +179,6 @@ classdef OptimizationController < handle
         function markOptimizationDirty(obj, app)
             % Skip if suppressed during batch operations (e.g., clearing all cases)
             if obj.SuppressDirtyMarking
-                fprintf('[DEBUG] markOptimizationDirty - SUPPRESSED during batch update\n');
                 return;
             end
 
@@ -194,13 +193,9 @@ classdef OptimizationController < handle
             hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
             hasSchedule = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
 
-            fprintf('[DEBUG] markOptimizationDirty - hasCases: %d, hasSchedule: %d\n', hasCases, hasSchedule);
-
             if ~hasSchedule || ~hasCases
-                fprintf('[DEBUG] markOptimizationDirty - showing placeholder\n');
                 obj.showOptimizationPendingPlaceholder(app);
             else
-                fprintf('[DEBUG] markOptimizationDirty - re-rendering stale schedule\n');
                 % Re-render existing schedule with fade to indicate it's stale
                 % Use simulated schedule if time control is active to preserve status indicators
                 scheduleToRender = app.getScheduleForRendering();

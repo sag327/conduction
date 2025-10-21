@@ -346,22 +346,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function updateCaseSelectionVisuals(app)
             selectedId = app.SelectedCaseId;
 
-            if app.DebugShowCaseIds
-                fprintf('[DEBUG] updateCaseSelectionVisuals - selectedId: %s\n', selectedId);
-            end
-
             if strlength(selectedId) > 0
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
                     overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
-                    if app.DebugShowCaseIds
-                        fprintf('[DEBUG] updateCaseSelectionVisuals - showSelectionOverlay returned: %d\n', overlayApplied);
-                    end
                 end
                 if ~overlayApplied && ~isempty(app.OptimizedSchedule)
-                    if app.DebugShowCaseIds
-                        fprintf('[DEBUG] updateCaseSelectionVisuals - overlay not applied, triggering full redraw\n');
-                    end
                     conduction.gui.app.redrawSchedule(app);
                 end
 
@@ -375,9 +365,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     end
                 end
             else
-                if app.DebugShowCaseIds
-                    fprintf('[DEBUG] updateCaseSelectionVisuals - clearing selection (selectedId empty)\n');
-                end
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(true);
                 elseif ~isempty(app.OptimizedSchedule)
@@ -511,7 +498,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function onResourceStoreChanged(app)
             % Prevent re-entrant calls during resource store updates
             if app.IsUpdatingResourceStore
-                fprintf('[DEBUG] onResourceStoreChanged - BLOCKED (already updating)\n');
                 return;
             end
 
@@ -1100,18 +1086,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function onScheduleBlockClicked(app, caseId)
-            fprintf('[DEBUG] onScheduleBlockClicked - CALLED with nargin=%d\n', nargin);
             if nargin < 2
-                fprintf('[DEBUG] onScheduleBlockClicked - EARLY RETURN (nargin < 2)\n');
                 return;
             end
-
-            fprintf('[DEBUG] onScheduleBlockClicked - caseId: %s\n', caseId);
 
             % Check if this is a lock-toggle request from double-click
             caseIdStr = string(caseId);
             if startsWith(caseIdStr, 'lock-toggle:')
-                fprintf('[DEBUG] onScheduleBlockClicked - lock-toggle detected\n');
                 % Extract the actual caseId from the prefix
                 actualCaseId = extractAfter(caseIdStr, 'lock-toggle:');
                 if strlength(actualCaseId) > 0
@@ -1124,24 +1105,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Normal single-click behavior: select case
             % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
-            fprintf('[DEBUG] onScheduleBlockClicked - finding case by ID: %s\n', caseId);
-            fprintf('[DEBUG] onScheduleBlockClicked - CaseManager has %d cases\n', app.CaseManager.CaseCount);
-            % Log all case IDs in CaseManager for debugging
-            for i = 1:app.CaseManager.CaseCount
-                caseObj = app.CaseManager.getCase(i);
-                fprintf('[DEBUG]   Case %d: CaseId = "%s"\n', i, caseObj.CaseId);
-            end
             [~, caseIndex] = app.CaseManager.findCaseById(caseId);
-            fprintf('[DEBUG] onScheduleBlockClicked - found caseIndex: %d\n', caseIndex);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
-                fprintf('[DEBUG] onScheduleBlockClicked - valid index, setting selection\n');
                 if ~isempty(app.CaseStore)
                     app.CaseStore.setSelection(caseIndex);
-                else
-                    fprintf('[DEBUG] onScheduleBlockClicked - CaseStore is empty!\n');
                 end
-            else
-                fprintf('[DEBUG] onScheduleBlockClicked - invalid caseIndex (nan or out of range)\n');
             end
 
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
@@ -1218,9 +1186,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Respond to selection updates in the shared CaseStore.
             % Skip during session restore to avoid premature UI updates
             if app.IsRestoringSession
-                if app.DebugShowCaseIds
-                    fprintf('[DEBUG] onCaseStoreSelectionChanged - BLOCKED (IsRestoringSession=true)\n');
-                end
                 return;
             end
 
@@ -1229,11 +1194,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             selection = app.CaseStore.Selection;
-
-            if app.DebugShowCaseIds
-                fprintf('[DEBUG] onCaseStoreSelectionChanged - Selection: [%s], IsRestoringSession: %d\n', ...
-                    num2str(selection), app.IsRestoringSession);
-            end
 
             if isempty(selection)
                 app.SelectedCaseId = "";
@@ -1245,10 +1205,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     app.SelectedCaseId = "";
                 end
-            end
-
-            if app.DebugShowCaseIds
-                fprintf('[DEBUG] onCaseStoreSelectionChanged - SelectedCaseId set to: %s\n', app.SelectedCaseId);
             end
 
             app.updateCaseSelectionVisuals();
@@ -2244,11 +2200,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
                     % restoredCases(i) is a ProspectiveCase object, not a struct, so use property access
                     if strlength(restoredCases(i).CaseId) > 0
-                        fprintf('[DEBUG] importAppState - Restoring CaseId for case %d: %s -> %s\n', ...
-                            i, caseObj.CaseId, restoredCases(i).CaseId);
                         caseObj.CaseId = restoredCases(i).CaseId;
-                    else
-                        fprintf('[DEBUG] importAppState - NO CaseId to restore for case %d (CaseId is empty)\n', i);
                     end
                     if ~isnan(restoredCases(i).CaseNumber)
                         caseObj.CaseNumber = restoredCases(i).CaseNumber;
