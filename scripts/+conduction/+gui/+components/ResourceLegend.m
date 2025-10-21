@@ -138,18 +138,31 @@ classdef ResourceLegend < handle
             obj.EmptyLabel = matlab.ui.control.Label.empty;
 
             if isempty(obj.ResourceTypes)
-                obj.ListGrid.ColumnWidth = {'1x'};
+                obj.ListGrid.ColumnWidth = {20, '1x'};  % Small spacer + centered empty text
+
+                % Small spacer column
+                spacer = uilabel(obj.ListGrid);
+                spacer.Text = '';
+                spacer.Layout.Row = 1;
+                spacer.Layout.Column = 1;
+
                 obj.EmptyLabel = uilabel(obj.ListGrid);
                 obj.EmptyLabel.Text = 'No resources defined';
                 obj.EmptyLabel.FontColor = [0.6 0.6 0.6];
                 obj.EmptyLabel.HorizontalAlignment = 'center';
                 obj.EmptyLabel.Layout.Row = 1;
-                obj.EmptyLabel.Layout.Column = 1;
+                obj.EmptyLabel.Layout.Column = 2;
                 return;
             end
 
-            % Horizontal layout: one column per resource
-            obj.ListGrid.ColumnWidth = repmat({'fit'}, 1, numel(obj.ResourceTypes));
+            % Horizontal layout: small spacer column + one column per resource
+            obj.ListGrid.ColumnWidth = [20, repmat({'fit'}, 1, numel(obj.ResourceTypes))];
+
+            % Small spacer column before first resource
+            spacer = uilabel(obj.ListGrid);
+            spacer.Text = '';
+            spacer.Layout.Row = 1;
+            spacer.Layout.Column = 1;
 
             % Keep capacity/case count calculation for future use, but don't display
             counts = conduction.gui.components.ResourceLegend.buildCountMap(obj.ResourceSummary);
@@ -161,7 +174,7 @@ classdef ResourceLegend < handle
                 toggle = uicheckbox(obj.ListGrid);
                 toggle.Text = char(entry.Name);
                 toggle.Layout.Row = 1;
-                toggle.Layout.Column = idx;
+                toggle.Layout.Column = idx + 1;  % Offset by 1 due to spacer column
                 toggle.Tag = char(entry.Id);
                 toggle.ValueChangedFcn = @(src, ~) obj.onToggleChanged(src);
 
