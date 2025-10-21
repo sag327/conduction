@@ -587,9 +587,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             newSelection = string(resourceIds(:));
             app.applyResourcesToCase(caseObj, newSelection);
+            app.CaseManager.notifyChange();
             app.markDirty();
-            % CaseStore auto-refreshes via CaseManager listener - explicit refresh
-            % here causes cascading events that clear the selection overlay
+            % CaseStore auto-refreshes via CaseManager listener
         end
 
         % (moved applyResourcesToCase to a public methods block below)
