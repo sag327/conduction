@@ -2215,6 +2215,12 @@ classdef ScheduleRenderer < handle
             % Format axis with time labels (e.g., "06:00", "07:00")
             hourTicks = floor(startHour):ceil(endHour);
             hourLabels = arrayfun(@(h) sprintf('%02d:00', mod(h, 24)), hourTicks, 'UniformOutput', false);
+            if ~isempty(hourLabels)
+                hourLabels{1} = '';
+                if numel(hourLabels) > 1
+                    hourLabels{end} = '';
+                end
+            end
             set(ax, 'YTick', hourTicks, 'YTickLabel', hourLabels);
         end
 

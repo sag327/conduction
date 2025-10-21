@@ -656,6 +656,15 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
     end
 
     conduction.visualization.timeFormatting.formatAxisTimeTicks(ax, startHour, endHour, 'y');
+    % Hide outermost hour labels so the schedule gutters stay clean
+    tickLabels = string(ax.YTickLabel);
+    if ~isempty(tickLabels)
+        tickLabels(1) = "";
+        if numel(tickLabels) > 1
+            tickLabels(end) = "";
+        end
+        ax.YTickLabel = tickLabels;
+    end
     set(ax, 'XTick', [], 'Box', 'off', 'TickLength', [0 0]);
     if isprop(ax, 'XAxis') && isprop(ax.XAxis, 'MinorTick')
         ax.XAxis.MinorTick = 'off';
@@ -1038,4 +1047,3 @@ function val = fetchMetric(metrics, field, fallback)
 
     val = fallback;
 end
-

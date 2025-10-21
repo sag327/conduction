@@ -46,6 +46,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerStartValueLabel       matlab.ui.control.Label
         DrawerEndValueLabel         matlab.ui.control.Label
         DrawerLockToggle            matlab.ui.control.CheckBox  % CASE-LOCKING: Lock toggle in drawer
+        DrawerResourcesTitle        matlab.ui.control.Label     % Resources section title
         DrawerDurationsTitle        matlab.ui.control.Label     % DURATION-EDITING: Duration section title
         DrawerDurationsGrid         matlab.ui.container.GridLayout  % DURATION-EDITING: Duration grid
         DrawerSetupSpinner          matlab.ui.control.Spinner   % DURATION-EDITING: Setup time spinner
