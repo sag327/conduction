@@ -496,7 +496,8 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
                 end
-                obj.restoreSelectionOverlay(app);
+                % Note: restoreSelectionOverlay not needed here because invokeCaseBlockClick
+                % triggers selection change which calls updateCaseSelectionVisuals -> showSelectionOverlay
                 return;
             end
 
@@ -521,7 +522,8 @@ classdef ScheduleRenderer < handle
             if isnan(newSetupStartMinutes)
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
-                obj.restoreSelectionOverlay(app);
+                % Note: restoreSelectionOverlay not needed here because invokeCaseBlockClick
+                % triggers selection change which calls updateCaseSelectionVisuals -> showSelectionOverlay
                 return;
             end
 
@@ -537,11 +539,15 @@ classdef ScheduleRenderer < handle
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
                 end
+                % Note: restoreSelectionOverlay not needed here because markOptimizationDirty
+                % triggers full re-render which calls registerCaseBlocks -> showSelectionOverlay
             else
                 set(drag.rectHandle, 'Position', drag.originalPosition);
                 if isprop(drag.rectHandle, 'FaceAlpha')
                     drag.rectHandle.FaceAlpha = 0;
                 end
+                % Restore overlay after failed drag (no re-render happened)
+                obj.restoreSelectionOverlay(app);
                 if app.DebugShowCaseIds
                     fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
                 end
@@ -550,8 +556,6 @@ classdef ScheduleRenderer < handle
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
                 drag.rectHandle.FaceAlpha = 0;
             end
-
-            obj.restoreSelectionOverlay(app);
         end
 
         function onCaseResizeMouseDown(obj, app, handle)
@@ -746,14 +750,16 @@ classdef ScheduleRenderer < handle
                 if isfield(resize, 'handleRect') && isgraphics(resize.handleRect)
                     set(resize.handleRect, 'Position', resize.originalHandlePos);
                 end
+                % Restore overlay after failed resize (no re-render happened)
+                obj.restoreSelectionOverlay(app);
             else
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                     app.DrawerController.populateDrawer(app, caseId);
                 end
+                % Note: restoreSelectionOverlay not needed here because applyCaseResize
+                % calls markOptimizationDirty which triggers full re-render → registerCaseBlocks → showSelectionOverlay
             end
-
-            obj.restoreSelectionOverlay(app);
         end
 
         function updateCaseDragDebugLabel(~, app, textValue)
