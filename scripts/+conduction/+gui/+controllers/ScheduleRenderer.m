@@ -530,7 +530,6 @@ classdef ScheduleRenderer < handle
             scheduleWasUpdated = obj.applyCaseMove(app, drag.caseId, targetLabIndex, newSetupStartMinutes);
             if scheduleWasUpdated
                 app.OptimizationController.markOptimizationDirty(app);
-                app.markDirty();
                 app.updateCasesTable();
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
@@ -899,10 +898,21 @@ classdef ScheduleRenderer < handle
             % Store simulated schedule for re-rendering (e.g., when drawer opens)
             app.SimulatedSchedule = updatedSchedule;
 
-            % Mark schedule as dirty (stale with new time)
-            app.OptimizationController.markOptimizationDirty(app);
+            % Check if any case statuses actually changed
+            statusesChanged = obj.didCaseStatusesChange(app.OptimizedSchedule, updatedSchedule);
 
-            % Re-render schedule to show updated statuses with fade effect
+            % Mark schedule as dirty only if statuses changed (shows fade effect)
+            if statusesChanged
+                % Mark optimization dirty but don't mark session dirty yet
+                app.OptimizationController.markOptimizationDirty(app, false);
+            end
+
+            % Always mark session dirty because time position is saved state
+            % (even if no statuses changed, the time position itself changed)
+            app.markDirty();
+
+            % Re-render schedule to show updated statuses
+            % (with fade effect if statusesChanged=true, otherwise normal)
             app.ScheduleRenderer.renderOptimizedSchedule(app, updatedSchedule, app.OptimizationOutcome);
 
             % Keep NOW line draggable if time control is still active
@@ -1095,6 +1105,47 @@ classdef ScheduleRenderer < handle
 
                 textId = "";
             end
+        end
+
+        function changed = didCaseStatusesChange(~, originalSchedule, simulatedSchedule)
+            %DIDCASESTATUSESCHANGE Check if any case statuses differ between schedules
+            %   Returns true if any case statuses have changed, false otherwise
+            if isempty(originalSchedule) || isempty(simulatedSchedule)
+                changed = false;
+                return;
+            end
+
+            origAssignments = originalSchedule.labAssignments();
+            simAssignments = simulatedSchedule.labAssignments();
+
+            if numel(origAssignments) ~= numel(simAssignments)
+                changed = true;
+                return;
+            end
+
+            % Compare statuses for all cases across all labs
+            for labIdx = 1:numel(origAssignments)
+                origCases = origAssignments{labIdx};
+                simCases = simAssignments{labIdx};
+
+                if numel(origCases) ~= numel(simCases)
+                    changed = true;
+                    return;
+                end
+
+                % Check each case in this lab
+                for caseIdx = 1:numel(origCases)
+                    origStatus = conduction.gui.controllers.ScheduleRenderer.getFieldValue(origCases(caseIdx), 'Status', "");
+                    simStatus = conduction.gui.controllers.ScheduleRenderer.getFieldValue(simCases(caseIdx), 'Status', "");
+
+                    if origStatus ~= simStatus
+                        changed = true;
+                        return;
+                    end
+                end
+            end
+
+            changed = false;
         end
 
         function updateActualTimeIndicator(obj, app)
@@ -1373,7 +1424,6 @@ classdef ScheduleRenderer < handle
             end
 
             app.OptimizationController.markOptimizationDirty(app);
-            app.markDirty();
             app.updateCasesTable();
 
             if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
@@ -1417,7 +1467,6 @@ classdef ScheduleRenderer < handle
             % Update schedule
             app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.OptimizationController.markOptimizationDirty(app);
-            app.markDirty();
 
             % Refresh drawer if needed
             if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
@@ -1470,7 +1519,6 @@ classdef ScheduleRenderer < handle
             % Update schedule
             app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, metrics);
             app.OptimizationController.markOptimizationDirty(app);
-            app.markDirty();
 
             % Refresh drawer if needed
             if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...

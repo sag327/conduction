@@ -550,6 +550,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
 
                 app.refreshResourceLegend();
+
+                % Mark optimization dirty when resource constraints change
+                app.OptimizationController.markOptimizationDirty(app);
+
                 if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
             catch ME
                 app.IsUpdatingResourceStore = false;

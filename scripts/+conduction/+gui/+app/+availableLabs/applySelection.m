@@ -37,7 +37,6 @@ function applySelection(app, selectedLabs, suppressDirty)
     if ~suppressDirty && changed
         app.OptimizationController.updateOptimizationOptionsSummary(app);
         app.OptimizationController.markOptimizationDirty(app);
-        app.markDirty();  % SAVE/LOAD: Mark as dirty when available labs change (Stage 7)
     elseif ~suppressDirty && ~changed
         app.OptimizationController.updateOptimizationOptionsSummary(app);
     end

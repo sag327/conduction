@@ -176,7 +176,13 @@ classdef OptimizationController < handle
             app.OptimizationController.updateOptimizationActionAvailability(app);
         end
 
-        function markOptimizationDirty(obj, app)
+        function markOptimizationDirty(obj, app, markSessionDirty)
+            % markSessionDirty: optional, defaults to true
+            % When true, also marks session as needing save
+            if nargin < 3
+                markSessionDirty = true;
+            end
+
             % Skip if suppressed during batch operations (e.g., clearing all cases)
             if obj.SuppressDirtyMarking
                 return;
@@ -204,6 +210,11 @@ classdef OptimizationController < handle
 
             obj.updateOptimizationStatus(app);
             obj.updateOptimizationActionAvailability(app);
+
+            % Mark session dirty if requested (default behavior)
+            if markSessionDirty
+                app.markDirty();  % SAVE/LOAD: Optimization state changed
+            end
         end
 
         function beginBatchUpdate(obj)
@@ -551,7 +562,6 @@ classdef OptimizationController < handle
 
                 obj.updateOptimizationOptionsSummary(app);
                 obj.markOptimizationDirty(app);
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when options change (Stage 7)
             catch ME
                 fprintf('Warning: Failed to update optimization options: %s\n', ME.message);
             end
