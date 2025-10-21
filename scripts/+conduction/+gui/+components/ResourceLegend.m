@@ -109,26 +109,25 @@ classdef ResourceLegend < handle
 
     methods (Access = private)
         function buildUI(obj)
+            % Horizontal layout for bottom bar placement
             obj.Grid = uigridlayout(obj.Parent);
-            obj.Grid.RowHeight = {'fit', '1x'};
+            obj.Grid.RowHeight = {'fit'};
             obj.Grid.ColumnWidth = {'1x'};
-            obj.Grid.RowSpacing = 6;
+            obj.Grid.RowSpacing = 0;
             obj.Grid.ColumnSpacing = 0;
-            obj.Grid.Padding = [6 6 6 6];
+            obj.Grid.Padding = [0 0 0 0];
 
-            obj.HeaderLabel = uilabel(obj.Grid);
-            obj.HeaderLabel.Text = 'Resources';
-            obj.HeaderLabel.FontWeight = 'bold';
-            obj.HeaderLabel.Layout.Row = 1;
-            obj.HeaderLabel.Layout.Column = 1;
+            % No header label for horizontal layout
+            obj.HeaderLabel = matlab.ui.control.Label.empty;
 
             obj.ListGrid = uigridlayout(obj.Grid);
-            obj.ListGrid.Layout.Row = 2;
+            obj.ListGrid.Layout.Row = 1;
             obj.ListGrid.Layout.Column = 1;
-            obj.ListGrid.RowSpacing = 4;
-            obj.ListGrid.ColumnSpacing = 0;
+            obj.ListGrid.RowHeight = {'fit'};
+            obj.ListGrid.ColumnSpacing = 12;
+            obj.ListGrid.RowSpacing = 0;
             obj.ListGrid.Padding = [0 0 0 0];
-            obj.ListGrid.ColumnWidth = {'1x'};
+            obj.ListGrid.ColumnWidth = {};  % Will be set dynamically based on resource count
 
             obj.rebuildList();
         end
@@ -139,7 +138,7 @@ classdef ResourceLegend < handle
             obj.EmptyLabel = matlab.ui.control.Label.empty;
 
             if isempty(obj.ResourceTypes)
-                obj.ListGrid.RowHeight = {'fit'};
+                obj.ListGrid.ColumnWidth = {'1x'};
                 obj.EmptyLabel = uilabel(obj.ListGrid);
                 obj.EmptyLabel.Text = 'No resources defined';
                 obj.EmptyLabel.FontColor = [0.6 0.6 0.6];
@@ -149,45 +148,26 @@ classdef ResourceLegend < handle
                 return;
             end
 
-            obj.ListGrid.RowHeight = repmat({'fit'}, 1, numel(obj.ResourceTypes));
+            % Horizontal layout: one column per resource
+            obj.ListGrid.ColumnWidth = repmat({'fit'}, 1, numel(obj.ResourceTypes));
+
+            % Keep capacity/case count calculation for future use, but don't display
             counts = conduction.gui.components.ResourceLegend.buildCountMap(obj.ResourceSummary);
 
             for idx = 1:numel(obj.ResourceTypes)
                 entry = obj.ResourceTypes(idx);
-                row = uigridlayout(obj.ListGrid);
-                row.ColumnWidth = {16, '1x', 'fit'};
-                row.RowHeight = {'fit'};
-                row.ColumnSpacing = 6;
-                row.RowSpacing = 0;
-                row.Padding = [0 0 0 0];
-                row.BackgroundColor = obj.Grid.BackgroundColor;
-                row.Layout.Row = idx;
-                row.Layout.Column = 1;
 
-                colorPatch = uipanel(row);
-                colorPatch.Layout.Row = 1;
-                colorPatch.Layout.Column = 1;
-                colorPatch.BorderType = 'line';
-                colorPatch.BorderWidth = 1;
-                colorPatch.BackgroundColor = conduction.gui.components.ResourceLegend.safeColor(entry.Color);
-
-                toggle = uicheckbox(row);
+                % Simple checkbox with resource name only
+                toggle = uicheckbox(obj.ListGrid);
                 toggle.Text = char(entry.Name);
                 toggle.Layout.Row = 1;
-                toggle.Layout.Column = 2;
+                toggle.Layout.Column = idx;
                 toggle.Tag = char(entry.Id);
                 toggle.ValueChangedFcn = @(src, ~) obj.onToggleChanged(src);
 
-                infoLabel = uilabel(row);
-                infoLabel.Layout.Row = 1;
-                infoLabel.Layout.Column = 3;
-                caseCount = conduction.gui.components.ResourceLegend.lookupCount(counts, entry.Id);
-                infoLabel.Text = sprintf('Cap %g | Cases %d', entry.Capacity, caseCount);
-                infoLabel.FontColor = [0.75 0.75 0.75];
-
+                % Disable if capacity is 0 or less
                 if entry.Capacity <= 0
                     toggle.Enable = 'off';
-                    infoLabel.FontColor = [0.55 0.55 0.55];
                 end
 
                 obj.CheckboxMap(char(entry.Id)) = toggle;
