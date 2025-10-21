@@ -1,6 +1,10 @@
 classdef OptimizationController < handle
     % OPTIMIZATIONCONTROLLER Controller for optimization functionality
 
+    properties (Access = private)
+        SuppressDirtyMarking logical = false  % Suppress markOptimizationDirty during batch operations
+    end
+
     methods (Access = public)
 
         function executeOptimization(~, app)
@@ -173,16 +177,30 @@ classdef OptimizationController < handle
         end
 
         function markOptimizationDirty(obj, app)
+            % Skip if suppressed during batch operations (e.g., clearing all cases)
+            if obj.SuppressDirtyMarking
+                fprintf('[DEBUG] markOptimizationDirty - SUPPRESSED during batch update\n');
+                return;
+            end
+
             app.IsOptimizationDirty = true;
 
             % Don't clear the schedule - keep it visible with fade effect
             % app.OptimizedSchedule is preserved
             % app.OptimizationOutcome is preserved
 
-            % Only show placeholder if there's no schedule to display
-            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+            % Show placeholder if no schedule exists OR CaseManager has no cases
+            % This prevents trying to render a stale schedule when all cases have been cleared
+            hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
+            hasSchedule = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
+
+            fprintf('[DEBUG] markOptimizationDirty - hasCases: %d, hasSchedule: %d\n', hasCases, hasSchedule);
+
+            if ~hasSchedule || ~hasCases
+                fprintf('[DEBUG] markOptimizationDirty - showing placeholder\n');
                 obj.showOptimizationPendingPlaceholder(app);
             else
+                fprintf('[DEBUG] markOptimizationDirty - re-rendering stale schedule\n');
                 % Re-render existing schedule with fade to indicate it's stale
                 % Use simulated schedule if time control is active to preserve status indicators
                 scheduleToRender = app.getScheduleForRendering();
@@ -191,6 +209,17 @@ classdef OptimizationController < handle
 
             obj.updateOptimizationStatus(app);
             obj.updateOptimizationActionAvailability(app);
+        end
+
+        function beginBatchUpdate(obj)
+            %BEGINBATCHUPDATE Suppress markOptimizationDirty during batch operations (e.g., clear all)
+            obj.SuppressDirtyMarking = true;
+        end
+
+        function endBatchUpdate(obj, app)
+            %ENDBATCHUPDATE Clear dirty marking suppression and mark dirty once
+            obj.SuppressDirtyMarking = false;
+            obj.markOptimizationDirty(app);
         end
 
         function [filteredAssignments, removedCaseIds] = sanitizeLockedAssignments(~, app, assignments)

@@ -13,6 +13,7 @@ classdef CaseStore < handle
     properties (Access = private)
         CaseManager conduction.gui.controllers.CaseManager
         HasAttachedListener logical = false
+        SuppressRefresh logical = false  % Suppress auto-refresh during batch operations
     end
 
     events
@@ -116,14 +117,21 @@ classdef CaseStore < handle
                 return;
             end
 
-            indices = obj.Selection;
-            for idx = sort(indices, 'descend')
-                if idx >= 1 && idx <= obj.caseCount()
-                    obj.CaseManager.removeCase(idx);
+            % Suppress auto-refresh during batch removal for performance
+            obj.beginBatchUpdate();
+            try
+                indices = obj.Selection;
+                for idx = sort(indices, 'descend')
+                    if idx >= 1 && idx <= obj.caseCount()
+                        obj.CaseManager.removeCase(idx);
+                    end
                 end
+                obj.clearSelection();
+            catch ME
+                obj.endBatchUpdate();
+                rethrow(ME);
             end
-
-            obj.clearSelection();
+            obj.endBatchUpdate();
         end
 
         function clearAll(obj)
@@ -131,8 +139,27 @@ classdef CaseStore < handle
                 return;
             end
 
-            obj.CaseManager.clearAllCases();
-            obj.clearSelection();
+            % Suppress auto-refresh during clear all for performance
+            obj.beginBatchUpdate();
+            try
+                obj.CaseManager.clearAllCases();
+                obj.clearSelection();
+            catch ME
+                obj.endBatchUpdate();
+                rethrow(ME);
+            end
+            obj.endBatchUpdate();
+        end
+
+        function beginBatchUpdate(obj)
+            %BEGINBATCHUPDATE Suppress auto-refresh during batch operations (e.g., session load)
+            obj.SuppressRefresh = true;
+        end
+
+        function endBatchUpdate(obj)
+            %ENDBATCHUPDATE Clear refresh suppression and refresh once
+            obj.SuppressRefresh = false;
+            obj.refresh();
         end
     end
 
@@ -148,6 +175,10 @@ classdef CaseStore < handle
 
         function onCaseManagerChanged(obj)
             if ~isvalid(obj)
+                return;
+            end
+            % Skip refresh if suppressed (for batch operations)
+            if obj.SuppressRefresh
                 return;
             end
             obj.refresh();

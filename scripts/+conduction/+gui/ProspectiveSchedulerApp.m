@@ -1431,36 +1431,64 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Collect schedule IDs before deletion
-            scheduleCaseIds = string.empty(0, 1);
-            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                scheduleCases = app.OptimizedSchedule.cases();
-                if ~isempty(scheduleCases)
-                    scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
+            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.beginBatchUpdate();
+            end
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.beginBatchUpdate();
+            end
+
+            try
+                % Collect schedule IDs before deletion
+                scheduleCaseIds = string.empty(0, 1);
+                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                    scheduleCases = app.OptimizedSchedule.cases();
+                    if ~isempty(scheduleCases)
+                        scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
+                    end
                 end
-            end
 
-            % Gather locked IDs from both case objects and app-level lock list
-            lockedCaseIds = string.empty(0, 1);
-            for i = 1:caseCount
-                caseObj = app.CaseManager.getCase(i);
-                if caseObj.IsLocked
-                    lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                % Gather locked IDs from both case objects and app-level lock list
+                lockedCaseIds = string.empty(0, 1);
+                for i = 1:caseCount
+                    caseObj = app.CaseManager.getCase(i);
+                    if caseObj.IsLocked
+                        lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                    end
                 end
+                if ~isempty(app.LockedCaseIds)
+                    lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
+                end
+
+                % Remove unlocked cases from manager using a single filtered update
+                app.CaseManager.clearCasesExcept(lockedCaseIds);
+
+                caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
+                scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
+
+                app.CaseStore.clearSelection();
+                app.ensureDrawerSelectionValid();
+                app.finalizeCaseMutation(scheduleWasUpdated);
+
+            catch ME
+                % Ensure batch updates are ended even if error occurs
+                if ~isempty(app.OptimizationController)
+                    app.OptimizationController.endBatchUpdate(app);
+                end
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
+                end
+                rethrow(ME);
             end
-            if ~isempty(app.LockedCaseIds)
-                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
+
+            % End batch updates - refresh once after all operations
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.endBatchUpdate(app);
             end
-
-            % Remove unlocked cases from manager using a single filtered update
-            app.CaseManager.clearCasesExcept(lockedCaseIds);
-
-            caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
-            scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
-
-            app.CaseStore.clearSelection();
-            app.ensureDrawerSelectionValid();
-            app.finalizeCaseMutation(scheduleWasUpdated);
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.endBatchUpdate();
+            end
         end
 
         function clearAllCasesIncludingLocked(app)
@@ -1469,33 +1497,61 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            for i = caseCount:-1:1
-                app.CaseManager.removeCase(i);
+            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.beginBatchUpdate();
+            end
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.beginBatchUpdate();
             end
 
-            app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
-            app.OptimizationOutcome = struct();
-            app.IsOptimizationDirty = true;
-            app.OptimizationLastRun = NaT;
+            try
+                for i = caseCount:-1:1
+                    app.CaseManager.removeCase(i);
+                end
 
-            app.LockedCaseIds = string.empty;
-            app.TimeControlLockedCaseIds = string.empty;
-            app.TimeControlBaselineLockedIds = string.empty;
+                app.OptimizedSchedule = conduction.DailySchedule.empty;
+                app.SimulatedSchedule = conduction.DailySchedule.empty;
+                app.OptimizationOutcome = struct();
+                app.IsOptimizationDirty = true;
+                app.OptimizationLastRun = NaT;
 
-            app.SelectedCaseId = "";
-            if ~isempty(app.CaseStore)
-                app.CaseStore.clearSelection();
+                app.LockedCaseIds = string.empty;
+                app.TimeControlLockedCaseIds = string.empty;
+                app.TimeControlBaselineLockedIds = string.empty;
+
+                app.SelectedCaseId = "";
+                if ~isempty(app.CaseStore)
+                    app.CaseStore.clearSelection();
+                end
+                app.DrawerCurrentCaseId = "";
+                app.DrawerController.closeDrawer(app);
+
+                app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+                if app.IsTimeControlActive
+                    app.ScheduleRenderer.updateActualTimeIndicator(app);
+                end
+
+                app.finalizeCaseMutation(false);
+
+            catch ME
+                % Ensure batch updates are ended even if error occurs
+                if ~isempty(app.OptimizationController)
+                    app.OptimizationController.endBatchUpdate(app);
+                end
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
+                end
+                rethrow(ME);
             end
-            app.DrawerCurrentCaseId = "";
-            app.DrawerController.closeDrawer(app);
 
-            app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
-            if app.IsTimeControlActive
-                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            % End batch updates - refresh once after all operations
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.endBatchUpdate(app);
             end
-
-            app.finalizeCaseMutation(false);
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.endBatchUpdate();
+            end
         end
 
         function scheduleWasUpdated = removeCaseIdsFromSchedules(app, caseIdsToRemove)
@@ -2100,7 +2156,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.CaseStore)
                 return;
             end
-            app.CaseStore.refresh();
+            % CaseStore auto-refreshes via CaseManager listener - no need for explicit refresh here
+            % This prevents double-refresh (once from listener, once from here)
+            % app.CaseStore.refresh();  % REMOVED - redundant with auto-refresh
         end
 
 
@@ -2162,6 +2220,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Restore cases
             if isfield(sessionData, 'cases') && ~isempty(sessionData.cases)
                 restoredCases = conduction.session.deserializeProspectiveCase(sessionData.cases);
+
+                % Suppress CaseStore auto-refresh during batch case loading for performance
+                batchUpdateActive = false;
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.beginBatchUpdate();
+                    batchUpdateActive = true;
+                end
+
+                try
                 for i = 1:length(restoredCases)
                     app.CaseManager.addCase( ...
                         restoredCases(i).OperatorName, ...
@@ -2220,6 +2287,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     % Legacy session without counter - validate and sync
                     app.CaseManager.validateAndSyncCaseNumbers();
+                end
+
+                catch ME
+                    % Ensure batch update is ended even if error occurs
+                    if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                        app.CaseStore.endBatchUpdate();
+                    end
+                    rethrow(ME);
+                end
+
+                % End batch update - refresh CaseStore once after all cases loaded
+                if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
                 end
             end
 
