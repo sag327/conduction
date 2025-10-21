@@ -1,6 +1,10 @@
 classdef OptimizationController < handle
     % OPTIMIZATIONCONTROLLER Controller for optimization functionality
 
+    properties (Access = private)
+        SuppressDirtyMarking logical = false  % Suppress markOptimizationDirty during batch operations
+    end
+
     methods (Access = public)
 
         function executeOptimization(~, app)
@@ -134,6 +138,9 @@ classdef OptimizationController < handle
                 end
 
                 app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, metadata);
+                if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
+                    app.OptimizationController.displayResourceViolations(app, outcome.ResourceViolations);
+                end
             catch ME
                 app.OptimizedSchedule = conduction.DailySchedule.empty;
                 app.OptimizationOutcome = struct();
@@ -170,16 +177,30 @@ classdef OptimizationController < handle
         end
 
         function markOptimizationDirty(obj, app)
+            % Skip if suppressed during batch operations (e.g., clearing all cases)
+            if obj.SuppressDirtyMarking
+                fprintf('[DEBUG] markOptimizationDirty - SUPPRESSED during batch update\n');
+                return;
+            end
+
             app.IsOptimizationDirty = true;
 
             % Don't clear the schedule - keep it visible with fade effect
             % app.OptimizedSchedule is preserved
             % app.OptimizationOutcome is preserved
 
-            % Only show placeholder if there's no schedule to display
-            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+            % Show placeholder if no schedule exists OR CaseManager has no cases
+            % This prevents trying to render a stale schedule when all cases have been cleared
+            hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
+            hasSchedule = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
+
+            fprintf('[DEBUG] markOptimizationDirty - hasCases: %d, hasSchedule: %d\n', hasCases, hasSchedule);
+
+            if ~hasSchedule || ~hasCases
+                fprintf('[DEBUG] markOptimizationDirty - showing placeholder\n');
                 obj.showOptimizationPendingPlaceholder(app);
             else
+                fprintf('[DEBUG] markOptimizationDirty - re-rendering stale schedule\n');
                 % Re-render existing schedule with fade to indicate it's stale
                 % Use simulated schedule if time control is active to preserve status indicators
                 scheduleToRender = app.getScheduleForRendering();
@@ -188,6 +209,17 @@ classdef OptimizationController < handle
 
             obj.updateOptimizationStatus(app);
             obj.updateOptimizationActionAvailability(app);
+        end
+
+        function beginBatchUpdate(obj)
+            %BEGINBATCHUPDATE Suppress markOptimizationDirty during batch operations (e.g., clear all)
+            obj.SuppressDirtyMarking = true;
+        end
+
+        function endBatchUpdate(obj, app)
+            %ENDBATCHUPDATE Clear dirty marking suppression and mark dirty once
+            obj.SuppressDirtyMarking = false;
+            obj.markOptimizationDirty(app);
         end
 
         function [filteredAssignments, removedCaseIds] = sanitizeLockedAssignments(~, app, assignments)
@@ -238,6 +270,14 @@ classdef OptimizationController < handle
             numLabs = max(1, round(app.Opts.labs));
             startTimes = repmat({'08:00'}, 1, numLabs);
 
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    resourceTypes = store.snapshot();
+                end
+            end
+
             scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
                 'NumLabs', numLabs, ...
                 'LabStartTimes', startTimes, ...
@@ -248,7 +288,8 @@ classdef OptimizationController < handle
                 'EnforceMidnight', logical(app.Opts.enforceMidnight), ...
                 'PrioritizeOutpatient', logical(app.Opts.prioritizeOutpt), ...
                 'AvailableLabs', app.AvailableLabIds, ...
-                'LockedCaseConstraints', lockedConstraints);
+                'LockedCaseConstraints', lockedConstraints, ...
+                'ResourceTypes', resourceTypes);
         end
 
         function showOptimizationOptionsDialog(~, app)
@@ -672,6 +713,50 @@ classdef OptimizationController < handle
                 else
                     constraints(end+1) = constraint; %#ok<AGROW>
                 end
+            end
+        end
+
+        function displayResourceViolations(~, app, violations)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            if isempty(violations)
+                return;
+            end
+
+            maxMessages = min(3, numel(violations));
+            lines = strings(maxMessages, 1);
+            for idx = 1:maxMessages
+                violation = violations(idx);
+                startText = localFormatMinutes(violation.StartTime);
+                endText = localFormatMinutes(violation.EndTime);
+                caseIds = violation.CaseIds;
+                if isempty(caseIds)
+                    caseSummary = 'unspecified cases';
+                else
+                    caseSummary = strjoin(caseIds, ', ');
+                end
+                lines(idx) = sprintf('%s capacity %.0f exceeded between %s-%s (%s)', ...
+                    char(violation.ResourceName), violation.Capacity, startText, endText, caseSummary);
+            end
+
+            message = strjoin(lines, newline);
+            remaining = numel(violations) - maxMessages;
+            if remaining > 0
+                message = sprintf('%s\n...and %d additional warning(s).', message, remaining);
+            end
+
+            uialert(app.UIFigure, message, 'Resource Constraint Warning', 'Icon', 'warning');
+
+            function text = localFormatMinutes(value)
+                if isempty(value) || ~isfinite(value)
+                    text = 'N/A';
+                    return;
+                end
+                hours = floor(value / 60);
+                minutes = floor(mod(value, 60));
+                text = sprintf('%02d:%02d', hours, minutes);
             end
         end
 

@@ -103,6 +103,15 @@ classdef DrawerController < handle
             obj.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
             obj.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
 
+            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                if isempty(caseObj)
+                    app.DrawerResourcesChecklist.setSelection(string.empty(0,1));
+                else
+                    app.DrawerResourcesChecklist.setSelection(caseObj.listRequiredResources());
+                end
+            end
+
             % DURATION-EDITING: Update duration spinners
             obj.setSpinnerValue(app.DrawerSetupSpinner, details.SetupMinutes);
             obj.setSpinnerValue(app.DrawerProcSpinner, details.ProcMinutes);
@@ -131,6 +140,10 @@ classdef DrawerController < handle
             obj.setSpinnerValue(app.DrawerSetupSpinner, 0);
             obj.setSpinnerValue(app.DrawerProcSpinner, 0);
             obj.setSpinnerValue(app.DrawerPostSpinner, 0);
+
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                app.DrawerResourcesChecklist.setSelection(string.empty(0,1));
+            end
         end
 
         function updateHistogram(obj, app, operatorName, procedureName)

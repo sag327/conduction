@@ -13,6 +13,7 @@ classdef CaseStore < handle
     properties (Access = private)
         CaseManager conduction.gui.controllers.CaseManager
         HasAttachedListener logical = false
+        SuppressRefresh logical = false  % Suppress auto-refresh during batch operations
     end
 
     events
@@ -38,6 +39,7 @@ classdef CaseStore < handle
         end
 
         function refresh(obj)
+            fprintf('[DEBUG] CaseStore.refresh() called\n');
             newData = obj.buildTableData();
             if ~isequal(newData, obj.Data)
                 obj.Data = newData;
@@ -80,12 +82,19 @@ classdef CaseStore < handle
             end
 
             if ~isequal(newSelection, obj.Selection)
+                fprintf('[DEBUG] CaseStore.setSelection() - old: [%s], new: [%s]\n', ...
+                    num2str(obj.Selection), num2str(newSelection));
                 obj.Selection = newSelection;
                 notify(obj, 'SelectionChanged');
             end
         end
 
         function clearSelection(obj)
+            fprintf('[DEBUG] CaseStore.clearSelection() called\n');
+            st = dbstack;
+            if length(st) > 1
+                fprintf('         Called from: %s (line %d)\n', st(2).name, st(2).line);
+            end
             obj.setSelection(double.empty(1, 0));
         end
 
@@ -108,14 +117,21 @@ classdef CaseStore < handle
                 return;
             end
 
-            indices = obj.Selection;
-            for idx = sort(indices, 'descend')
-                if idx >= 1 && idx <= obj.caseCount()
-                    obj.CaseManager.removeCase(idx);
+            % Suppress auto-refresh during batch removal for performance
+            obj.beginBatchUpdate();
+            try
+                indices = obj.Selection;
+                for idx = sort(indices, 'descend')
+                    if idx >= 1 && idx <= obj.caseCount()
+                        obj.CaseManager.removeCase(idx);
+                    end
                 end
+                obj.clearSelection();
+            catch ME
+                obj.endBatchUpdate();
+                rethrow(ME);
             end
-
-            obj.clearSelection();
+            obj.endBatchUpdate();
         end
 
         function clearAll(obj)
@@ -123,8 +139,27 @@ classdef CaseStore < handle
                 return;
             end
 
-            obj.CaseManager.clearAllCases();
-            obj.clearSelection();
+            % Suppress auto-refresh during clear all for performance
+            obj.beginBatchUpdate();
+            try
+                obj.CaseManager.clearAllCases();
+                obj.clearSelection();
+            catch ME
+                obj.endBatchUpdate();
+                rethrow(ME);
+            end
+            obj.endBatchUpdate();
+        end
+
+        function beginBatchUpdate(obj)
+            %BEGINBATCHUPDATE Suppress auto-refresh during batch operations (e.g., session load)
+            obj.SuppressRefresh = true;
+        end
+
+        function endBatchUpdate(obj)
+            %ENDBATCHUPDATE Clear refresh suppression and refresh once
+            obj.SuppressRefresh = false;
+            obj.refresh();
         end
     end
 
@@ -142,6 +177,10 @@ classdef CaseStore < handle
             if ~isvalid(obj)
                 return;
             end
+            % Skip refresh if suppressed (for batch operations)
+            if obj.SuppressRefresh
+                return;
+            end
             obj.refresh();
         end
 
@@ -153,6 +192,8 @@ classdef CaseStore < handle
             maxIndex = obj.caseCount();
             trimmed = obj.Selection(obj.Selection >= 1 & obj.Selection <= maxIndex);
             if ~isequal(trimmed, obj.Selection)
+                fprintf('[DEBUG] CaseStore.trimSelection() - before: [%s], after: [%s], maxIndex: %d\n', ...
+                    num2str(obj.Selection), num2str(trimmed), maxIndex);
                 obj.Selection = trimmed;
                 notify(obj, 'SelectionChanged');
             end
@@ -166,7 +207,8 @@ classdef CaseStore < handle
                 return;
             end
 
-            tableData = cell(caseCount, 8);
+            tableData = cell(caseCount, 9);
+            resourceStore = obj.CaseManager.getResourceStore();
             for i = 1:caseCount
                 caseObj = obj.CaseManager.getCase(i);
 
@@ -193,13 +235,22 @@ classdef CaseStore < handle
                     tableData{i, 7} = char(caseObj.SpecificLab);
                 end
 
-                if caseObj.IsFirstCaseOfDay
-                    tableData{i, 8} = 'Yes';
+                resourceNames = string.empty(0, 1);
+                if ~isempty(resourceStore) && isa(resourceStore, 'conduction.gui.stores.ResourceStore') && isvalid(resourceStore)
+                    resourceNames = resourceStore.namesForIds(caseObj.RequiredResourceIds);
+                end
+                if isempty(resourceNames)
+                    tableData{i, 8} = '--';
                 else
-                    tableData{i, 8} = 'No';
+                    tableData{i, 8} = char(strjoin(resourceNames, ', '));
+                end
+
+                if caseObj.IsFirstCaseOfDay
+                    tableData{i, 9} = 'Yes';
+                else
+                    tableData{i, 9} = 'No';
                 end
             end
         end
     end
 end
-

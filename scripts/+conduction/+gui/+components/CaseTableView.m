@@ -126,8 +126,8 @@ classdef CaseTableView < handle
             obj.Table = uitable(obj.Grid);
             obj.Table.Layout.Row = 2;
             obj.Table.Layout.Column = [1 2];
-            obj.Table.ColumnName = {'', 'ID', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'First Case'};
-            obj.Table.ColumnWidth = {45, 50, 110, 150, 80, 110, 90, 90};
+            obj.Table.ColumnName = {'', 'ID', 'Operator', 'Procedure', 'Duration', 'Admission', 'Lab', 'Resources', 'First Case'};
+            obj.Table.ColumnWidth = {45, 50, 110, 150, 80, 110, 90, 140, 90};
             obj.Table.RowName = {};
             obj.Table.SelectionType = 'row';
             obj.Table.SelectionChangedFcn = @(src, event) obj.onTableSelectionChanged(event);

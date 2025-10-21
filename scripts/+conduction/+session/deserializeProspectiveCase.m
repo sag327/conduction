@@ -68,6 +68,21 @@ function caseObj = deserializeProspectiveCase(caseStruct)
         c.ScheduledProcStartTime = getFieldSafe(s, 'scheduledProcStartTime', NaN);
         c.ScheduledEndTime = getFieldSafe(s, 'scheduledEndTime', NaN);
 
+        if isfield(s, 'caseId') && strlength(string(s.caseId)) > 0
+            c.CaseId = string(s.caseId);
+        end
+        if isfield(s, 'caseNumber') && ~isnan(s.caseNumber)
+            c.CaseNumber = s.caseNumber;
+        end
+
+        if isfield(s, 'requiredResourceIds') && ~isempty(s.requiredResourceIds)
+            reqIds = string(s.requiredResourceIds);
+            reqIds = reqIds(strlength(reqIds) > 0);
+            c.RequiredResourceIds = reqIds(:);
+        else
+            c.RequiredResourceIds = string.empty(0, 1);
+        end
+
         caseObj(i) = c;
     end
 end

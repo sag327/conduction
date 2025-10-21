@@ -42,6 +42,9 @@ classdef ProspectiveCase < handle
         ScheduledStartTime double = NaN  % Scheduled setup start time
         ScheduledProcStartTime double = NaN  % Scheduled procedure start time
         ScheduledEndTime double = NaN  % Scheduled end time (including post + turnover)
+
+        % RESOURCE-CONSTRAINTS: Required shared resources by id
+        RequiredResourceIds string = string.empty(0, 1)
     end
 
     methods
@@ -112,6 +115,53 @@ classdef ProspectiveCase < handle
         function tf = isCompleted(obj)
             %ISCOMPLETED Check if case is completed
             tf = strcmpi(obj.CaseStatus, "completed");
+        end
+
+        function ids = listRequiredResources(obj)
+            ids = obj.RequiredResourceIds;
+        end
+
+        function assignResource(obj, resourceId)
+            arguments
+                obj
+                resourceId (1,1) string
+            end
+            resourceId = string(strtrim(resourceId));
+            if strlength(resourceId) == 0
+                return;
+            end
+            if ~any(obj.RequiredResourceIds == resourceId)
+                obj.RequiredResourceIds(end+1, 1) = resourceId;
+            end
+        end
+
+        function removeResource(obj, resourceId)
+            arguments
+                obj
+                resourceId (1,1) string
+            end
+            resourceId = string(strtrim(resourceId));
+            if isempty(obj.RequiredResourceIds)
+                return;
+            end
+            mask = obj.RequiredResourceIds ~= resourceId;
+            obj.RequiredResourceIds = obj.RequiredResourceIds(mask);
+        end
+
+        function clearResources(obj)
+            obj.RequiredResourceIds = string.empty(0, 1);
+        end
+
+        function tf = requiresResource(obj, resourceId)
+            arguments
+                obj
+                resourceId (1,1) string
+            end
+            if isempty(obj.RequiredResourceIds)
+                tf = false;
+            else
+                tf = any(obj.RequiredResourceIds == resourceId);
+            end
         end
     end
 

@@ -17,6 +17,9 @@ classdef CaseManager < handle
         CompletedCases conduction.gui.models.ProspectiveCase  % Archive of completed cases
         CurrentTimeMinutes double = NaN  % Current time in minutes from midnight
 
+        % Shared resource store
+        ResourceStore conduction.gui.stores.ResourceStore = conduction.gui.stores.ResourceStore.empty
+
         % DUAL-ID: Counter for sequential case numbering
         NextCaseNumber double = 1  % Session-scoped counter, starts at 1
     end
@@ -38,6 +41,7 @@ classdef CaseManager < handle
             obj.TargetDate = targetDate;
             obj.Cases = conduction.gui.models.ProspectiveCase.empty;
             obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;  % REALTIME-SCHEDULING
+            obj.ResourceStore = conduction.gui.stores.ResourceStore();
 
             obj.resetClinicalDataState();
             obj.HistoricalCollection = historicalCollection;
@@ -47,6 +51,21 @@ classdef CaseManager < handle
                 obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
                 obj.computeProcedureAnalytics();
             end
+        end
+
+        function store = getResourceStore(obj)
+            if isempty(obj.ResourceStore) || ~isvalid(obj.ResourceStore)
+                obj.ResourceStore = conduction.gui.stores.ResourceStore();
+            end
+            store = obj.ResourceStore;
+        end
+
+        function setResourceStore(obj, store)
+            arguments
+                obj
+                store (1,1) conduction.gui.stores.ResourceStore
+            end
+            obj.ResourceStore = store;
         end
 
         function count = get.CaseCount(obj)
@@ -142,6 +161,42 @@ classdef CaseManager < handle
                     index = i;
                     return;
                 end
+            end
+        end
+
+        function result = casesRequiringResource(obj, resourceId)
+            arguments
+                obj
+                resourceId (1,1) string
+            end
+
+            if isempty(obj.Cases)
+                result = conduction.gui.models.ProspectiveCase.empty;
+                return;
+            end
+
+            mask = arrayfun(@(c) c.requiresResource(resourceId), obj.Cases);
+            result = obj.Cases(mask);
+        end
+
+        function summary = caseResourceSummary(obj)
+            if isempty(obj.ResourceStore) || ~isvalid(obj.ResourceStore)
+                summary = struct('ResourceId', {}, 'CaseIds', {});
+                return;
+            end
+
+            resourceIds = obj.ResourceStore.ids();
+            summary = struct('ResourceId', {}, 'CaseIds', {});
+
+            if isempty(resourceIds)
+                return;
+            end
+
+            for k = 1:numel(resourceIds)
+                resId = resourceIds(k);
+                cases = obj.casesRequiringResource(resId);
+                summary(k).ResourceId = resId; %#ok<*AGROW>
+                summary(k).CaseIds = string({cases.CaseId});
             end
         end
 
@@ -784,6 +839,21 @@ classdef CaseManager < handle
 
             metadata = struct();
             metadata.labIds = labIds;
+            if nargout > 1
+                resourceStore = obj.getResourceStore();
+                if isempty(resourceStore) || ~isvalid(resourceStore)
+                    metadata.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                else
+                    metadata.resourceTypes = resourceStore.snapshot();
+                end
+                metadata.resourceSummary = obj.caseResourceSummary();
+            end
+
+            resourceStore = obj.getResourceStore();
+            assignableIds = string.empty(0, 1);
+            if ~isempty(resourceStore) && isvalid(resourceStore)
+                assignableIds = resourceStore.assignableIds();
+            end
 
             if obj.CaseCount == 0
                 casesStruct = struct([]);
@@ -808,7 +878,8 @@ classdef CaseManager < handle
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
-                'date', NaT);
+                'date', NaT, ...
+                'requiredResourceIds', string.empty(0, 1));
             casesStruct = repmat(template, obj.CaseCount, 1);
 
             dateValue = obj.TargetDate;
@@ -843,6 +914,19 @@ classdef CaseManager < handle
                 casesStruct(idx).admissionStatus = char(statusValue);
                 casesStruct(idx).caseStatus = char(caseObj.CaseStatus);  % REALTIME-SCHEDULING
                 casesStruct(idx).date = dateValue;
+                rawRequiredIds = caseObj.listRequiredResources();
+                if isempty(assignableIds)
+                    filteredRequiredIds = string.empty(0, 1);
+                else
+                    filteredRequiredIds = rawRequiredIds(ismember(rawRequiredIds, assignableIds));
+                end
+                if numel(filteredRequiredIds) ~= numel(rawRequiredIds)
+                    caseObj.clearResources();
+                    for rid = filteredRequiredIds(:)'
+                        caseObj.assignResource(rid);
+                    end
+                end
+                casesStruct(idx).requiredResourceIds = filteredRequiredIds;
             end
         end
     end

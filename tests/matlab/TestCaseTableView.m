@@ -50,9 +50,10 @@ classdef TestCaseTableView < matlab.unittest.TestCase
             drawnow;
 
             data = testCase.View.Table.Data;
-            testCase.verifySize(data, [1, 8]);
+            testCase.verifySize(data, [1, 9]);
             testCase.verifyEqual(data{1, 3}, 'Dr. Chen');
             testCase.verifyEqual(string(testCase.View.ClearButton.Enable), "on");
+            testCase.verifyEqual(data{1, 8}, '--');
         end
 
         function testSelectionSync(testCase)

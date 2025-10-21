@@ -111,6 +111,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptMetricDropDown           matlab.ui.control.DropDown
         OptLabsLabel                matlab.ui.control.Label
         OptLabsSpinner              matlab.ui.control.Spinner
+        OptResourcesLabel           matlab.ui.control.Label
+        OptResourcesButton          matlab.ui.control.Button
         OptAvailableLabsLabel       matlab.ui.control.Label
         OptAvailableSelectAll       matlab.ui.control.CheckBox
         OptAvailableLabsPanel       matlab.ui.container.Panel
@@ -132,6 +134,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
+        ResourceLegendPanel        matlab.ui.container.Panel
+        ResourceLegend             conduction.gui.components.ResourceLegend = conduction.gui.components.ResourceLegend.empty
         UtilAxes                    matlab.ui.control.UIAxes
         FlipAxes                    matlab.ui.control.UIAxes
         IdleAxes                    matlab.ui.control.UIAxes
@@ -140,9 +144,105 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
+        % Debugging controls
+        DebugScheduling             logical = true
+        DebugLogFile                string = "logs/debug-schedule.log"
+    end
+
+    methods (Access = public, Hidden = true)
+        function applyResourcesToCase(app, caseObj, desiredIds)
+            arguments
+                app
+                caseObj conduction.gui.models.ProspectiveCase
+                desiredIds string
+            end
+
+            if isempty(caseObj) || ~isa(caseObj, 'conduction.gui.models.ProspectiveCase')
+                return;
+            end
+
+            currentIds = caseObj.listRequiredResources();
+            desiredIds = string(desiredIds(:));
+
+            assignableIds = string.empty(0, 1);
+            if ~isempty(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    assignableIds = store.assignableIds();
+                end
+            end
+
+            if isempty(assignableIds)
+                desiredIds = string.empty(0, 1);
+            else
+                filtered = intersect(desiredIds, assignableIds, 'stable');
+                desiredIds = string(filtered(:));
+            end
+
+            toRemove = setdiff(currentIds, desiredIds);
+            if ~isempty(assignableIds)
+                disallowedCurrent = setdiff(currentIds, assignableIds, 'stable');
+                toRemove = unique([toRemove(:); disallowedCurrent(:)], 'stable');
+            else
+                toRemove = currentIds;
+            end
+
+            toAdd = setdiff(desiredIds, currentIds);
+
+            for k = 1:numel(toRemove)
+                caseObj.removeResource(toRemove(k));
+            end
+
+            for k = 1:numel(toAdd)
+                caseObj.assignResource(toAdd(k));
+            end
+
+            app.refreshResourceLegend();
+            app.ScheduleRenderer.refreshResourceHighlights(app);
+        end
+
+        function openResourceManagementDialog(app)
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            if isempty(app.ResourceManagerWindow) || ~isvalid(app.ResourceManagerWindow)
+                app.ResourceManagerWindow = conduction.gui.windows.ResourceManager(store, ...
+                    'Visible', 'on', 'OnClose', @(mgr) app.onResourceManagerClosed());
+            end
+
+            app.ResourceManagerWindow.show();
+        end
     end
 
     methods (Access = private)
+        function debugLog(app, where, message)
+            try
+                ts = char(datetime('now','Format','HH:mm:ss.SSS'));
+                line = sprintf('[DEBUG][%s] %s: %s\n', ts, where, message);
+                % Always print to console during debug
+                fprintf('%s', line);
+                % Append to log file
+                logPath = string(app.DebugLogFile);
+                if strlength(logPath) > 0
+                    [logDir,~,~] = fileparts(logPath);
+                    if ~isempty(logDir) && ~isfolder(logDir)
+                        mkdir(logDir);
+                    end
+                    fid = fopen(logPath, 'a');
+                    if fid > 0
+                        fprintf(fid, '%s', line);
+                        fclose(fid);
+                    end
+                end
+            catch
+            end
+        end
 
         function onGlobalKeyPress(app, event)
             if isempty(event) || ~isprop(event, 'Key')
@@ -176,6 +276,38 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.CaseStoreListeners = addlistener(app.CaseStore, 'SelectionChanged', ...
                 @(~, ~) app.onCaseStoreSelectionChanged());
+
+            app.ensureResourceStoreListener();
+
+            % Create checklists now that CaseManager exists
+            store = app.CaseManager.getResourceStore();
+            if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel) && ...
+                    (isempty(app.AddResourcesChecklist) || ~isvalid(app.AddResourcesChecklist))
+                app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                    app.AddResourcesPanel, store, ...
+                    'Title', "Resources", ...
+                    'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
+                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'ShowCreateButton', false);
+                if ~isempty(app.PendingAddResourceIds)
+                    app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+                end
+            elseif ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                app.AddResourcesChecklist.refresh();
+                app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+            end
+
+            if ~isempty(app.DrawerResourcesPanel) && isvalid(app.DrawerResourcesPanel) && ...
+                    (isempty(app.DrawerResourcesChecklist) || ~isvalid(app.DrawerResourcesChecklist))
+                app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                    app.DrawerResourcesPanel, store, ...
+                    'Title', "Resources", ...
+                    'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
+                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'ShowCreateButton', false);
+            elseif ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                app.DrawerResourcesChecklist.refresh();
+            end
 
             app.createEmbeddedCaseView();
         end
@@ -215,12 +347,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function updateCaseSelectionVisuals(app)
             selectedId = app.SelectedCaseId;
 
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] updateCaseSelectionVisuals - selectedId: %s\n', selectedId);
+            end
+
             if strlength(selectedId) > 0
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
                     overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
+                    if app.DebugShowCaseIds
+                        fprintf('[DEBUG] updateCaseSelectionVisuals - showSelectionOverlay returned: %d\n', overlayApplied);
+                    end
                 end
                 if ~overlayApplied && ~isempty(app.OptimizedSchedule)
+                    if app.DebugShowCaseIds
+                        fprintf('[DEBUG] updateCaseSelectionVisuals - overlay not applied, triggering full redraw\n');
+                    end
                     conduction.gui.app.redrawSchedule(app);
                 end
 
@@ -234,6 +376,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     end
                 end
             else
+                if app.DebugShowCaseIds
+                    fprintf('[DEBUG] updateCaseSelectionVisuals - clearing selection (selectedId empty)\n');
+                end
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(true);
                 elseif ~isempty(app.OptimizedSchedule)
@@ -351,6 +496,115 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function ensureResourceStoreListener(app)
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
+                delete(app.ResourceStoreListener);
+            end
+
+            app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) app.onResourceStoreChanged());
+        end
+
+        function onResourceStoreChanged(app)
+            % Prevent re-entrant calls during resource store updates
+            if app.IsUpdatingResourceStore
+                fprintf('[DEBUG] onResourceStoreChanged - BLOCKED (already updating)\n');
+                return;
+            end
+
+            app.IsUpdatingResourceStore = true;
+            try
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.refresh();
+                end
+
+                % Get the new/current ResourceStore
+                store = app.CaseManager.getResourceStore();
+
+                % Recreate AddResourcesChecklist with new store
+                if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel)
+                    if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                        delete(app.AddResourcesChecklist);
+                    end
+                    app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                        app.AddResourcesPanel, store, ...
+                        'Title', "Resources", ...
+                        'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
+                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'ShowCreateButton', false);
+                    if ~isempty(app.PendingAddResourceIds)
+                        app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+                    end
+                end
+
+                % Recreate DrawerResourcesChecklist with new store
+                if ~isempty(app.DrawerResourcesPanel) && isvalid(app.DrawerResourcesPanel)
+                    % Preserve current selection before recreating
+                    current = string.empty(0,1);
+                    if ~isempty(app.DrawerCurrentCaseId)
+                        [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+                        if ~isempty(caseObj)
+                            current = caseObj.listRequiredResources();
+                        end
+                    end
+
+                    if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                        delete(app.DrawerResourcesChecklist);
+                    end
+                    app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
+                        app.DrawerResourcesPanel, store, ...
+                        'Title', "Resources", ...
+                        'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
+                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'ShowCreateButton', false);
+                    app.DrawerResourcesChecklist.setSelection(current);
+                end
+
+                app.refreshResourceLegend();
+                if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
+            catch ME
+                app.IsUpdatingResourceStore = false;
+                rethrow(ME);
+            end
+            app.IsUpdatingResourceStore = false;
+        end
+
+        function onResourceManagerClosed(app)
+            app.ResourceManagerWindow = conduction.gui.windows.ResourceManager.empty;
+        end
+
+        function onAddResourcesSelectionChanged(app, resourceIds)
+            app.PendingAddResourceIds = string(resourceIds(:));
+        end
+
+        function onDrawerResourcesSelectionChanged(app, resourceIds)
+            % Don't apply changes during session restore
+            if app.IsRestoringSession
+                return;
+            end
+
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+
+            [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
+            if isempty(caseObj)
+                return;
+            end
+
+            newSelection = string(resourceIds(:));
+            app.applyResourcesToCase(caseObj, newSelection);
+            app.markDirty();
+            % CaseStore auto-refreshes via CaseManager listener - explicit refresh
+            % here causes cascading events that clear the selection overlay
+        end
+
+        % (moved applyResourcesToCase to a public methods block below)
+
     end
 
     % App state properties
@@ -359,6 +613,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStore conduction.gui.stores.CaseStore
         CasesView conduction.gui.components.CaseTableView
         CasesPopout conduction.gui.windows.CasesPopout
+        AddResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
+        DrawerResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
+        AddResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
+        DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
+        ResourceManagerWindow conduction.gui.windows.ResourceManager = conduction.gui.windows.ResourceManager.empty
+        PendingAddResourceIds string = string.empty(0, 1)
+        ResourceHighlightIds string = string.empty(0, 1)
+        LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+            'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}))
+        IsRestoringSession logical = false
 
         % Controllers
         ScheduleRenderer conduction.gui.controllers.ScheduleRenderer
@@ -414,9 +678,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     properties (Access = private)
         IsSyncingAvailableLabSelection logical = false
+        IsUpdatingResourceStore logical = false  % Guard against re-entrant calls
         CaseStoreListeners event.listener = event.listener.empty
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         IsHandlingTabSelection logical = false
+        ResourceStoreListener event.listener = event.listener.empty
     end
 
 
@@ -574,10 +840,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
             app.CanvasScheduleLayout.RowHeight = {'1x'};
-            app.CanvasScheduleLayout.ColumnWidth = {'1x'};
+            app.CanvasScheduleLayout.ColumnWidth = {'1x', 180};
             app.CanvasScheduleLayout.Padding = [0 0 0 0];
             app.CanvasScheduleLayout.RowSpacing = 0;
-            app.CanvasScheduleLayout.ColumnSpacing = 0;
+            app.CanvasScheduleLayout.ColumnSpacing = 8;
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
             app.ScheduleAxes.Layout.Row = 1;
@@ -588,6 +854,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleAxes.Box = 'on';
             app.ScheduleAxes.Color = [0 0 0];
             app.ScheduleAxes.Toolbar.Visible = 'off';
+
+            app.ResourceLegendPanel = uipanel(app.CanvasScheduleLayout);
+            app.ResourceLegendPanel.Layout.Row = 1;
+            app.ResourceLegendPanel.Layout.Column = 2;
+            app.ResourceLegendPanel.BorderType = 'none';
+            app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
+                app.ResourceLegendPanel.Scrollable = 'on';
+                app.ResourceLegendPanel.Visible = 'on';
+
+            app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
+                'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
 
             app.CanvasAnalyzeLayout = uigridlayout(app.CanvasAnalyzeTab);
             app.CanvasAnalyzeLayout.RowHeight = {'1.5x', '1x', '1.3x'};
@@ -794,6 +1071,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CaseManager = conduction.gui.controllers.CaseManager(targetDate, historicalCollection);
             end
 
+            app.initializeResourceLegend();
+
             % Initialize case table data store and embedded view
             app.initializeCaseTableComponents();
 
@@ -822,13 +1101,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function onScheduleBlockClicked(app, caseId)
+            fprintf('[DEBUG] onScheduleBlockClicked - CALLED with nargin=%d\n', nargin);
             if nargin < 2
+                fprintf('[DEBUG] onScheduleBlockClicked - EARLY RETURN (nargin < 2)\n');
                 return;
             end
+
+            fprintf('[DEBUG] onScheduleBlockClicked - caseId: %s\n', caseId);
 
             % Check if this is a lock-toggle request from double-click
             caseIdStr = string(caseId);
             if startsWith(caseIdStr, 'lock-toggle:')
+                fprintf('[DEBUG] onScheduleBlockClicked - lock-toggle detected\n');
                 % Extract the actual caseId from the prefix
                 actualCaseId = extractAfter(caseIdStr, 'lock-toggle:');
                 if strlength(actualCaseId) > 0
@@ -841,11 +1125,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Normal single-click behavior: select case
             % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
+            fprintf('[DEBUG] onScheduleBlockClicked - finding case by ID: %s\n', caseId);
+            fprintf('[DEBUG] onScheduleBlockClicked - CaseManager has %d cases\n', app.CaseManager.CaseCount);
+            % Log all case IDs in CaseManager for debugging
+            for i = 1:app.CaseManager.CaseCount
+                caseObj = app.CaseManager.getCase(i);
+                fprintf('[DEBUG]   Case %d: CaseId = "%s"\n', i, caseObj.CaseId);
+            end
             [~, caseIndex] = app.CaseManager.findCaseById(caseId);
+            fprintf('[DEBUG] onScheduleBlockClicked - found caseIndex: %d\n', caseIndex);
             if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
+                fprintf('[DEBUG] onScheduleBlockClicked - valid index, setting selection\n');
                 if ~isempty(app.CaseStore)
                     app.CaseStore.setSelection(caseIndex);
+                else
+                    fprintf('[DEBUG] onScheduleBlockClicked - CaseStore is empty!\n');
                 end
+            else
+                fprintf('[DEBUG] onScheduleBlockClicked - invalid caseIndex (nan or out of range)\n');
             end
 
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
@@ -878,6 +1175,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.stopAutoSaveTimer();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
 
+            if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
+                delete(app.ResourceStoreListener);
+            end
+
+            if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                delete(app.AddResourcesChecklist);
+            end
+
+            if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
+                delete(app.DrawerResourcesChecklist);
+            end
+
+            if ~isempty(app.ResourceManagerWindow) && isvalid(app.ResourceManagerWindow)
+                delete(app.ResourceManagerWindow);
+            end
+
+            if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                delete(app.ResourceLegend);
+            end
+
             if ~isempty(app.CaseStoreListeners)
                 delete(app.CaseStoreListeners);
                 app.CaseStoreListeners = event.listener.empty;
@@ -900,11 +1217,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function onCaseStoreSelectionChanged(app)
             % Respond to selection updates in the shared CaseStore.
+            % Skip during session restore to avoid premature UI updates
+            if app.IsRestoringSession
+                if app.DebugShowCaseIds
+                    fprintf('[DEBUG] onCaseStoreSelectionChanged - BLOCKED (IsRestoringSession=true)\n');
+                end
+                return;
+            end
+
             if isempty(app.CaseStore) || ~isa(app.CaseStore, 'conduction.gui.stores.CaseStore')
                 return;
             end
 
             selection = app.CaseStore.Selection;
+
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] onCaseStoreSelectionChanged - Selection: [%s], IsRestoringSession: %d\n', ...
+                    num2str(selection), app.IsRestoringSession);
+            end
 
             if isempty(selection)
                 app.SelectedCaseId = "";
@@ -916,6 +1246,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     app.SelectedCaseId = "";
                 end
+            end
+
+            if app.DebugShowCaseIds
+                fprintf('[DEBUG] onCaseStoreSelectionChanged - SelectedCaseId set to: %s\n', app.SelectedCaseId);
             end
 
             app.updateCaseSelectionVisuals();
@@ -1097,36 +1431,64 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Collect schedule IDs before deletion
-            scheduleCaseIds = string.empty(0, 1);
-            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                scheduleCases = app.OptimizedSchedule.cases();
-                if ~isempty(scheduleCases)
-                    scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
+            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.beginBatchUpdate();
+            end
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.beginBatchUpdate();
+            end
+
+            try
+                % Collect schedule IDs before deletion
+                scheduleCaseIds = string.empty(0, 1);
+                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                    scheduleCases = app.OptimizedSchedule.cases();
+                    if ~isempty(scheduleCases)
+                        scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
+                    end
                 end
-            end
 
-            % Gather locked IDs from both case objects and app-level lock list
-            lockedCaseIds = string.empty(0, 1);
-            for i = 1:caseCount
-                caseObj = app.CaseManager.getCase(i);
-                if caseObj.IsLocked
-                    lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                % Gather locked IDs from both case objects and app-level lock list
+                lockedCaseIds = string.empty(0, 1);
+                for i = 1:caseCount
+                    caseObj = app.CaseManager.getCase(i);
+                    if caseObj.IsLocked
+                        lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                    end
                 end
+                if ~isempty(app.LockedCaseIds)
+                    lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
+                end
+
+                % Remove unlocked cases from manager using a single filtered update
+                app.CaseManager.clearCasesExcept(lockedCaseIds);
+
+                caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
+                scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
+
+                app.CaseStore.clearSelection();
+                app.ensureDrawerSelectionValid();
+                app.finalizeCaseMutation(scheduleWasUpdated);
+
+            catch ME
+                % Ensure batch updates are ended even if error occurs
+                if ~isempty(app.OptimizationController)
+                    app.OptimizationController.endBatchUpdate(app);
+                end
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
+                end
+                rethrow(ME);
             end
-            if ~isempty(app.LockedCaseIds)
-                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
+
+            % End batch updates - refresh once after all operations
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.endBatchUpdate(app);
             end
-
-            % Remove unlocked cases from manager using a single filtered update
-            app.CaseManager.clearCasesExcept(lockedCaseIds);
-
-            caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
-            scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
-
-            app.CaseStore.clearSelection();
-            app.ensureDrawerSelectionValid();
-            app.finalizeCaseMutation(scheduleWasUpdated);
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.endBatchUpdate();
+            end
         end
 
         function clearAllCasesIncludingLocked(app)
@@ -1135,33 +1497,61 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            for i = caseCount:-1:1
-                app.CaseManager.removeCase(i);
+            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.beginBatchUpdate();
+            end
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.beginBatchUpdate();
             end
 
-            app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
-            app.OptimizationOutcome = struct();
-            app.IsOptimizationDirty = true;
-            app.OptimizationLastRun = NaT;
+            try
+                for i = caseCount:-1:1
+                    app.CaseManager.removeCase(i);
+                end
 
-            app.LockedCaseIds = string.empty;
-            app.TimeControlLockedCaseIds = string.empty;
-            app.TimeControlBaselineLockedIds = string.empty;
+                app.OptimizedSchedule = conduction.DailySchedule.empty;
+                app.SimulatedSchedule = conduction.DailySchedule.empty;
+                app.OptimizationOutcome = struct();
+                app.IsOptimizationDirty = true;
+                app.OptimizationLastRun = NaT;
 
-            app.SelectedCaseId = "";
-            if ~isempty(app.CaseStore)
-                app.CaseStore.clearSelection();
+                app.LockedCaseIds = string.empty;
+                app.TimeControlLockedCaseIds = string.empty;
+                app.TimeControlBaselineLockedIds = string.empty;
+
+                app.SelectedCaseId = "";
+                if ~isempty(app.CaseStore)
+                    app.CaseStore.clearSelection();
+                end
+                app.DrawerCurrentCaseId = "";
+                app.DrawerController.closeDrawer(app);
+
+                app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+                if app.IsTimeControlActive
+                    app.ScheduleRenderer.updateActualTimeIndicator(app);
+                end
+
+                app.finalizeCaseMutation(false);
+
+            catch ME
+                % Ensure batch updates are ended even if error occurs
+                if ~isempty(app.OptimizationController)
+                    app.OptimizationController.endBatchUpdate(app);
+                end
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
+                end
+                rethrow(ME);
             end
-            app.DrawerCurrentCaseId = "";
-            app.DrawerController.closeDrawer(app);
 
-            app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
-            if app.IsTimeControlActive
-                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            % End batch updates - refresh once after all operations
+            if ~isempty(app.OptimizationController)
+                app.OptimizationController.endBatchUpdate(app);
             end
-
-            app.finalizeCaseMutation(false);
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.endBatchUpdate();
+            end
         end
 
         function scheduleWasUpdated = removeCaseIdsFromSchedules(app, caseIdsToRemove)
@@ -1450,9 +1840,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.IsDirty = false;
                 app.updateWindowTitle();
 
-                % Success message
-                uialert(app.UIFigure, sprintf('Session loaded from:\n%s', filepath), ...
-                    'Session Loaded', 'Icon', 'success');
+                % Success: log to console (avoid modal popups that can disrupt state)
+                fprintf('Session loaded from: %s\n', filepath);
 
             catch ME
                 % Error dialog
@@ -1599,8 +1988,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.updateCasesTable();
-            app.OptimizationController.markOptimizationDirty(app);
+            if ~app.IsRestoringSession
+                app.OptimizationController.markOptimizationDirty(app);
+            end
             app.TestingModeController.updateTestingInfoText(app);
+            app.refreshResourceLegend();
         end
 
 
@@ -1643,6 +2035,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Initialize empty schedule visualization for the target date
 
             app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            app.LastResourceMetadata = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+                'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
+            app.refreshResourceLegend();
+            conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+            if ismethod(app, 'debugLog'); app.debugLog('initializeEmptySchedule', 'empty schedule drawn'); end
         end
 
         function initializeOptimizationState(app)
@@ -1686,12 +2083,82 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.gui.app.analytics.resetSummaries(app);
         end
 
+        function initializeResourceLegend(app)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+            app.refreshResourceLegend();
+        end
+
+        function refreshResourceLegend(app)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
+
+            if ~isempty(app.CaseManager)
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    resourceTypes = store.snapshot();
+                end
+                resourceSummary = app.CaseManager.caseResourceSummary();
+            end
+
+            app.updateResourceLegendContents(resourceTypes, resourceSummary);
+        end
+
+        function updateResourceLegendContents(app, resourceTypes, resourceSummary)
+            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
+                return;
+            end
+
+            if nargin < 2 || isempty(resourceTypes)
+                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            end
+            if nargin < 3 || isempty(resourceSummary)
+                resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
+            end
+
+            app.LastResourceMetadata = struct('resourceTypes', resourceTypes, 'resourceSummary', resourceSummary);
+
+            allowedIds = string({resourceTypes.Id});
+            if isempty(allowedIds)
+                trimmedHighlight = string.empty(0, 1);
+            else
+                trimmedHighlight = intersect(app.ResourceHighlightIds, allowedIds, 'stable');
+            end
+
+            if numel(trimmedHighlight) > 1
+                trimmedHighlight = trimmedHighlight(1);
+            end
+            highlightChanged = ~isequal(trimmedHighlight, app.ResourceHighlightIds);
+            app.ResourceHighlightIds = trimmedHighlight;
+
+            app.ResourceLegend.setData(resourceTypes, resourceSummary);
+            app.ResourceLegend.setHighlights(trimmedHighlight, true);
+
+            app.ScheduleRenderer.refreshResourceHighlights(app);
+            if ismethod(app, 'debugLog'); app.debugLog('updateResourceLegendContents', sprintf('highlights=%s', strjoin(app.ResourceHighlightIds,','))); end
+        end
+
+        function onResourceLegendHighlightChanged(app, highlightIds)
+            highlightIds = unique(string(highlightIds(:)), 'stable');
+            if ~isequal(highlightIds, app.ResourceHighlightIds)
+                app.ResourceHighlightIds = highlightIds;
+            end
+            app.ScheduleRenderer.refreshResourceHighlights(app);
+        end
+
 
         function updateCasesTable(app)
             if isempty(app.CaseStore)
                 return;
             end
-            app.CaseStore.refresh();
+            % CaseStore auto-refreshes via CaseManager listener - no need for explicit refresh here
+            % This prevents double-refresh (once from listener, once from here)
+            % app.CaseStore.refresh();  % REMOVED - redundant with auto-refresh
         end
 
 
@@ -1733,6 +2200,16 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty;
+            app.IsRestoringSession = true;
+            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'begin'); end
+            app.IsRestoringSession = true;
+            try
+            % Restore resource definitions before adding cases
+            snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            if isfield(sessionData, 'resourceTypes') && ~isempty(sessionData.resourceTypes)
+                snapshot = sessionData.resourceTypes;
+            end
+            app.restoreResourceStoreFromSnapshot(snapshot);
 
             % Restore target date
             app.TargetDate = sessionData.targetDate;
@@ -1743,6 +2220,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Restore cases
             if isfield(sessionData, 'cases') && ~isempty(sessionData.cases)
                 restoredCases = conduction.session.deserializeProspectiveCase(sessionData.cases);
+
+                % Suppress CaseStore auto-refresh during batch case loading for performance
+                batchUpdateActive = false;
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.beginBatchUpdate();
+                    batchUpdateActive = true;
+                end
+
+                try
                 for i = 1:length(restoredCases)
                     app.CaseManager.addCase( ...
                         restoredCases(i).OperatorName, ...
@@ -1757,15 +2243,36 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     caseObj.IsLocked = restoredCases(i).IsLocked;
 
                     % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
-                    if isfield(restoredCases(i), 'CaseId') && strlength(restoredCases(i).CaseId) > 0
+                    % restoredCases(i) is a ProspectiveCase object, not a struct, so use property access
+                    if strlength(restoredCases(i).CaseId) > 0
+                        fprintf('[DEBUG] importAppState - Restoring CaseId for case %d: %s -> %s\n', ...
+                            i, caseObj.CaseId, restoredCases(i).CaseId);
                         caseObj.CaseId = restoredCases(i).CaseId;
+                    else
+                        fprintf('[DEBUG] importAppState - NO CaseId to restore for case %d (CaseId is empty)\n', i);
                     end
-                    if isfield(restoredCases(i), 'CaseNumber') && ~isnan(restoredCases(i).CaseNumber)
+                    if ~isnan(restoredCases(i).CaseNumber)
                         caseObj.CaseNumber = restoredCases(i).CaseNumber;
                     end
 
                     % Reset case status to "pending" - session loads fresh
                     caseObj.CaseStatus = "pending";
+
+                    % Restore resource assignments
+                    try
+                        caseObj.clearResources();
+                        resourceIds = restoredCases(i).listRequiredResources();
+                        if isempty(resourceIds)
+                            resourceIds = restoredCases(i).RequiredResourceIds;
+                        end
+                        resourceIds = string(resourceIds(:));
+                        resourceIds = resourceIds(strlength(resourceIds) > 0);
+                        for rid = resourceIds(:)'
+                            caseObj.assignResource(rid);
+                        end
+                    catch
+                        % best effort
+                    end
 
                     % Clear actual times - no execution data on load
                     caseObj.ActualStartTime = NaN;
@@ -1780,6 +2287,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     % Legacy session without counter - validate and sync
                     app.CaseManager.validateAndSyncCaseNumbers();
+                end
+
+                catch ME
+                    % Ensure batch update is ended even if error occurs
+                    if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                        app.CaseStore.endBatchUpdate();
+                    end
+                    rethrow(ME);
+                end
+
+                % End batch update - refresh CaseStore once after all cases loaded
+                if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
                 end
             end
 
@@ -1872,13 +2392,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     sessionData.operatorColors);
             end
 
-            % Trigger UI updates
+            % Trigger UI updates (while IsRestoringSession is still true)
             app.updateCasesTable();
             app.OptimizationController.updateOptimizationOptionsSummary(app);
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
+            app.refreshResourceLegend();
 
             % Re-render schedule
+            app.IsOptimizationDirty = false;  % Loaded schedules should not appear stale
             if ~isempty(app.OptimizedSchedule)
                 conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, ...
                     app.OptimizationOutcome);
@@ -1886,8 +2408,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
             end
 
+            if isfield(sessionData, 'resourceHighlights') && ~isempty(sessionData.resourceHighlights)
+                highlights = string(sessionData.resourceHighlights);
+                if numel(highlights) > 1
+                    highlights = highlights(1);
+                end
+                app.ResourceHighlightIds = highlights(:);
+                if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                    app.ResourceLegend.setHighlights(app.ResourceHighlightIds, true);
+                end
+            else
+                app.ResourceHighlightIds = string.empty(0, 1);
+                if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
+                    app.ResourceLegend.setHighlights(string.empty(0, 1), true);
+                end
+            end
+            app.ScheduleRenderer.refreshResourceHighlights(app);
+
             % Clear timeline position (time control is OFF)
             app.CaseManager.setCurrentTime(NaN);
+
+            % End session restore mode - all UI updates complete
+            app.IsRestoringSession = false;
+            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'session restore complete'); end
 
             % Notify user
             if isfield(sessionData, 'savedDate')
@@ -1896,6 +2439,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 fprintf('Session loaded successfully\n');
             end
+            catch ME
+                app.IsRestoringSession = false;
+                rethrow(ME);
+            end
+            
         end
 
         function sessionData = exportAppState(app)
@@ -1972,6 +2520,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Operator colors
             sessionData.operatorColors = ...
                 conduction.session.serializeOperatorColors(app.OperatorColors);
+
+            % Resource model
+            resourceStore = app.CaseManager.getResourceStore();
+            if isempty(resourceStore)
+                sessionData.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            else
+                sessionData.resourceTypes = resourceStore.snapshot();
+            end
+            sessionData.resourceHighlights = app.ResourceHighlightIds;
 
             % Historical data reference
             historicalCollection = app.CaseManager.getHistoricalCollection();
@@ -2102,5 +2659,60 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function restoreResourceStoreFromSnapshot(app, snapshot)
+            if nargin < 2 || isempty(snapshot)
+                store = conduction.gui.stores.ResourceStore();
+                app.CaseManager.setResourceStore(store);
+                app.onResourceStoreChanged();
+                return;
+            end
+
+            if ~isstruct(snapshot)
+                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            end
+
+            resourceTypes = conduction.gui.models.ResourceType.empty;
+            for idx = 1:numel(snapshot)
+                entry = snapshot(idx);
+                try
+                    id = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Id', sprintf('resource_%03d', idx)));
+                    name = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Name', sprintf('Resource %d', idx)));
+                    capacity = double(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Capacity', 0));
+                    colorValue = conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Color', [0.45 0.45 0.45]);
+                    colorValue = double(colorValue(:)');
+                    if numel(colorValue) ~= 3 || any(~isfinite(colorValue))
+                        colorValue = [0.45 0.45 0.45];
+                    end
+                    pattern = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Pattern', "solid"));
+                    isTracked = logical(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'IsTracked', true));
+
+                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue, pattern, "", isTracked); %#ok<AGROW>
+                catch
+                    % Skip malformed entries
+                end
+            end
+
+            store = conduction.gui.stores.ResourceStore(resourceTypes);
+            app.CaseManager.setResourceStore(store);
+            app.onResourceStoreChanged();
+            if ~isempty(app.ResourceLegendPanel) && isvalid(app.ResourceLegendPanel)
+                if isempty(resourceTypes)
+                    app.ResourceLegendPanel.Visible = 'off';
+                else
+                    app.ResourceLegendPanel.Visible = 'on';
+                end
+            end
+        end
+
+    end
+
+    methods (Static, Access = private)
+        function value = safeField(entry, fieldName, defaultValue)
+            if isstruct(entry) && isfield(entry, fieldName)
+                value = entry.(fieldName);
+            else
+                value = defaultValue;
+            end
+        end
     end
 end

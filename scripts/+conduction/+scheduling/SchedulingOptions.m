@@ -17,6 +17,7 @@ classdef SchedulingOptions
         AvailableLabs double = double.empty(1, 0)
         Verbose (1,1) logical = true
         TimeStep (1,1) double {mustBePositive, mustBeFinite} = 10
+        ResourceTypes struct = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {})
     end
 
     properties (Constant, Access = private)
@@ -67,6 +68,8 @@ classdef SchedulingOptions
             addParameter(parser, 'Verbose', conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE, @islogical);
             addParameter(parser, 'TimeStep', conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP, ...
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
+            addParameter(parser, 'ResourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+                @(x) isempty(x) || isstruct(x));
 
             parse(parser, params{:});
             results = parser.Results;
@@ -84,14 +87,15 @@ classdef SchedulingOptions
                 results.LockedCaseConstraints, ...
                 results.AvailableLabs, ...
                 results.Verbose, ...
-                results.TimeStep);
+                results.TimeStep, ...
+                results.ResourceTypes);
         end
     end
 
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
                 maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
-                lockedCaseConstraints, availableLabs, verbose, timeStep)
+                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -107,6 +111,9 @@ classdef SchedulingOptions
                 availableLabs = [];
                 verbose = conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE;
                 timeStep = conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP;
+                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            elseif nargin < 14
+                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
             end
 
             if isempty(labStartTimes)
@@ -134,6 +141,7 @@ classdef SchedulingOptions
             obj.AvailableLabs = conduction.scheduling.SchedulingOptions.normalizeAvailableLabs(availableLabs, numLabs);
             obj.Verbose = verbose;
             obj.TimeStep = timeStep;
+            obj.ResourceTypes = conduction.scheduling.SchedulingOptions.normalizeResourceTypes(resourceTypes);
         end
 
         function metric = normalizedMetric(obj)
@@ -158,7 +166,8 @@ classdef SchedulingOptions
                 'LockedCaseConstraints', obj.LockedCaseConstraints, ...
                 'AvailableLabs', obj.AvailableLabs, ...
                 'Verbose', obj.Verbose, ...
-                'TimeStep', obj.TimeStep);
+                'TimeStep', obj.TimeStep, ...
+                'ResourceTypes', obj.ResourceTypes);
         end
 
         function newObj = with(obj, varargin)
@@ -196,6 +205,71 @@ classdef SchedulingOptions
                     'Unsupported case filter: %s', cand);
             end
             filter = conduction.scheduling.SchedulingOptions.VALID_CASE_FILTERS(matches);
+        end
+
+        function resources = normalizeResourceTypes(candidate)
+            base = struct('Id', "", 'Name', "", 'Capacity', 0, 'Color', [0.5 0.5 0.5], 'Pattern', "", 'IsTracked', true);
+
+            if nargin == 0 || isempty(candidate)
+                resources = repmat(base, 0, 1);
+                return;
+            end
+
+            if ~isstruct(candidate)
+                error('SchedulingOptions:InvalidResourceTypes', ...
+                    'ResourceTypes must be provided as a struct array.');
+            end
+
+            resources = repmat(base, 1, numel(candidate));
+            for idx = 1:numel(candidate)
+                entry = candidate(idx);
+
+                if ~isfield(entry, 'Id') || isempty(entry.Id)
+                    error('SchedulingOptions:InvalidResourceTypes', ...
+                        'Each resource entry must include an Id field.');
+                end
+                resources(idx).Id = string(entry.Id);
+
+                if isfield(entry, 'Name') && ~isempty(entry.Name)
+                    resources(idx).Name = string(entry.Name);
+                else
+                    resources(idx).Name = resources(idx).Id;
+                end
+
+                if isfield(entry, 'Capacity') && ~isempty(entry.Capacity)
+                    capacityValue = double(entry.Capacity);
+                else
+                    capacityValue = 0;
+                end
+                if ~isfinite(capacityValue) || capacityValue < 0
+                    error('SchedulingOptions:InvalidResourceCapacity', ...
+                        'Resource capacity must be a finite, nonnegative value.');
+                end
+                resources(idx).Capacity = capacityValue;
+
+                if isfield(entry, 'Color') && ~isempty(entry.Color)
+                    colorValue = double(entry.Color(:)');
+                    if numel(colorValue) ~= 3 || any(~isfinite(colorValue))
+                        error('SchedulingOptions:InvalidResourceColor', ...
+                            'Resource color must be a finite 1x3 RGB array.');
+                    end
+                    resources(idx).Color = colorValue;
+                else
+                    resources(idx).Color = base.Color;
+                end
+
+                if isfield(entry, 'Pattern') && ~isempty(entry.Pattern)
+                    resources(idx).Pattern = string(entry.Pattern);
+                else
+                    resources(idx).Pattern = base.Pattern;
+                end
+
+                if isfield(entry, 'IsTracked') && ~isempty(entry.IsTracked)
+                    resources(idx).IsTracked = logical(entry.IsTracked);
+                else
+                    resources(idx).IsTracked = base.IsTracked;
+                end
+            end
         end
 
         function labs = normalizeAvailableLabs(candidate, numLabs)

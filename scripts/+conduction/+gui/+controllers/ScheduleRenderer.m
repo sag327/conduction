@@ -57,6 +57,8 @@ classdef ScheduleRenderer < handle
 
             obj.enableCaseDrag(app);
 
+            conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
@@ -108,6 +110,22 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
+            % Always fetch fresh resource metadata from authoritative sources
+            % This prevents stale data issues when loading sessions
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
+
+            if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
+                resourceStore = app.CaseManager.getResourceStore();
+                if ~isempty(resourceStore) && isvalid(resourceStore)
+                    resourceTypes = resourceStore.snapshot();
+                end
+                resourceSummary = app.CaseManager.caseResourceSummary();
+            end
+
+            app.updateResourceLegendContents(resourceTypes, resourceSummary);
+            obj.refreshResourceHighlights(app);
+
 
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
@@ -129,6 +147,36 @@ classdef ScheduleRenderer < handle
 
             % Bind drag after everything is drawn
             obj.enableCaseDrag(app);
+        end
+
+        function refreshResourceHighlights(~, app)
+            % Ensure we have a valid axes to draw on
+            if isempty(app)
+                return;
+            end
+            if ~isprop(app, 'ScheduleAxes') || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+
+            % Gather resource types from app state (legend/store snapshot)
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            try
+                if ~isempty(app.LastResourceMetadata) && isfield(app.LastResourceMetadata, 'resourceTypes')
+                    resourceTypes = app.LastResourceMetadata.resourceTypes;
+                end
+            catch
+                % Ignore access issues; fall back to empty
+            end
+
+            % Choose the correct schedule to overlay (respects time control)
+            scheduleForRender = app.getScheduleForRendering();
+            if isempty(scheduleForRender)
+                conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+                return;
+            end
+
+            % Draw overlays
+            conduction.gui.renderers.ResourceOverlayRenderer.draw(app, scheduleForRender, resourceTypes, app.ResourceHighlightIds);
         end
 
         % REALTIME-SCHEDULING: NOW Line Drag Functionality
@@ -1663,6 +1711,7 @@ classdef ScheduleRenderer < handle
 
         function invokeCaseBlockClick(~, app, rectHandle)
             if isempty(rectHandle) || ~isgraphics(rectHandle)
+                fprintf('[DEBUG] invokeCaseBlockClick - rectHandle is empty or invalid\n');
                 return;
             end
 
@@ -1670,12 +1719,22 @@ classdef ScheduleRenderer < handle
             callback = [];
             caseId = "";
 
+            fprintf('[DEBUG] invokeCaseBlockClick - userData is struct: %d\n', isstruct(userData));
             if isstruct(userData)
+                fprintf('[DEBUG] invokeCaseBlockClick - userData fields: %s\n', strjoin(fieldnames(userData), ', '));
                 if isfield(userData, 'caseClickedFcn')
                     callback = userData.caseClickedFcn;
+                    fprintf('[DEBUG] invokeCaseBlockClick - caseClickedFcn exists, type: %s, isempty: %d\n', ...
+                        class(callback), isempty(callback));
+                    if isa(callback, 'function_handle')
+                        fprintf('[DEBUG] invokeCaseBlockClick - callback function: %s\n', func2str(callback));
+                    end
                 end
                 if isfield(userData, 'caseId')
                     caseId = string(userData.caseId);
+                    fprintf('[DEBUG] invokeCaseBlockClick - extracted caseId: %s\n', caseId);
+                else
+                    fprintf('[DEBUG] invokeCaseBlockClick - NO caseId field in UserData!\n');
                 end
             end
 
@@ -1707,10 +1766,23 @@ classdef ScheduleRenderer < handle
 
                 if isempty(callback)
                     if strlength(callbackArg) > 0
+                        fprintf('[DEBUG] invokeCaseBlockClick - calling onScheduleBlockClicked with: %s\n', callbackArg);
                         app.onScheduleBlockClicked(callbackArg);
+                    else
+                        fprintf('[DEBUG] invokeCaseBlockClick - callbackArg is EMPTY, NOT calling onScheduleBlockClicked\n');
                     end
                 else
-                    callback(callbackArg);
+                    fprintf('[DEBUG] invokeCaseBlockClick - calling custom callback with arg: %s\n', callbackArg);
+                    try
+                        callback(callbackArg);
+                        fprintf('[DEBUG] invokeCaseBlockClick - custom callback completed\n');
+                    catch cbME
+                        fprintf('[DEBUG] invokeCaseBlockClick - custom callback FAILED: %s\n', cbME.message);
+                        fprintf('[DEBUG] invokeCaseBlockClick - falling back to onScheduleBlockClicked\n');
+                        if strlength(callbackArg) > 0
+                            app.onScheduleBlockClicked(callbackArg);
+                        end
+                    end
                 end
             catch ME
                 warning('ScheduleRenderer:CaseClickFailed', 'Case click handler failed: %s', ME.message);

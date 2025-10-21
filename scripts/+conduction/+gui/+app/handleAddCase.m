@@ -23,12 +23,28 @@ function handleAddCase(app)
     try
         app.CaseManager.addCase(operatorName, procedureName, duration, specificLab, isFirstCase, admissionStatus);
 
+        % Assign selected resources to the new case
+        newCase = app.CaseManager.getCase(app.CaseManager.CaseCount);
+        selectedIds = app.PendingAddResourceIds;
+        if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+            selectedIds = app.AddResourcesChecklist.getSelection();
+        end
+        app.applyResourcesToCase(newCase, selectedIds);
+
+        if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+            app.CaseStore.refresh();
+        end
+
         % Reset form controls back to defaults.
         app.OperatorDropDown.Value = app.OperatorDropDown.Items{1};
         app.ProcedureDropDown.Value = app.ProcedureDropDown.Items{1};
         app.SpecificLabDropDown.Value = 'Any Lab';
         app.FirstCaseCheckBox.Value = false;
         app.AdmissionStatusDropDown.Value = 'outpatient';
+        app.PendingAddResourceIds = string.empty(0, 1);
+        if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+            app.AddResourcesChecklist.setSelection(string.empty(0, 1));
+        end
 
         % Collapse constraint panel if it was left open.
         if strcmp(app.ConstraintPanel.Visible, 'on')

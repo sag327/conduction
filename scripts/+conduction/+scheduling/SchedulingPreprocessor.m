@@ -100,6 +100,56 @@ classdef SchedulingPreprocessor
             prepared.lockedLabs = lockedLabs;
             prepared.availableLabs = availableLabs;
             prepared.closedLabs = find(closedLabsMask);
+
+            resourceTypes = options.ResourceTypes;
+            if isempty(resourceTypes)
+                prepared.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                prepared.resourceIds = string.empty(0, 1);
+                prepared.resourceCapacities = double.empty(0, 1);
+                prepared.caseResourceMatrix = false(prepared.numCases, 0);
+                prepared.caseResourceIds = repmat({string.empty(0, 1)}, prepared.numCases, 1);
+                prepared.unknownCaseResourceIds = string.empty(0, 1);
+            else
+                resourceIds = string({resourceTypes.Id});
+                resourceCapacities = zeros(1, numel(resourceTypes));
+                for idx = 1:numel(resourceTypes)
+                    resourceCapacities(idx) = double(resourceTypes(idx).Capacity);
+                end
+
+                caseResourceMatrix = false(prepared.numCases, numel(resourceTypes));
+                caseResourceIds = repmat({string.empty(0, 1)}, prepared.numCases, 1);
+                unknownAssignments = string.empty(0, 1);
+
+                hasRequiredField = isfield(cases, 'requiredResourceIds');
+
+                for caseIdx = 1:prepared.numCases
+                    if hasRequiredField
+                        rawIds = cases(caseIdx).requiredResourceIds;
+                    else
+                        rawIds = string.empty(0, 1);
+                    end
+
+                    rawIds = string(rawIds);
+                    rawIds = rawIds(strlength(rawIds) > 0);
+                    caseResourceIds{caseIdx} = rawIds(:);
+
+                    for rid = reshape(rawIds, 1, [])
+                        matchIdx = find(resourceIds == rid, 1, 'first');
+                        if isempty(matchIdx)
+                            unknownAssignments(end+1, 1) = rid; %#ok<AGROW>
+                            continue;
+                        end
+                        caseResourceMatrix(caseIdx, matchIdx) = true;
+                    end
+                end
+
+                prepared.resourceTypes = resourceTypes;
+                prepared.resourceIds = resourceIds;
+                prepared.resourceCapacities = resourceCapacities;
+                prepared.caseResourceMatrix = caseResourceMatrix;
+                prepared.caseResourceIds = caseResourceIds;
+                prepared.unknownCaseResourceIds = unique(unknownAssignments, 'stable');
+            end
         end
     end
 

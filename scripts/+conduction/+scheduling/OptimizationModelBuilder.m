@@ -31,6 +31,24 @@ classdef OptimizationModelBuilder
             labPreferences = prepared.labPreferences;
             caseOperators = prepared.operatorIndex;
 
+            if isfield(prepared, 'caseResourceMatrix')
+                caseResourceMatrix = prepared.caseResourceMatrix;
+            else
+                caseResourceMatrix = false(numCases, 0);
+            end
+
+            if isfield(prepared, 'resourceCapacities')
+                resourceCapacities = prepared.resourceCapacities;
+            else
+                resourceCapacities = double.empty(0, 1);
+            end
+
+            if isfield(prepared, 'resourceIds')
+                resourceIds = prepared.resourceIds;
+            else
+                resourceIds = string.empty(0, 1);
+            end
+
             % Locked case information
             lockedStartTimes = prepared.lockedStartTimes;
             lockedLabs = prepared.lockedLabs;
@@ -407,6 +425,13 @@ classdef OptimizationModelBuilder
             A = A(1:ineqRowIdx, :);
             b = b(1:ineqRowIdx);
 
+            [resourceA, resourceb] = conduction.scheduling.OptimizationModelBuilder.buildResourceCapacityConstraints( ...
+                caseResourceMatrix, resourceCapacities, numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes);
+            if ~isempty(resourceA)
+                A = [A; resourceA];
+                b = [b; resourceb];
+            end
+
             % --- Objective vector ---------------------------------------------------
             if verbose
                 fprintf('Building objective vector (%s)...', optimizationMetric);
@@ -505,6 +530,95 @@ classdef OptimizationModelBuilder
             model.uniqueOperators = uniqueOperators;
             model.optimizationMetric = optimizationMetric;
             model.enforceMidnight = enforceMidnight;
+            model.resourceCapacities = resourceCapacities;
+            model.caseResourceMatrix = caseResourceMatrix;
+            model.resourceIds = resourceIds;
+        end
+    end
+
+    methods (Static, Access = private)
+        function [resourceA, resourceb] = buildResourceCapacityConstraints(caseResourceMatrix, resourceCapacities, ...
+                numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes)
+
+        if isempty(caseResourceMatrix) || isempty(resourceCapacities)
+            resourceA = sparse(0, numVars);
+            resourceb = zeros(0, 1);
+            return;
+        end
+
+        numResources = size(caseResourceMatrix, 2);
+        if numResources == 0
+            resourceA = sparse(0, numVars);
+            resourceb = zeros(0, 1);
+            return;
+        end
+
+        constraintEstimate = max(1, numResources * numTimeSlots);
+        nzEstimate = max(1, nnz(caseResourceMatrix) * numLabs);
+        resourceA = spalloc(constraintEstimate, numVars, nzEstimate * 4);
+        resourceb = zeros(constraintEstimate, 1);
+
+        rowIdx = 0;
+
+        for resourceIdx = 1:numResources
+            resourceCases = find(caseResourceMatrix(:, resourceIdx));
+            if isempty(resourceCases)
+                continue;
+            end
+
+            capacity = resourceCapacities(resourceIdx);
+            if isinf(capacity)
+                continue;
+            end
+            if isempty(capacity) || ~isfinite(capacity) || capacity < 0
+                capacity = 0;
+            end
+
+            for tIdx = 1:numTimeSlots
+                currentTime = timeSlots(tIdx);
+                rowCols = [];
+
+                for caseIdx = resourceCases(:)'
+                    setupDuration = caseSetupTimes(caseIdx);
+                    procDuration = caseProcTimes(caseIdx);
+                    if procDuration <= 0
+                        continue;
+                    end
+
+                    for labIdx = 1:numLabs
+                        if labPreferences(caseIdx, labIdx) ~= 1
+                            continue;
+                        end
+
+                        validSlots = validTimeSlots{labIdx};
+                        for startIdx = validSlots(:)'
+                            procStart = timeSlots(startIdx) + setupDuration;
+                            procEnd = procStart + procDuration;
+
+                            if procStart <= currentTime && procEnd > currentTime
+                                rowCols(end+1) = getVarIndex(caseIdx, labIdx, startIdx); %#ok<AGROW>
+                            end
+                        end
+                    end
+                end
+
+                if isempty(rowCols)
+                    continue;
+                end
+
+                rowIdx = rowIdx + 1;
+                if rowIdx > size(resourceA, 1)
+                    % Grow sparse matrix if estimate was too small
+                    resourceA(rowIdx, :) = sparse(1, numVars);
+                    resourceb(rowIdx, 1) = 0;
+                end
+                resourceA(rowIdx, rowCols) = 1;
+                resourceb(rowIdx) = capacity;
+            end
+        end
+
+        resourceA = resourceA(1:rowIdx, :);
+        resourceb = resourceb(1:rowIdx);
         end
     end
 end

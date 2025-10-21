@@ -28,4 +28,12 @@ function buildCaseDetailsSection(app, leftGrid)
     app.ProcedureDropDown.Layout.Row = 12;
     app.ProcedureDropDown.Layout.Column = [2 4];
     app.ProcedureDropDown.ValueChangedFcn = @(src, event) app.ProcedureDropDownValueChanged(event);
+
+    resourcesPanel = uipanel(leftGrid);
+    resourcesPanel.Layout.Row = 13;
+    resourcesPanel.Layout.Column = [1 4];
+    resourcesPanel.BorderType = 'none';
+    resourcesPanel.BackgroundColor = app.TabAdd.BackgroundColor;
+
+    app.AddResourcesPanel = resourcesPanel;
 end
