@@ -109,6 +109,10 @@ classdef DailySchedule
                 legacyCases(idx).preferredLab = conduction.DailySchedule.fieldOr(src, 'preferredLab', []);
                 legacyCases(idx).admissionStatus = conduction.DailySchedule.fieldOr(src, 'admissionStatus', '');
                 legacyCases(idx).date = conduction.DailySchedule.fieldOr(src, 'date', obj.Date);
+
+                % Copy resource assignments to ensure capacity constraints are enforced
+                resourceIds = conduction.DailySchedule.fieldOr(src, 'requiredResourceIds', string.empty(0, 1));
+                legacyCases(idx).requiredResourceIds = string(resourceIds(:));
             end
         end
 
@@ -543,7 +547,8 @@ classdef DailySchedule
                 'priority', [], ...
                 'preferredLab', [], ...
                 'admissionStatus', '', ...
-                'date', NaT ...
+                'date', NaT, ...
+                'requiredResourceIds', string.empty(0, 1) ...
             );
         end
 
