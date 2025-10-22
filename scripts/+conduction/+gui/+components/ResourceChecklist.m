@@ -73,6 +73,7 @@ classdef ResourceChecklist < handle
                 keys = string(obj.CheckboxMap.keys);
                 obj.Selection = resourceIds(ismember(resourceIds, keys));
             end
+
             obj.syncCheckboxes();
 
             % Only fire SelectionChanged if selection actually changed

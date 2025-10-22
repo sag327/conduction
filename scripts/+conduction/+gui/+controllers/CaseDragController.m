@@ -304,6 +304,14 @@ classdef CaseDragController < handle
                 set(obj.SelectionRect, 'Position', selPos, 'Visible', 'on');
             end
 
+            % Show selection box immediately before calculating resize grip
+            try
+                uistack(obj.SelectionRect, 'top');
+                drawnow limitrate nocallbacks;
+            catch
+                % Ignore stacking/drawnow errors
+            end
+
             % Create/update resize grip when case is selectable
             % Allow resizing even when the case is locked; only block during time control
             canResize = ~timeControlActive;

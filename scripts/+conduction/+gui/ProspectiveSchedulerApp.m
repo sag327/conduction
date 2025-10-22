@@ -157,12 +157,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = public, Hidden = true)
-        function applyResourcesToCase(app, caseObj, desiredIds)
+        function hasChanges = applyResourcesToCase(app, caseObj, desiredIds)
             arguments
                 app
                 caseObj conduction.gui.models.ProspectiveCase
                 desiredIds string
             end
+
+            hasChanges = false;
 
             if isempty(caseObj) || ~isa(caseObj, 'conduction.gui.models.ProspectiveCase')
                 return;
@@ -196,6 +198,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             toAdd = setdiff(desiredIds, currentIds);
 
+            hasChanges = ~isempty(toAdd) || ~isempty(toRemove);
+
             for k = 1:numel(toRemove)
                 caseObj.removeResource(toRemove(k));
             end
@@ -204,8 +208,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 caseObj.assignResource(toAdd(k));
             end
 
-            app.refreshResourceLegend();
-            app.ScheduleRenderer.refreshResourceHighlights(app);
+            if hasChanges
+                app.refreshResourceLegend();
+                app.ScheduleRenderer.refreshResourceHighlights(app);
+            end
         end
 
         % Resources Tab Callbacks
@@ -483,6 +489,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
                     overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
+
+                    % Force UI update so selection overlay appears immediately
+                    if overlayApplied
+                        try
+                            drawnow limitrate;
+                        catch
+                            % Ignore drawnow errors
+                        end
+                    end
                 end
                 if ~overlayApplied && ~isempty(app.OptimizedSchedule)
                     conduction.gui.app.redrawSchedule(app);
@@ -717,10 +732,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             newSelection = string(resourceIds(:));
-            app.applyResourcesToCase(caseObj, newSelection);
-            app.CaseManager.notifyChange();
-            app.markDirty();
-            % CaseStore auto-refreshes via CaseManager listener
+            hasChanges = app.applyResourcesToCase(caseObj, newSelection);
+
+            % Only notify listeners and mark dirty if resources actually changed
+            if hasChanges
+                % Suppress markOptimizationDirty in onCaseManagerChanged since we'll handle it
+                app.SuppressOptimizationDirty = true;
+                try
+                    % Notify CaseManager listeners (for table updates, etc.)
+                    app.CaseManager.notifyChange();
+
+                    % Mark optimization dirty but skip re-render since we already updated visuals
+                    app.OptimizationController.markOptimizationDirty(app, true, true);
+                catch ME
+                    % Always clear suppression flag on error
+                    app.SuppressOptimizationDirty = false;
+                    rethrow(ME);
+                end
+
+                % Clear suppression flag after successful completion
+                app.SuppressOptimizationDirty = false;
+
+                % CaseStore auto-refreshes via CaseManager listener
+            end
         end
 
         % (moved applyResourcesToCase to a public methods block below)
@@ -799,6 +833,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     properties (Access = private)
         IsSyncingAvailableLabSelection logical = false
         IsUpdatingResourceStore logical = false  % Guard against re-entrant calls
+        SuppressOptimizationDirty logical = false  % Skip markOptimizationDirty in onCaseManagerChanged when already handled
         CaseStoreListeners event.listener = event.listener.empty
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         IsHandlingTabSelection logical = false
@@ -2082,11 +2117,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.updateCasesTable();
-            if ~app.IsRestoringSession
+
+            if ~app.IsRestoringSession && ~app.SuppressOptimizationDirty
                 app.OptimizationController.markOptimizationDirty(app);
             end
+
             app.TestingModeController.updateTestingInfoText(app);
-            app.refreshResourceLegend();
+
+            % Skip redundant refreshResourceLegend when already handled by caller
+            if ~app.SuppressOptimizationDirty
+                app.refreshResourceLegend();
+            end
         end
 
 

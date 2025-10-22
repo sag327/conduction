@@ -88,6 +88,7 @@ classdef DrawerController < handle
             end
 
             caseId = string(caseId);
+
             if strlength(caseId) == 0
                 obj.resetDrawerInspector(app);
                 obj.clearHistogram(app);

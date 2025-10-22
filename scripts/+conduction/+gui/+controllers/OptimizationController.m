@@ -176,11 +176,16 @@ classdef OptimizationController < handle
             app.OptimizationController.updateOptimizationActionAvailability(app);
         end
 
-        function markOptimizationDirty(obj, app, markSessionDirty)
+        function markOptimizationDirty(obj, app, markSessionDirty, skipRender)
             % markSessionDirty: optional, defaults to true
             % When true, also marks session as needing save
+            % skipRender: optional, defaults to false
+            % When true, skips the schedule re-render (use when visuals already updated)
             if nargin < 3
                 markSessionDirty = true;
+            end
+            if nargin < 4
+                skipRender = false;
             end
 
             % Skip if suppressed during batch operations (e.g., clearing all cases)
@@ -194,18 +199,20 @@ classdef OptimizationController < handle
             % app.OptimizedSchedule is preserved
             % app.OptimizationOutcome is preserved
 
-            % Show placeholder if no schedule exists OR CaseManager has no cases
-            % This prevents trying to render a stale schedule when all cases have been cleared
-            hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
-            hasSchedule = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
+            if ~skipRender
+                % Show placeholder if no schedule exists OR CaseManager has no cases
+                % This prevents trying to render a stale schedule when all cases have been cleared
+                hasCases = ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0;
+                hasSchedule = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
 
-            if ~hasSchedule || ~hasCases
-                obj.showOptimizationPendingPlaceholder(app);
-            else
-                % Re-render existing schedule with fade to indicate it's stale
-                % Use simulated schedule if time control is active to preserve status indicators
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
+                if ~hasSchedule || ~hasCases
+                    obj.showOptimizationPendingPlaceholder(app);
+                else
+                    % Re-render existing schedule with fade to indicate it's stale
+                    % Use simulated schedule if time control is active to preserve status indicators
+                    scheduleToRender = app.getScheduleForRendering();
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
+                end
             end
 
             obj.updateOptimizationStatus(app);
