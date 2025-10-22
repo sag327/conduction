@@ -24,6 +24,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TabAdd                      matlab.ui.container.Tab
         TabList                     matlab.ui.container.Tab
         TabOptimization             matlab.ui.container.Tab
+        TabResources                matlab.ui.container.Tab
         TestPanel                   matlab.ui.container.Panel
         TestPanelLayout             matlab.ui.container.GridLayout
 
@@ -112,8 +113,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptMetricDropDown           matlab.ui.control.DropDown
         OptLabsLabel                matlab.ui.control.Label
         OptLabsSpinner              matlab.ui.control.Spinner
-        OptResourcesLabel           matlab.ui.control.Label
-        OptResourcesButton          matlab.ui.control.Button
         OptAvailableLabsLabel       matlab.ui.control.Label
         OptAvailableSelectAll       matlab.ui.control.CheckBox
         OptAvailableLabsPanel       matlab.ui.container.Panel
@@ -132,6 +131,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptMaxOperatorSpinner       matlab.ui.control.Spinner
         OptEnforceMidnightCheckBox  matlab.ui.control.CheckBox
         OptPrioritizeOutpatientCheckBox matlab.ui.control.CheckBox
+
+        % Resources Tab Components
+        ResourceNameField           matlab.ui.control.EditField
+        ResourceCapacitySpinner     matlab.ui.control.Spinner
+        SaveResourceButton          matlab.ui.control.Button
+        ResetResourceButton         matlab.ui.control.Button
+        ResourcesTable              matlab.ui.control.Table
+        NewResourceButton           matlab.ui.control.Button
+        DeleteResourceButton        matlab.ui.control.Button
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
@@ -201,7 +209,118 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleRenderer.refreshResourceHighlights(app);
         end
 
-        function openResourceManagementDialog(app)
+        % Resources Tab Callbacks
+        function onResourceTableSelectionChanged(app, evt)
+            if isempty(evt.Selection)
+                app.SelectedResourceId = "";
+                app.DeleteResourceButton.Enable = 'off';
+                return;
+            end
+
+            rowIdx = evt.Selection(1);
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            types = store.list();
+            if rowIdx < 1 || rowIdx > numel(types)
+                return;
+            end
+
+            selectedType = types(rowIdx);
+            app.SelectedResourceId = selectedType.Id;
+            app.DeleteResourceButton.Enable = 'on';
+
+            % Load into form
+            app.ResourceNameField.Value = char(selectedType.Name);
+            app.ResourceCapacitySpinner.Value = selectedType.Capacity;
+        end
+
+        function onNewResourcePressed(app)
+            app.SelectedResourceId = "";
+            app.clearResourceForm();
+            app.ResourcesTable.Selection = [];
+            app.DeleteResourceButton.Enable = 'off';
+        end
+
+        function onDeleteResourcePressed(app)
+            if strlength(app.SelectedResourceId) == 0
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            type = store.get(app.SelectedResourceId);
+            if isempty(type)
+                return;
+            end
+
+            answer = uiconfirm(app.UIFigure, ...
+                sprintf('Delete resource "%s"?', type.Name), ...
+                'Confirm Delete', 'Options', {'Delete', 'Cancel'}, ...
+                'DefaultOption', 2, 'CancelOption', 2);
+
+            if strcmp(answer, 'Delete')
+                store.remove(app.SelectedResourceId);
+                app.SelectedResourceId = "";
+                app.clearResourceForm();
+                app.refreshResourcesTable();
+                app.markDirty();
+            end
+        end
+
+        function onSaveResourcePressed(app)
+            name = strtrim(string(app.ResourceNameField.Value));
+            capacity = app.ResourceCapacitySpinner.Value;
+
+            if strlength(name) == 0
+                uialert(app.UIFigure, 'Resource name cannot be empty.', 'Validation Error');
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            try
+                if strlength(app.SelectedResourceId) == 0
+                    % Create new resource
+                    store.create(name, capacity);
+                else
+                    % Update existing resource
+                    store.update(app.SelectedResourceId, 'Name', name, 'Capacity', capacity);
+                end
+                app.clearResourceForm();
+                app.SelectedResourceId = "";
+                app.refreshResourcesTable();
+                app.markDirty();
+            catch ME
+                uialert(app.UIFigure, ME.message, 'Error');
+            end
+        end
+
+        function onResetResourcePressed(app)
+            if strlength(app.SelectedResourceId) > 0
+                % Reload from store
+                store = app.CaseManager.getResourceStore();
+                if ~isempty(store) && isvalid(store)
+                    type = store.get(app.SelectedResourceId);
+                    if ~isempty(type)
+                        app.ResourceNameField.Value = char(type.Name);
+                        app.ResourceCapacitySpinner.Value = type.Capacity;
+                        return;
+                    end
+                end
+            end
+            app.clearResourceForm();
+        end
+
+        function refreshResourcesTable(app)
             if isempty(app.CaseManager)
                 return;
             end
@@ -211,12 +330,32 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            if isempty(app.ResourceManagerWindow) || ~isvalid(app.ResourceManagerWindow)
-                app.ResourceManagerWindow = conduction.gui.windows.ResourceManager(store, ...
-                    'Visible', 'on', 'OnClose', @(mgr) app.onResourceManagerClosed());
+            types = store.list();  % Already sorted alphabetically
+            if isempty(types)
+                app.ResourcesTable.Data = {};
+                return;
             end
 
-            app.ResourceManagerWindow.show();
+            data = cell(numel(types), 2);
+            for k = 1:numel(types)
+                data{k, 1} = char(types(k).Name);
+                data{k, 2} = types(k).Capacity;
+            end
+            app.ResourcesTable.Data = data;
+        end
+
+        function clearResourceForm(app)
+            app.ResourceNameField.Value = '';
+            app.ResourceCapacitySpinner.Value = 1;
+        end
+
+        function switchToResourcesTab(app)
+            %SWITCHTORESOURCESTAB Switch to the Resources tab
+            if ~isempty(app.TabGroup) && isvalid(app.TabGroup) && ...
+               ~isempty(app.TabResources) && isvalid(app.TabResources)
+                app.TabGroup.SelectedTab = app.TabResources;
+                app.refreshResourcesTable();
+            end
         end
     end
 
@@ -287,7 +426,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.AddResourcesPanel, store, ...
                     'Title', "Resources", ...
                     'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
-                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'CreateCallback', @(comp) app.switchToResourcesTab(), ...
                     'ShowCreateButton', false);
                 if ~isempty(app.PendingAddResourceIds)
                     app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
@@ -303,7 +442,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.DrawerResourcesPanel, store, ...
                     'Title', "Resources", ...
                     'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
-                    'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                    'CreateCallback', @(comp) app.switchToResourcesTab(), ...
                     'ShowCreateButton', false, ...
                     'HorizontalLayout', true);
             elseif ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
@@ -521,7 +660,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                         app.AddResourcesPanel, store, ...
                         'Title', "Resources", ...
                         'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
-                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'CreateCallback', @(comp) app.switchToResourcesTab(), ...
                         'ShowCreateButton', false);
                     if ~isempty(app.PendingAddResourceIds)
                         app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
@@ -546,13 +685,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                         app.DrawerResourcesPanel, store, ...
                         'Title', "Resources", ...
                         'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
-                        'CreateCallback', @(comp) app.openResourceManagementDialog(), ...
+                        'CreateCallback', @(comp) app.switchToResourcesTab(), ...
                         'ShowCreateButton', false, ...
                         'HorizontalLayout', true);
                     app.DrawerResourcesChecklist.setSelection(current);
                 end
 
                 app.refreshResourceLegend();
+                app.refreshResourcesTable();
 
                 % Mark optimization dirty when resource constraints change
                 app.OptimizationController.markOptimizationDirty(app);
@@ -563,10 +703,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 rethrow(ME);
             end
             app.IsUpdatingResourceStore = false;
-        end
-
-        function onResourceManagerClosed(app)
-            app.ResourceManagerWindow = conduction.gui.windows.ResourceManager.empty;
         end
 
         function onAddResourcesSelectionChanged(app, resourceIds)
@@ -609,7 +745,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         AddResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
         DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
-        ResourceManagerWindow conduction.gui.windows.ResourceManager = conduction.gui.windows.ResourceManager.empty
         PendingAddResourceIds string = string.empty(0, 1)
         ResourceHighlightIds string = string.empty(0, 1)
         LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
@@ -655,6 +790,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
+        SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
         IsDirty logical = false  % SAVE/LOAD: Track unsaved changes (Stage 7)
         AutoSaveEnabled logical = false  % SAVE/LOAD: Auto-save enabled flag (Stage 8)
@@ -801,6 +937,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TabAdd = uitab(app.TabGroup, 'Title', 'Add/Edit');
             app.TabList = uitab(app.TabGroup, 'Title', 'Cases');
             app.TabOptimization = uitab(app.TabGroup, 'Title', 'Optimization');
+            app.TabResources = uitab(app.TabGroup, 'Title', 'Resources');
 
             addGrid = conduction.gui.app.configureAddTabLayout(app);
             conduction.gui.app.buildDateSection(app, addGrid);
@@ -821,6 +958,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             optimizationGrid = conduction.gui.app.configureOptimizationTabLayout(app);
             conduction.gui.app.buildOptimizationTab(app, optimizationGrid);
+
+            resourcesGrid = conduction.gui.app.configureResourcesTabLayout(app);
+            conduction.gui.app.buildResourcesTab(app, resourcesGrid);
 
             app.CanvasTabGroup = uitabgroup(app.MiddleLayout);
             app.CanvasTabGroup.Layout.Row = [1 2];

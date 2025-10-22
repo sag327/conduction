@@ -79,39 +79,30 @@ classdef ResourceStore < handle
             exists = obj.IdIndex.isKey(char(resourceId));
         end
 
-        function type = create(obj, name, capacity, varargin)
+        function type = create(obj, name, capacity)
+            %CREATE Create a new resource type with auto-assigned color
+            %   Resources are always created with Pattern='solid', Notes='', IsTracked=true
+            %   Color is automatically assigned from the palette and cannot be customized
+
             name = string(name);
             validateattributes(capacity, {'numeric'}, {'scalar','nonnegative'});
-            parser = inputParser;
-            addParameter(parser, 'Color', [], @(v) isempty(v) || (isnumeric(v) && numel(v) == 3));
-            addParameter(parser, 'Pattern', "solid", @(v) isstring(v) || ischar(v));
-            addParameter(parser, 'Notes', "", @(v) isstring(v) || ischar(v));
-            addParameter(parser, 'IsTracked', true, @(v) islogical(v) && isscalar(v));
-            parse(parser, varargin{:});
-            opts = parser.Results;
 
             trimmedName = obj.validateUniqueName(name);
-            color = opts.Color;
-            if isempty(color)
-                color = obj.nextPaletteColor();
-            else
-                color = double(color(:)');
-            end
+            color = obj.nextPaletteColor();
 
             newId = obj.generateId();
-            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color, opts.Pattern, opts.Notes, opts.IsTracked);
+            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color, "solid", "", true);
             obj.appendType(type);
             obj.notifyChanged();
         end
 
         function update(obj, resourceId, varargin)
+            %UPDATE Update a resource type's name and/or capacity
+            %   Only Name and Capacity can be updated. Color is assigned at creation and cannot be changed.
+
             parser = inputParser;
             addParameter(parser, 'Name', [], @(v) (isstring(v) || ischar(v)));
             addParameter(parser, 'Capacity', [], @(v) isempty(v) || (isscalar(v) && v >= 0));
-            addParameter(parser, 'Color', [], @(v) isempty(v) || (isnumeric(v) && numel(v) == 3));
-            addParameter(parser, 'Pattern', [], @(v) isempty(v) || isstring(v) || ischar(v));
-            addParameter(parser, 'Notes', [], @(v) isempty(v) || isstring(v) || ischar(v));
-            addParameter(parser, 'IsTracked', [], @(v) isempty(v) || islogical(v));
             parse(parser, varargin{:});
             params = parser.Results;
 
@@ -133,23 +124,6 @@ classdef ResourceStore < handle
 
             if ~isempty(params.Capacity)
                 type.Capacity = params.Capacity;
-            end
-
-            if ~isempty(params.Color)
-                colorRow = double(params.Color(:)');
-                type.Color = colorRow;
-            end
-
-            if ~isempty(params.Pattern)
-                type.Pattern = string(params.Pattern);
-            end
-
-            if ~isempty(params.Notes)
-                type.Notes = string(params.Notes);
-            end
-
-            if ~isempty(params.IsTracked)
-                type.IsTracked = logical(params.IsTracked);
             end
 
             obj.notifyChanged();
@@ -277,13 +251,16 @@ classdef ResourceStore < handle
         end
 
         function color = nextPaletteColor(obj)
+            %NEXTPALETTECOLOR Get next color from palette (cycles through 6 distinct colors)
+            %   Palette avoids inpatient teal [0, 0.75, 0.82] and outpatient orange [1, 0.65, 0.15]
+
             palette = [
-                0.1294 0.5882 0.9529;
-                0.2039 0.6588 0.3255;
-                0.9843 0.5569 0;
-                0.8941 0.1020 0.1098;
-                0.5961 0.3059 0.6392;
-                0.9686 0.7137 0.8235
+                0.2039 0.6588 0.3255;  % Deep Green
+                0.8941 0.1020 0.1098;  % Crimson Red
+                0.5961 0.3059 0.6392;  % Royal Purple
+                0.9686 0.7137 0.8235;  % Hot Pink
+                0.55 0.27 0.07;        % Chocolate Brown
+                0.72 0.11 0.55         % Deep Magenta
             ];
             obj.PaletteIndex = obj.PaletteIndex + 1;
             color = palette(mod(obj.PaletteIndex-1, size(palette,1)) + 1, :);
