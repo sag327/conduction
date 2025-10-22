@@ -76,21 +76,22 @@ function buildResourcesTab(app, resourcesGrid)
     app.ResourcesTable.ColumnName = {'Name', 'Capacity'};
     app.ResourcesTable.ColumnEditable = [false false];
     app.ResourcesTable.ColumnWidth = {'1x', 80};
+    app.ResourcesTable.ColumnFormat = {'char', 'numeric'};
     app.ResourcesTable.SelectionChangedFcn = @(~, evt) app.onResourceTableSelectionChanged(evt);
 
-    % Button row (New and Delete)
+    % Button row (Delete only)
     btnGrid = uigridlayout(resourcesGrid);
     btnGrid.Layout.Row = 3;
     btnGrid.Layout.Column = 1;
-    btnGrid.ColumnWidth = {'1x', '1x'};
+    btnGrid.ColumnWidth = {'1x', 100};  % Spacer + fixed-width Delete button
     btnGrid.RowHeight = {'fit'};
     btnGrid.ColumnSpacing = 8;
     btnGrid.Padding = [0 0 0 0];
 
-    app.NewResourceButton = uibutton(btnGrid, 'push');
-    app.NewResourceButton.Text = 'New';
-    app.NewResourceButton.Layout.Column = 1;
-    app.NewResourceButton.ButtonPushedFcn = @(~, ~) app.onNewResourcePressed();
+    % Spacer
+    spacer = uilabel(btnGrid);
+    spacer.Text = '';
+    spacer.Layout.Column = 1;
 
     app.DeleteResourceButton = uibutton(btnGrid, 'push');
     app.DeleteResourceButton.Text = 'Delete';

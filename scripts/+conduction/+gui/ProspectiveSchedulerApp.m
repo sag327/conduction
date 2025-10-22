@@ -138,7 +138,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SaveResourceButton          matlab.ui.control.Button
         ResetResourceButton         matlab.ui.control.Button
         ResourcesTable              matlab.ui.control.Table
-        NewResourceButton           matlab.ui.control.Button
         DeleteResourceButton        matlab.ui.control.Button
 
         % Visualization & KPIs
@@ -235,13 +234,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Load into form
             app.ResourceNameField.Value = char(selectedType.Name);
             app.ResourceCapacitySpinner.Value = selectedType.Capacity;
-        end
-
-        function onNewResourcePressed(app)
-            app.SelectedResourceId = "";
-            app.clearResourceForm();
-            app.ResourcesTable.Selection = [];
-            app.DeleteResourceButton.Enable = 'off';
         end
 
         function onDeleteResourcePressed(app)
