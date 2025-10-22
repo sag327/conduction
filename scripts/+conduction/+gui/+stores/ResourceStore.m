@@ -10,6 +10,7 @@ classdef ResourceStore < handle
         IdIndex containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'double')
         NameIndex containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'double')
         PaletteIndex double = 0
+        LastChangeData struct = struct('ChangeType', 'none', 'ResourceId', "", 'OldCapacity', 0, 'NewCapacity', 0)
     end
 
     methods
@@ -81,7 +82,6 @@ classdef ResourceStore < handle
 
         function type = create(obj, name, capacity)
             %CREATE Create a new resource type with auto-assigned color
-            %   Resources are always created with Pattern='solid', Notes='', IsTracked=true
             %   Color is automatically assigned from the palette and cannot be customized
 
             name = string(name);
@@ -91,9 +91,9 @@ classdef ResourceStore < handle
             color = obj.nextPaletteColor();
 
             newId = obj.generateId();
-            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color, "solid", "", true);
+            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color);
             obj.appendType(type);
-            obj.notifyChanged();
+            obj.notifyChanged('create', newId, 0, capacity);
         end
 
         function update(obj, resourceId, varargin)
@@ -112,6 +112,7 @@ classdef ResourceStore < handle
             end
 
             type = obj.Types(index);
+            oldCapacity = type.Capacity;
 
             if ~isempty(params.Name)
                 trimmedName = obj.validateUniqueName(params.Name, resourceId);
@@ -122,11 +123,13 @@ classdef ResourceStore < handle
                 obj.NameIndex(char(trimmedName)) = index;
             end
 
+            newCapacity = oldCapacity;
             if ~isempty(params.Capacity)
-                type.Capacity = params.Capacity;
+                newCapacity = params.Capacity;
+                type.Capacity = newCapacity;
             end
 
-            obj.notifyChanged();
+            obj.notifyChanged('update', resourceId, oldCapacity, newCapacity);
         end
 
         function remove(obj, resourceId)
@@ -136,6 +139,8 @@ classdef ResourceStore < handle
             end
 
             type = obj.Types(index);
+            oldCapacity = type.Capacity;
+
             if obj.IdIndex.isKey(char(type.Id))
                 remove(obj.IdIndex, char(type.Id));
             end
@@ -147,7 +152,7 @@ classdef ResourceStore < handle
 
             % Rebuild index maps quickly since counts are small.
             obj.rebuildIndices();
-            obj.notifyChanged();
+            obj.notifyChanged('delete', resourceId, oldCapacity, 0);
         end
 
         function ids = ids(obj)
@@ -172,24 +177,27 @@ classdef ResourceStore < handle
             %SNAPSHOT Return resource types as struct array for serialization/optimization
             types = obj.list();
             if isempty(types)
-                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
                 return;
             end
 
             snapshot = repmat(struct('Id', "", 'Name', "", 'Capacity', 0, ...
-                'Color', zeros(1, 3), 'Pattern', "", 'IsTracked', true), 1, numel(types));
+                'Color', zeros(1, 3)), 1, numel(types));
             for k = 1:numel(types)
                 snapshot(k).Id = types(k).Id;
                 snapshot(k).Name = types(k).Name;
                 snapshot(k).Capacity = double(types(k).Capacity);
                 snapshot(k).Color = double(types(k).Color);
-                snapshot(k).Pattern = string(types(k).Pattern);
-                snapshot(k).IsTracked = logical(types(k).IsTracked);
             end
         end
 
         function paletteReset(obj)
             obj.PaletteIndex = 0;
+        end
+
+        function data = getLastChangeData(obj)
+            %GETLASTCHANGEDATA Get details about the most recent change
+            data = obj.LastChangeData;
         end
     end
 
@@ -210,8 +218,12 @@ classdef ResourceStore < handle
             end
         end
 
-        function notifyChanged(obj)
-            notify(obj, 'TypesChanged');
+        function notifyChanged(obj, changeType, resourceId, oldCapacity, newCapacity)
+            % Notify listeners with change context
+            eventData = struct('ChangeType', changeType, 'ResourceId', resourceId, ...
+                'OldCapacity', oldCapacity, 'NewCapacity', newCapacity);
+            notify(obj, 'TypesChanged', event.EventData);
+            obj.LastChangeData = eventData;  % Store for listener retrieval
         end
 
         function rebuildIndices(obj)

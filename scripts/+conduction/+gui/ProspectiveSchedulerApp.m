@@ -157,6 +157,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = public, Hidden = true)
+        function isAssigned = isResourceAssigned(app, resourceId)
+            %ISRESOURCEASSIGNED Check if any case uses this resource
+            isAssigned = false;
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            resourceId = string(resourceId);
+            for k = 1:app.CaseManager.CaseCount
+                caseObj = app.CaseManager.getCase(k);
+                if any(caseObj.listRequiredResources() == resourceId)
+                    isAssigned = true;
+                    return;
+                end
+            end
+        end
+
         function hasChanges = applyResourcesToCase(app, caseObj, desiredIds)
             arguments
                 app
@@ -655,8 +672,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.CaseStore.refresh();
                 end
 
-                % Get the new/current ResourceStore
+                % Get the new/current ResourceStore and change details
                 store = app.CaseManager.getResourceStore();
+                changeData = store.getLastChangeData();
 
                 % Recreate AddResourcesChecklist with new store
                 if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel)
@@ -701,8 +719,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.refreshResourceLegend();
                 app.refreshResourcesTable();
 
-                % Mark optimization dirty when resource constraints change
-                app.OptimizationController.markOptimizationDirty(app);
+                % Conditionally mark optimization dirty based on change type
+                shouldMarkDirty = false;
+                switch changeData.ChangeType
+                    case 'create'
+                        % New resource, not assigned yet - don't mark dirty
+                        shouldMarkDirty = false;
+                    case 'delete'
+                        % Only mark dirty if resource was assigned to cases
+                        shouldMarkDirty = app.isResourceAssigned(changeData.ResourceId);
+                    case 'update'
+                        % Only mark dirty if capacity changed AND resource is assigned
+                        if changeData.OldCapacity ~= changeData.NewCapacity
+                            shouldMarkDirty = app.isResourceAssigned(changeData.ResourceId);
+                        end
+                end
+
+                if shouldMarkDirty
+                    app.OptimizationController.markOptimizationDirty(app);
+                end
 
                 if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
             catch ME
@@ -773,7 +808,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
         PendingAddResourceIds string = string.empty(0, 1)
         ResourceHighlightIds string = string.empty(0, 1)
-        LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+        LastResourceMetadata struct = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}), ...
             'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}))
         IsRestoringSession logical = false
 
@@ -2170,7 +2205,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Initialize empty schedule visualization for the target date
 
             app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
-            app.LastResourceMetadata = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
+            app.LastResourceMetadata = struct('resourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}), ...
                 'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
             app.refreshResourceLegend();
             conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
@@ -2230,7 +2265,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
             resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
 
             if ~isempty(app.CaseManager)
@@ -2250,7 +2285,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             if nargin < 2 || isempty(resourceTypes)
-                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
             end
             if nargin < 3 || isempty(resourceSummary)
                 resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
@@ -2655,7 +2690,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Resource model
             resourceStore = app.CaseManager.getResourceStore();
             if isempty(resourceStore)
-                sessionData.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                sessionData.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
             else
                 sessionData.resourceTypes = resourceStore.snapshot();
             end
