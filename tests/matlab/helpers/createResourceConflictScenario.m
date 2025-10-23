@@ -30,7 +30,7 @@ function [outpatientCases, inpatientCases, resourceTypes] = createResourceConfli
         caseObj = caseManager.getCase(i);
         caseObj.assignResource(resource.Id);
         caseObj.AdmissionStatus = 'outpatient';
-        caseObj.ProcedureMinutes = caseDuration;
+        caseObj.EstimatedDurationMinutes = caseDuration;
     end
 
     % Create inpatient cases
@@ -40,7 +40,7 @@ function [outpatientCases, inpatientCases, resourceTypes] = createResourceConfli
         caseObj = caseManager.getCase(numOut + i);
         caseObj.assignResource(resource.Id);
         caseObj.AdmissionStatus = 'inpatient';
-        caseObj.ProcedureMinutes = caseDuration;
+        caseObj.EstimatedDurationMinutes = caseDuration;
     end
 
     % Build optimization cases
@@ -57,6 +57,14 @@ function [outpatientCases, inpatientCases, resourceTypes] = createResourceConfli
     isOut = arrayfun(@(c) strcmpi(c.admissionStatus, 'outpatient'), allCases);
     outpatientCases = allCases(isOut);
     inpatientCases = allCases(~isOut);
+
+    % Ensure row vectors for consistent concatenation
+    if ~isempty(outpatientCases)
+        outpatientCases = outpatientCases(:)';
+    end
+    if ~isempty(inpatientCases)
+        inpatientCases = inpatientCases(:)';
+    end
 
     % Get resource types for options
     resourceTypes = store.snapshot();
