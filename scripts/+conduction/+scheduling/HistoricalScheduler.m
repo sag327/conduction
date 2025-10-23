@@ -295,4 +295,246 @@ classdef HistoricalScheduler
             end
         end
     end
+
+    methods (Access = private)
+        function locked = convertScheduleToLockedConstraints(obj, scheduleStruct, cases, existingLocked)
+            %CONVERTSCHEDULETOLOCKEDCONSTRAINTS Build locked case constraints from phase 1 schedule
+            %
+            % Inputs:
+            %   scheduleStruct - Schedule output from phase 1
+            %   cases - Original case structs with resource assignments
+            %   existingLocked - Any pre-existing locked constraints to preserve
+            %
+            % Output:
+            %   locked - Array of locked constraint structs with fields:
+            %            caseID, startTime, assignedLab
+
+            locked = existingLocked;  % Start with existing locks
+
+            % Build map from caseID to case struct (to get resource info)
+            caseMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            for idx = 1:numel(cases)
+                caseMap(char(cases(idx).caseID)) = cases(idx);
+            end
+
+            % Extract locked constraints from schedule
+            for labIdx = 1:numel(scheduleStruct.labs)
+                labCases = scheduleStruct.labs{labIdx};
+                for caseIdx = 1:numel(labCases)
+                    scheduledCase = labCases(caseIdx);
+
+                    constraint = struct();
+                    constraint.caseID = scheduledCase.caseID;
+                    constraint.startTime = scheduledCase.startTime;
+                    constraint.assignedLab = labIdx;
+
+                    % Preserve resource assignments from original case
+                    if isKey(caseMap, char(scheduledCase.caseID))
+                        originalCase = caseMap(char(scheduledCase.caseID));
+                        if isfield(originalCase, 'requiredResourceIds')
+                            constraint.requiredResourceIds = originalCase.requiredResourceIds;
+                        end
+                    end
+
+                    locked(end+1) = constraint; %#ok<AGROW>
+                end
+            end
+        end
+
+        function violations = detectResourceViolations(obj, scheduleStruct, resourceTypes)
+            %DETECTRESOURCEVIOLATIONS Check if resource capacity limits are exceeded
+            %
+            % Returns array of violation structs with fields:
+            %   ResourceId, ResourceName, StartTime, EndTime, Capacity, ActualUsage, CaseIds
+
+            violations = struct([]);
+
+            if isempty(resourceTypes)
+                return;
+            end
+
+            % Build resource usage timeline
+            resourceIds = string({resourceTypes.Id});
+            resourceCapacities = arrayfun(@(r) r.Capacity, resourceTypes);
+
+            % Collect all scheduled cases with their resource requirements
+            allCases = [];
+            for labIdx = 1:numel(scheduleStruct.labs)
+                allCases = [allCases, scheduleStruct.labs{labIdx}]; %#ok<AGROW>
+            end
+
+            if isempty(allCases)
+                return;
+            end
+
+            % For each resource, check usage at each time point
+            for resIdx = 1:numel(resourceIds)
+                resId = resourceIds(resIdx);
+                capacity = resourceCapacities(resIdx);
+
+                % Find cases using this resource
+                casesUsingResource = [];
+                for caseIdx = 1:numel(allCases)
+                    if isfield(allCases(caseIdx), 'requiredResourceIds')
+                        if any(string(allCases(caseIdx).requiredResourceIds) == resId)
+                            casesUsingResource(end+1) = caseIdx; %#ok<AGROW>
+                        end
+                    end
+                end
+
+                if isempty(casesUsingResource)
+                    continue;
+                end
+
+                % Check for overlaps
+                for i = 1:numel(casesUsingResource)
+                    case_i = allCases(casesUsingResource(i));
+                    overlapCount = 1;  % Count self
+                    overlapCaseIds = {case_i.caseID};
+
+                    for j = i+1:numel(casesUsingResource)
+                        case_j = allCases(casesUsingResource(j));
+
+                        % Check if procedure times overlap
+                        i_procStart = case_i.procStartTime;
+                        i_procEnd = case_i.procEndTime;
+                        j_procStart = case_j.procStartTime;
+                        j_procEnd = case_j.procEndTime;
+
+                        overlaps = (i_procStart < j_procEnd) && (j_procStart < i_procEnd);
+
+                        if overlaps
+                            overlapCount = overlapCount + 1;
+                            overlapCaseIds{end+1} = case_j.caseID; %#ok<AGROW>
+                        end
+                    end
+
+                    % Record violation if capacity exceeded
+                    if overlapCount > capacity
+                        violation = struct();
+                        violation.ResourceId = resId;
+                        violation.ResourceName = resourceTypes(resIdx).Name;
+                        violation.StartTime = case_i.procStartTime;
+                        violation.EndTime = case_i.procEndTime;
+                        violation.Capacity = capacity;
+                        violation.ActualUsage = overlapCount;
+                        violation.CaseIds = overlapCaseIds;
+                        violations(end+1) = violation; %#ok<AGROW>
+                    end
+                end
+            end
+        end
+
+        function shouldFallback = shouldFallback(obj, phase2Outcome, combinedSchedule)
+            %SHOULDFALLBACK Determine if single-phase fallback is needed
+            %
+            % Returns true if:
+            %   - Phase 2 solver failed to find feasible solution (exitflag < 1)
+            %   - Resource violations detected in combined schedule
+
+            shouldFallback = false;
+
+            % Check solver status
+            if phase2Outcome.exitflag < 1
+                shouldFallback = true;
+                return;
+            end
+
+            % Check for resource violations
+            violations = obj.detectResourceViolations(combinedSchedule, obj.Options.ResourceTypes);
+            if ~isempty(violations)
+                shouldFallback = true;
+            end
+        end
+
+        function [dailySchedule, outcome] = fallbackToSinglePhase(obj, allCases, phase1Outcome, phase2Outcome)
+            %FALLBACKTOSINGLEPHASE Retry optimization with all cases together
+            %
+            % Uses single-phase optimization with priority weighting for outpatients
+
+            singlePhaseOptions = obj.buildSinglePhaseOptions();
+            [dailySchedule, outcome] = conduction.scheduling.HistoricalScheduler.runPhase(allCases, singlePhaseOptions);
+
+            % Add diagnostic info about fallback
+            outcome.originalPhase1 = phase1Outcome;
+            outcome.originalPhase2 = phase2Outcome;
+            outcome.conflictStats = obj.analyzeOutpatientInpatientMix(dailySchedule);
+        end
+
+        function stats = analyzeOutpatientInpatientMix(obj, schedule)
+            %ANALYZEOUTPATIENTINPATIENTMIX Identify inpatients scheduled before outpatients
+            %
+            % Returns struct with:
+            %   inpatientsMovedEarly: count of inpatients before any outpatient
+            %   affectedCases: list of caseIDs
+
+            stats = struct();
+            stats.inpatientsMovedEarly = 0;
+            stats.affectedCases = {};
+
+            % Extract cases from schedule
+            allCases = [];
+            if isfield(schedule, 'Cases') && ~isempty(schedule.Cases)
+                allCases = schedule.Cases;
+            elseif isfield(schedule, 'labs')
+                for labIdx = 1:numel(schedule.labs)
+                    allCases = [allCases, schedule.labs{labIdx}]; %#ok<AGROW>
+                end
+            end
+
+            if isempty(allCases)
+                return;
+            end
+
+            % Find earliest outpatient start time
+            earliestOutpatientTime = inf;
+            for caseIdx = 1:numel(allCases)
+                caseStruct = allCases(caseIdx);
+                if isfield(caseStruct, 'admissionStatus')
+                    if conduction.scheduling.HistoricalScheduler.isOutpatient(caseStruct)
+                        if isfield(caseStruct, 'startTime')
+                            earliestOutpatientTime = min(earliestOutpatientTime, caseStruct.startTime);
+                        elseif isfield(caseStruct, 'procStartTime')
+                            earliestOutpatientTime = min(earliestOutpatientTime, caseStruct.procStartTime);
+                        end
+                    end
+                end
+            end
+
+            % Count inpatients that start before earliest outpatient
+            if isfinite(earliestOutpatientTime)
+                for caseIdx = 1:numel(allCases)
+                    caseStruct = allCases(caseIdx);
+                    if isfield(caseStruct, 'admissionStatus')
+                        if conduction.scheduling.HistoricalScheduler.isInpatient(caseStruct)
+                            caseStartTime = inf;
+                            if isfield(caseStruct, 'startTime')
+                                caseStartTime = caseStruct.startTime;
+                            elseif isfield(caseStruct, 'procStartTime')
+                                caseStartTime = caseStruct.procStartTime;
+                            end
+
+                            if caseStartTime < earliestOutpatientTime
+                                stats.inpatientsMovedEarly = stats.inpatientsMovedEarly + 1;
+                                stats.affectedCases{end+1} = caseStruct.caseID; %#ok<AGROW>
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        function options = buildSinglePhaseOptions(obj)
+            %BUILDSINGLEPHASEOPTIO Configure options for single-phase fallback
+            %
+            % Modifies objective function to include priority weighting
+
+            baseStruct = obj.Options.toStruct();
+            baseStruct.PrioritizeOutpatient = false;  % Using custom weighting instead
+            baseStruct.CaseFilter = 'all';
+            baseStruct.OutpatientInpatientMode = 'SinglePhaseFlexible';
+
+            options = conduction.scheduling.SchedulingOptions.fromArgs(baseStruct);
+        end
+    end
 end
