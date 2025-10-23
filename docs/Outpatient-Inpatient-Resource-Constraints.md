@@ -810,9 +810,671 @@ function detectResourceViolations(schedule, resources):
     return violations
 ```
 
+## Comprehensive Automated Testing Strategy
+
+### Test Infrastructure
+
+The existing MATLAB unit testing framework (`matlab.unittest.TestCase`) provides a solid foundation. Key existing components:
+- **Helper functions**: `createTestCase()` for programmatic case creation
+- **Resource test baseline**: `TestResourceConstraints.m`
+- **CaseManager API**: Allows resource assignment and optimization case building
+
+### Test Suite Overview
+
+**Total**: 48 automated tests across 6 layers
+**Execution Time**: ~5-10 minutes for full suite
+**Coverage Goal**: >95% of new code
+
+---
+
+### Layer 1: Unit Tests - Core Components (10 tests)
+
+**File**: `tests/matlab/TestOutpatientInpatientResourceConstraints.m`
+
+#### Test Group A: Locked Case Conversion (3 tests)
+
+**Test 1: testConvertScheduleToLockedConstraints_BasicConversion**
+```matlab
+% Purpose: Verify phase 1 schedule converts to locked constraints correctly
+% Setup: Phase 1 schedule with 3 outpatients
+% Verify:
+%   - Locked constraints contain caseID, startTime, assignedLab
+%   - Resource assignments preserved in locked constraints
+%   - Count matches schedule
+```
+
+**Test 2: testConvertScheduleToLockedConstraints_PreservesExistingLocks**
+```matlab
+% Purpose: Ensure existing locked cases aren't lost
+% Setup: Phase 1 schedule + 2 pre-existing locked constraints
+% Verify:
+%   - Both old and new locked constraints present
+%   - No duplicates
+%   - Total count = existing + new
+```
+
+**Test 3: testConvertScheduleToLockedConstraints_EmptySchedule**
+```matlab
+% Purpose: Handle edge case gracefully
+% Setup: Empty schedule
+% Verify: Returns empty array (no crash)
+```
+
+#### Test Group B: Resource Violation Detection (4 tests)
+
+**Test 4: testDetectResourceViolations_NoViolation**
+```matlab
+% Purpose: Verify clean schedules pass
+% Setup: 2 cases sequential (9:00-10:00, 10:00-11:00), capacity=1
+% Verify: violations array is empty
+```
+
+**Test 5: testDetectResourceViolations_SimpleOverlap**
+```matlab
+% Purpose: Detect basic overlap
+% Setup: Case1 9:00-10:00, Case2 9:30-10:30, capacity=1
+% Verify:
+%   - 1 violation detected
+%   - ResourceId correct
+%   - Time window [9:30, 10:00]
+%   - ActualUsage = 2, Capacity = 1
+%   - Both caseIDs in CaseIds array
+```
+
+**Test 6: testDetectResourceViolations_MultipleResources**
+```matlab
+% Purpose: Independent resource tracking
+% Setup:
+%   - Resource A: capacity=1, cases overlap
+%   - Resource B: capacity=2, 2 cases overlap (within capacity)
+% Verify:
+%   - Violation only for Resource A
+%   - Resource B has no violation
+```
+
+**Test 7: testDetectResourceViolations_ExactCapacityNoViolation**
+```matlab
+% Purpose: Boundary condition
+% Setup: 2 cases overlapping, capacity=2
+% Verify: No violation (at limit but not over)
+```
+
+#### Test Group C: Fallback Decision Logic (3 tests)
+
+**Test 8: testShouldFallback_InfeasiblePhase2**
+```matlab
+% Purpose: Trigger fallback on solver failure
+% Setup: Mock phase2Outcome with exitflag = -1
+% Verify: shouldFallback() returns true
+```
+
+**Test 9: testShouldFallback_ResourceViolations**
+```matlab
+% Purpose: Trigger fallback on violations
+% Setup: Mock phase2Outcome exitflag=1, but violations detected
+% Verify: shouldFallback() returns true
+```
+
+**Test 10: testShouldFallback_Success**
+```matlab
+% Purpose: No fallback when successful
+% Setup: exitflag=1, no violations
+% Verify: shouldFallback() returns false
+```
+
+---
+
+### Layer 2: Integration Tests - Optimization Modes (15 tests)
+
+**File**: `tests/matlab/TestOptimizationModes.m`
+
+#### Test Group D: Two-Phase Strict Mode (5 tests)
+
+**Test 11: testTwoPhaseStrict_NormalCase_NoResourceConflict**
+```matlab
+% Purpose: Verify strict mode works when resources sufficient
+% Setup: 2 outpatients + 2 inpatients, resource capacity=2
+% Mode: TwoPhaseStrict
+% Verify:
+%   - exitflag >= 1 (success)
+%   - outcome.usedFallback == false
+%   - All outpatients start before all inpatients
+%   - 4 cases total in schedule
+```
+
+**Test 12: testTwoPhaseStrict_ResourceConflict_Fails**
+```matlab
+% Purpose: Verify strict mode fails appropriately
+% Setup: 2 outpatients + 2 inpatients (all 60min), capacity=1
+% Mode: TwoPhaseStrict
+% Verify:
+%   - outcome.infeasible == true
+%   - outcome.ResourceViolations not empty
+%   - infeasibilityReason contains "Resource capacity"
+```
+
+**Test 13: testTwoPhaseStrict_NoInpatients**
+```matlab
+% Purpose: Handle single-sided scenario
+% Setup: 3 outpatients only, capacity=1
+% Mode: TwoPhaseStrict
+% Verify:
+%   - Success
+%   - Only phase 1 executed
+%   - 3 cases in schedule
+```
+
+**Test 14: testTwoPhaseStrict_NoOutpatients**
+```matlab
+% Purpose: Handle inpatient-only scenario
+% Setup: 3 inpatients only, capacity=1
+% Mode: TwoPhaseStrict
+% Verify:
+%   - Success
+%   - Single-phase behavior
+%   - 3 cases scheduled
+```
+
+**Test 15: testTwoPhaseStrict_LockedCasesConsumeResources**
+```matlab
+% Purpose: Verify locked cases block resources in phase 2
+% Setup:
+%   - Outpatient: 9:00-10:00, using Resource A
+%   - Inpatient: 9:30-10:30, using Resource A
+%   - Resource A capacity = 1
+% Mode: TwoPhaseStrict
+% Verify:
+%   - Phase 2 infeasible or inpatient scheduled after 10:00
+%   - No overlap with outpatient
+```
+
+#### Test Group E: Two-Phase Auto-Fallback Mode (5 tests)
+
+**Test 16: testAutoFallback_NormalCase_NoFallback**
+```matlab
+% Purpose: Fast path when resources sufficient
+% Setup: 2 outpatients + 2 inpatients, capacity=2
+% Mode: TwoPhaseAutoFallback
+% Verify:
+%   - outcome.usedFallback == false
+%   - Two-phase success
+%   - All outpatients before inpatients
+```
+
+**Test 17: testAutoFallback_ResourceConflict_FallbackTriggered**
+```matlab
+% Purpose: Verify fallback mechanism
+% Setup: 2 outpatients + 2 inpatients, capacity=1
+% Mode: TwoPhaseAutoFallback
+% Verify:
+%   - outcome.usedFallback == true
+%   - outcome.fallbackReason contains "Resource"
+%   - All 4 cases scheduled
+%   - No resource violations in final schedule
+```
+
+**Test 18: testAutoFallback_InpatientsBeforeOutpatients_AfterFallback**
+```matlab
+% Purpose: Verify conflict detection and reporting
+% Setup: Same as Test 17
+% Mode: TwoPhaseAutoFallback
+% Verify:
+%   - outcome.conflictStats.inpatientsMovedEarly > 0
+%   - outcome.conflictStats.affectedCases contains inpatient caseIDs
+%   - Some inpatients have startTime < some outpatients
+```
+
+**Test 19: testAutoFallback_MultipleResources_PartialConflict**
+```matlab
+% Purpose: Mixed resource scenario
+% Setup:
+%   - Resource A (capacity=1): 1 outpatient + 1 inpatient
+%   - Resource B (capacity=2): 2 outpatients + 1 inpatient
+% Mode: TwoPhaseAutoFallback
+% Verify:
+%   - Fallback triggered (Resource A causes conflict)
+%   - All cases fit in final schedule
+%   - Both resource constraints respected
+```
+
+**Test 20: testAutoFallback_FallbackPreservesResourceConstraints**
+```matlab
+% Purpose: Verify single-phase respects resources
+% Setup: 3 cases all using same resource, capacity=1
+% Mode: TwoPhaseAutoFallback
+% Verify:
+%   - No overlapping resource usage in final schedule
+%   - All 3 cases scheduled sequentially
+```
+
+#### Test Group F: Single-Phase Flexible Mode (5 tests)
+
+**Test 21: testSinglePhaseFlexible_MixedScheduling**
+```matlab
+% Purpose: Verify flexible mode allows mixing
+% Setup: 2 outpatients + 2 inpatients, capacity=2
+% Mode: SinglePhaseFlexible
+% Verify:
+%   - All 4 cases scheduled
+%   - Resource constraints respected
+%   - May have mixed order (not required to be sequential)
+```
+
+**Test 22: testSinglePhaseFlexible_ResourceConstraintsEnforced**
+```matlab
+% Purpose: Hard constraints still enforced
+% Setup: 3 cases using same resource, capacity=1
+% Mode: SinglePhaseFlexible
+% Verify:
+%   - Cases scheduled sequentially
+%   - No resource overlaps
+```
+
+**Test 23: testSinglePhaseFlexible_NoOutpatients**
+```matlab
+% Purpose: Edge case handling
+% Setup: 3 inpatients only
+% Mode: SinglePhaseFlexible
+% Verify: All scheduled successfully
+```
+
+**Test 24: testSinglePhaseFlexible_NoInpatients**
+```matlab
+% Purpose: Edge case handling
+% Setup: 3 outpatients only
+% Mode: SinglePhaseFlexible
+% Verify: All scheduled successfully
+```
+
+**Test 25: testSinglePhaseFlexible_AllCasesMixed**
+```matlab
+% Purpose: Stress test with complexity
+% Setup: 5 outpatients + 5 inpatients, varied resource usage
+% Mode: SinglePhaseFlexible
+% Verify:
+%   - All 10 cases scheduled
+%   - All resource constraints respected
+```
+
+---
+
+### Layer 3: Edge Cases and Boundary Conditions (10 tests)
+
+**File**: `tests/matlab/TestOutpatientInpatientEdgeCases.m`
+
+#### Test Group G: Resource Edge Cases (4 tests)
+
+**Test 26: testEdgeCase_UnlimitedCapacityResource**
+```matlab
+% Purpose: Verify infinite capacity handling
+% Setup: Resource capacity = Inf, multiple overlapping cases
+% All modes: Should never trigger fallback
+% Verify: All cases can overlap freely
+```
+
+**Test 27: testEdgeCase_ZeroCapacityResource**
+```matlab
+% Purpose: Handle impossible resource
+% Setup: Resource capacity = 0
+% Verify:
+%   - Cases using this resource cannot be scheduled
+%   - Appropriate error or infeasibility
+```
+
+**Test 28: testEdgeCase_NoResourcesDefined**
+```matlab
+% Purpose: Backwards compatibility
+% Setup: Cases without resource assignments
+% All modes: Should work as before
+% Verify: Optimization completes, mode handling still applies
+```
+
+**Test 29: testEdgeCase_SomeResourcesUnlimited**
+```matlab
+% Purpose: Mixed capacity handling
+% Setup: Resource A (capacity=1), Resource B (capacity=Inf)
+% Verify: Constraints only enforced for Resource A
+```
+
+#### Test Group H: Timing Edge Cases (3 tests)
+
+**Test 30: testEdgeCase_ExactlySimultaneous**
+```matlab
+% Purpose: Same start/end times
+% Setup: 2 cases identical times, same resource
+% Verify: Resource violation detected
+```
+
+**Test 31: testEdgeCase_BackToBackNonOverlapping**
+```matlab
+% Purpose: Boundary condition
+% Setup: Case1 9:00-10:00, Case2 10:00-11:00, capacity=1
+% Verify:
+%   - No violation (end == start is OK)
+%   - Both scheduled successfully
+```
+
+**Test 32: testEdgeCase_OneMinuteOverlap**
+```matlab
+% Purpose: Minimal overlap detection
+% Setup: Case1 9:00-10:00, Case2 9:59-10:59, capacity=1
+% Verify:
+%   - Violation detected
+%   - Fallback triggered in auto mode
+```
+
+#### Test Group I: Data Edge Cases (3 tests)
+
+**Test 33: testEdgeCase_EmptyCaseList**
+```matlab
+% Purpose: Graceful handling
+% Setup: No cases
+% Verify: Empty schedule returned, no errors
+```
+
+**Test 34: testEdgeCase_SingleCase**
+```matlab
+% Purpose: Minimal scenario
+% Setup: 1 outpatient
+% Verify: Scheduled successfully in all modes
+```
+
+**Test 35: testEdgeCase_OnlyLockedCases**
+```matlab
+% Purpose: Pre-locked scenario
+% Setup: All cases pre-locked (manual locks)
+% Verify: Returns locked schedule, no optimization needed
+```
+
+---
+
+### Layer 4: Regression Tests (5 tests)
+
+**File**: `tests/matlab/TestOutpatientInpatientRegression.m`
+
+**Test 36: testRegression_BackwardsCompatibility_NoResourcesSpecified**
+```matlab
+% Purpose: Legacy compatibility
+% Setup: Optimization without ResourceTypes in options
+% Verify:
+%   - No crash
+%   - Defaults to TwoPhaseAutoFallback behavior
+%   - Works as before (ignores resource logic)
+```
+
+**Test 37: testRegression_ExistingLockedCasesPreserved**
+```matlab
+% Purpose: User locks respected
+% Setup: User manually locked 2 cases, phase 1 adds 3 more
+% Verify:
+%   - All 5 locks present in phase 2
+%   - Manual locks + phase 1 locks combined
+%   - No duplicates
+```
+
+**Test 38: testRegression_OperatorAvailabilityStillWorks**
+```matlab
+% Purpose: Existing feature preservation
+% Setup: Phase 1 completes, operator availability passed to phase 2
+% Verify:
+%   - Phase 2 respects operator availability
+%   - Inpatients don't start before operator free
+```
+
+**Test 39: testRegression_LabStartTimesStillUpdated**
+```matlab
+% Purpose: Lab coordination preserved
+% Setup: Phase 1 ends at different times per lab
+% Verify:
+%   - Phase 2 lab start times updated correctly
+%   - Inpatients start after outpatients per-lab
+```
+
+**Test 40: testRegression_PrioritizeOutpatientOption_StillWorks**
+```matlab
+% Purpose: Legacy option compatibility
+% Setup: PrioritizeOutpatient = false (old single-phase trigger)
+% Verify:
+%   - Single-phase behavior activated
+%   - Cases mixed regardless of admission status
+```
+
+---
+
+### Layer 5: Performance and Scale Tests (3 tests)
+
+**File**: `tests/matlab/TestOutpatientInpatientPerformance.m`
+
+**Test 41: testPerformance_LargeCase_TwoPhaseSpeed**
+```matlab
+% Purpose: Verify fast path performance
+% Setup: 20 outpatients + 20 inpatients, no conflicts, capacity=5
+% Mode: TwoPhaseAutoFallback
+% Measure: Execution time
+% Verify:
+%   - No fallback triggered
+%   - Completes within 2x baseline (baseline = current two-phase)
+```
+
+**Test 42: testPerformance_LargeCase_FallbackCost**
+```matlab
+% Purpose: Measure fallback overhead
+% Setup: 20 outpatients + 20 inpatients, capacity=1 (forces conflict)
+% Mode: TwoPhaseAutoFallback
+% Measure: Total time (two-phase attempt + single-phase retry)
+% Verify:
+%   - Fallback triggered
+%   - Completes within 5x baseline
+%   - Produces valid schedule
+```
+
+**Test 43: testPerformance_StrictMode_QuickFailure**
+```matlab
+% Purpose: Verify strict mode fails fast
+% Setup: Resource conflict scenario
+% Mode: TwoPhaseStrict
+% Measure: Time to failure
+% Verify:
+%   - Fails quickly (< 10% of fallback retry time)
+%   - Doesn't waste time on retry
+```
+
+---
+
+### Layer 6: Diagnostic and Reporting Tests (5 tests)
+
+**File**: `tests/matlab/TestOutpatientInpatientDiagnostics.m`
+
+**Test 44: testDiagnostics_ViolationReportAccuracy**
+```matlab
+% Purpose: Verify diagnostic data quality
+% Setup: Multiple overlapping cases creating violations
+% Verify ResourceViolations array contains:
+%   - Correct ResourceId, ResourceName
+%   - Accurate StartTime, EndTime
+%   - Correct Capacity vs ActualUsage
+%   - Complete CaseIds list
+```
+
+**Test 45: testDiagnostics_ConflictStatsAccuracy**
+```matlab
+% Purpose: Verify fallback reporting
+% Setup: Fallback scenario with 2 inpatients moved early
+% Verify outcome.conflictStats:
+%   - inpatientsMovedEarly = 2
+%   - affectedCases contains exactly those 2 caseIDs
+%   - Only truly early inpatients flagged
+```
+
+**Test 46: testDiagnostics_FallbackReason_Descriptive**
+```matlab
+% Purpose: User-friendly error messages
+% Setup: Various fallback triggers
+% Verify:
+%   - fallbackReason is non-empty string
+%   - Contains keywords: "Resource", "capacity", "constraints"
+%   - Helpful to user
+```
+
+**Test 47: testDiagnostics_PhaseOutcomes_Preserved**
+```matlab
+% Purpose: Debug information retention
+% Setup: Successful two-phase optimization
+% Verify outcome structure:
+%   - outcome.phase1 present with objectiveValue, exitflag
+%   - outcome.phase2 present with objectiveValue, exitflag
+%   - Can trace back each phase's results
+```
+
+**Test 48: testDiagnostics_InfeasibilityReason_Helpful**
+```matlab
+% Purpose: Actionable error messages
+% Setup: TwoPhaseStrict failure
+% Verify:
+%   - infeasibilityReason is descriptive
+%   - Suggests solutions (adjust capacity, reduce load, change mode)
+```
+
+---
+
+## Test Execution Strategy
+
+### Running Tests
+
+**Quick Smoke Test** (~1 minute, 10 tests):
+```matlab
+% Run core unit tests only
+runtests('tests/matlab/TestOutpatientInpatientResourceConstraints.m');
+```
+
+**Full Test Suite** (~5-10 minutes, 48 tests):
+```matlab
+% Run all tests
+results = runtests('tests/matlab/TestOutpatientInpatient*.m');
+disp(results);
+```
+
+**Performance Benchmarks** (separate run):
+```matlab
+% Performance tests can be slow, run separately
+runtests('tests/matlab/TestOutpatientInpatientPerformance.m');
+```
+
+**Coverage Report**:
+```matlab
+import matlab.unittest.TestRunner;
+import matlab.unittest.plugins.CodeCoveragePlugin;
+import matlab.unittest.plugins.codecoverage.CoverageReport;
+
+suite = testsuite('tests/matlab/TestOutpatientInpatient*.m');
+runner = TestRunner.withTextOutput;
+
+% Add coverage for new code
+sourceDir = fullfile('scripts', '+conduction', '+scheduling');
+plugin = CodeCoveragePlugin.forFolder(sourceDir, ...
+    'Producing', CoverageReport('coverage-report'));
+runner.addPlugin(plugin);
+
+results = runner.run(suite);
+```
+
+### Continuous Integration
+
+```matlab
+% CI script: run_tests.m
+function exitCode = run_tests()
+    % Run all tests and generate reports
+    import matlab.unittest.TestRunner;
+    import matlab.unittest.plugins.XMLPlugin;
+    import matlab.unittest.plugins.CodeCoveragePlugin;
+
+    suite = testsuite('tests/matlab/TestOutpatientInpatient*.m');
+    runner = TestRunner.withTextOutput;
+
+    % JUnit XML for CI systems
+    runner.addPlugin(XMLPlugin.producingJUnitFormat('test-results.xml'));
+
+    % Coverage report
+    runner.addPlugin(CodeCoveragePlugin.forFolder('scripts', ...
+        'Producing', CoverageReport('coverage')));
+
+    results = runner.run(suite);
+
+    % Exit code: 0 if all pass, 1 if any fail
+    exitCode = double(~all([results.Passed]));
+end
+```
+
+### Test Data Helpers
+
+Create reusable test fixtures:
+
+```matlab
+% tests/matlab/helpers/createResourceConflictScenario.m
+function [outpatients, inpatients, resources] = createResourceConflictScenario(numOut, numIn, capacity)
+    % Create scenario designed to trigger resource conflicts
+
+    store = conduction.gui.stores.ResourceStore();
+    resource = store.create("TestResource", capacity);
+
+    outpatients = [];
+    for i = 1:numOut
+        caseObj = createTestCase(sprintf('Dr. Out%d', i), 'Outpatient Procedure', 60, 'outpatient');
+        caseObj.assignResource(resource.Id);
+        outpatients(end+1) = caseObj; %#ok<AGROW>
+    end
+
+    inpatients = [];
+    for i = 1:numIn
+        caseObj = createTestCase(sprintf('Dr. In%d', i), 'Inpatient Procedure', 60, 'inpatient');
+        caseObj.assignResource(resource.Id);
+        inpatients(end+1) = caseObj; %#ok<AGROW>
+    end
+
+    resources = store.snapshot();
+end
+```
+
+### Coverage Goals
+
+- **Line Coverage**: >95% for all new methods in:
+  - `HistoricalScheduler.scheduleTwoPhase()`
+  - `HistoricalScheduler.convertScheduleToLockedConstraints()`
+  - `HistoricalScheduler.shouldFallback()`
+  - `HistoricalScheduler.detectResourceViolations()`
+  - `HistoricalScheduler.fallbackToSinglePhase()`
+
+- **Branch Coverage**: 100% for:
+  - Mode selection switch statements
+  - Fallback decision logic
+  - Resource violation detection loops
+
+- **Path Coverage**: All execution paths:
+  - Two-phase success (no fallback)
+  - Two-phase → fallback → success
+  - Two-phase → failure (strict mode)
+  - Single-phase direct
+
+### Test Maintenance
+
+**After each implementation session:**
+1. Run affected test group
+2. Update test if behavior intentionally changed
+3. Add new test if edge case discovered
+4. Verify coverage hasn't decreased
+
+**Before merging:**
+1. Run full test suite
+2. All 48 tests must pass
+3. Coverage >95%
+4. No performance regressions
+
+---
+
 ## References
 
 - `HistoricalScheduler.m` - Current two-phase implementation
 - `SchedulingOptions.m` - Configuration options
 - `OptimizationModelBuilder.m` - ILP constraint generation
 - `SchedulingPreprocessor.m` - Data preparation and locked case handling
+- `TestResourceConstraints.m` - Existing resource test baseline
