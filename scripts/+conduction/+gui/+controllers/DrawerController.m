@@ -365,6 +365,20 @@ classdef DrawerController < handle
                         % Add lab assignment to the case entry first
                         caseEntry.assignedLab = labIdx;
 
+                        % RESOURCE-BLOCKING: Extract resource IDs from original case
+                        % The schedule doesn't store resource IDs, so we must look them up
+                        % IMPORTANT: Always set this field to ensure struct consistency
+                        caseEntry.requiredResourceIds = {};  % Default empty
+                        if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
+                            [originalCase, ~] = app.CaseManager.findCaseById(caseId);
+                            if ~isempty(originalCase) && isvalid(originalCase)
+                                resourceIds = originalCase.RequiredResourceIds;
+                                if ~isempty(resourceIds) && numel(resourceIds) > 0
+                                    caseEntry.requiredResourceIds = resourceIds;
+                                end
+                            end
+                        end
+
                         % Extract the full case assignment
                         if isempty(lockedAssignments)
                             lockedAssignments = caseEntry;  % First element

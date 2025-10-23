@@ -18,6 +18,7 @@ classdef SchedulingOptions
         Verbose (1,1) logical = true
         TimeStep (1,1) double {mustBePositive, mustBeFinite} = 10
         ResourceTypes struct = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {})
+        OutpatientInpatientMode string {mustBeMember(OutpatientInpatientMode, ["TwoPhaseStrict", "TwoPhaseAutoFallback", "SinglePhaseFlexible"])} = "TwoPhaseAutoFallback"
     end
 
     properties (Constant, Access = private)
@@ -31,9 +32,11 @@ classdef SchedulingOptions
         DEFAULT_PRIORITIZE_OUTPATIENT = true;
         DEFAULT_VERBOSE = false;
         DEFAULT_TIME_STEP = 10;            % minutes
+        DEFAULT_OUTPATIENT_INPATIENT_MODE = "TwoPhaseAutoFallback";
 
         VALID_METRICS = ["operatorIdle", "labIdle", "makespan", "operatorOvertime"];
         VALID_CASE_FILTERS = ["all", "outpatient", "inpatient"];
+        VALID_OUTPATIENT_INPATIENT_MODES = ["TwoPhaseStrict", "TwoPhaseAutoFallback", "SinglePhaseFlexible"];
     end
 
     methods (Static)
@@ -70,6 +73,8 @@ classdef SchedulingOptions
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
             addParameter(parser, 'ResourceTypes', struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {}), ...
                 @(x) isempty(x) || isstruct(x));
+            addParameter(parser, 'OutpatientInpatientMode', conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE, ...
+                @(x) isstring(x) || ischar(x));
 
             parse(parser, params{:});
             results = parser.Results;
@@ -88,14 +93,15 @@ classdef SchedulingOptions
                 results.AvailableLabs, ...
                 results.Verbose, ...
                 results.TimeStep, ...
-                results.ResourceTypes);
+                results.ResourceTypes, ...
+                results.OutpatientInpatientMode);
         end
     end
 
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
                 maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
-                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes)
+                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes, outpatientInpatientMode)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -112,8 +118,12 @@ classdef SchedulingOptions
                 verbose = conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE;
                 timeStep = conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP;
                 resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
             elseif nargin < 14
                 resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
+            elseif nargin < 15
+                outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
             end
 
             if isempty(labStartTimes)
@@ -142,6 +152,7 @@ classdef SchedulingOptions
             obj.Verbose = verbose;
             obj.TimeStep = timeStep;
             obj.ResourceTypes = conduction.scheduling.SchedulingOptions.normalizeResourceTypes(resourceTypes);
+            obj.OutpatientInpatientMode = conduction.scheduling.SchedulingOptions.normalizeOutpatientInpatientMode(outpatientInpatientMode);
         end
 
         function metric = normalizedMetric(obj)
@@ -149,6 +160,23 @@ classdef SchedulingOptions
         end
 
         function tf = isTwoPhaseEnabled(obj)
+            % Two-phase is enabled based on OutpatientInpatientMode setting
+            % OutpatientInpatientMode takes precedence over legacy PrioritizeOutpatient
+
+            % If explicit mode is SinglePhaseFlexible, use single-phase
+            if obj.OutpatientInpatientMode == "SinglePhaseFlexible"
+                tf = false;
+                return;
+            end
+
+            % If explicit mode is TwoPhaseStrict or TwoPhaseAutoFallback, use two-phase
+            if obj.OutpatientInpatientMode == "TwoPhaseStrict" || ...
+               obj.OutpatientInpatientMode == "TwoPhaseAutoFallback"
+                tf = obj.CaseFilter ~= "inpatient";
+                return;
+            end
+
+            % Legacy fallback: use PrioritizeOutpatient checkbox (for backward compatibility)
             tf = obj.PrioritizeOutpatient && obj.CaseFilter ~= "inpatient";
         end
 
@@ -167,7 +195,8 @@ classdef SchedulingOptions
                 'AvailableLabs', obj.AvailableLabs, ...
                 'Verbose', obj.Verbose, ...
                 'TimeStep', obj.TimeStep, ...
-                'ResourceTypes', obj.ResourceTypes);
+                'ResourceTypes', obj.ResourceTypes, ...
+                'OutpatientInpatientMode', obj.OutpatientInpatientMode);
         end
 
         function newObj = with(obj, varargin)
@@ -270,6 +299,15 @@ classdef SchedulingOptions
             if any(~isfinite(labs)) || any(labs < 1) || any(labs > numLabs)
                 error('SchedulingOptions:InvalidAvailableLabs', ...
                     'Available labs must be integers between 1 and %d.', numLabs);
+            end
+        end
+
+        function mode = normalizeOutpatientInpatientMode(candidate)
+            mode = string(candidate);
+            validModes = conduction.scheduling.SchedulingOptions.VALID_OUTPATIENT_INPATIENT_MODES;
+            if ~any(mode == validModes)
+                error('SchedulingOptions:InvalidOutpatientInpatientMode', ...
+                    'OutpatientInpatientMode must be one of: %s', strjoin(validModes, ', '));
             end
         end
 
