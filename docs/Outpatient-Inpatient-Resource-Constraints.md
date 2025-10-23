@@ -67,9 +67,17 @@ outpatient/inpatient optimization handling option.
 - Tries outpatients-first approach (fast path)
 - Phase 1: Optimize outpatients
 - Phase 2: Optimize inpatients with phase 1 cases locked
+  - **Note:** Locked outpatient resource consumption is NOT enforced during phase 2 optimization
+  - Resource violations are detected AFTER merging schedules
 - If phase 2 fails or has violations → **automatically retry with single-phase**
 - Single-phase allows some inpatients before outpatients to satisfy resource constraints
 - Shows warning about which cases were affected
+
+**Resource Blocking Behavior (Current Implementation):**
+- Phase 2 optimizer does not see reduced resource capacity from locked outpatients
+- Resource violations detected post-merge trigger automatic fallback to single-phase
+- This "detect-and-fallback" approach works correctly but may trigger more fallbacks than necessary
+- Future enhancement: Pre-block resources in phase 2 to avoid unnecessary fallbacks
 
 **When to Use:**
 - Most scenarios - prefer outpatients first, but pragmatic about fitting all cases
