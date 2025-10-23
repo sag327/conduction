@@ -140,23 +140,21 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
     app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
-    app.OptPrioritizeOutpatientCheckBox = uicheckbox(optimizationGrid);
-    app.OptPrioritizeOutpatientCheckBox.Text = 'Prioritize outpatient';
-    app.OptPrioritizeOutpatientCheckBox.Value = logical(app.Opts.prioritizeOutpt);
-    app.OptPrioritizeOutpatientCheckBox.Layout.Row = 12;
-    app.OptPrioritizeOutpatientCheckBox.Layout.Column = [1 2];
-    app.OptPrioritizeOutpatientCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
-
     app.OptOutpatientInpatientModeLabel = uilabel(optimizationGrid);
     app.OptOutpatientInpatientModeLabel.Text = 'Outpt/Inpt handling:';
-    app.OptOutpatientInpatientModeLabel.Layout.Row = 13;
+    app.OptOutpatientInpatientModeLabel.Layout.Row = 12;
     app.OptOutpatientInpatientModeLabel.Layout.Column = 1;
 
     app.OptOutpatientInpatientModeDropDown = uidropdown(optimizationGrid);
     app.OptOutpatientInpatientModeDropDown.Items = {'Two-Phase (Strict)', 'Two-Phase (Auto-Fallback)', 'Single-Phase (Flexible)'};
     app.OptOutpatientInpatientModeDropDown.ItemsData = {'TwoPhaseStrict', 'TwoPhaseAutoFallback', 'SinglePhaseFlexible'};
-    app.OptOutpatientInpatientModeDropDown.Value = char(app.Opts.outpatientInpatientMode);
-    app.OptOutpatientInpatientModeDropDown.Layout.Row = 13;
+    % Set dropdown value with fallback for legacy sessions
+    if isfield(app.Opts, 'outpatientInpatientMode')
+        app.OptOutpatientInpatientModeDropDown.Value = char(app.Opts.outpatientInpatientMode);
+    else
+        app.OptOutpatientInpatientModeDropDown.Value = 'TwoPhaseAutoFallback';
+    end
+    app.OptOutpatientInpatientModeDropDown.Layout.Row = 12;
     app.OptOutpatientInpatientModeDropDown.Layout.Column = 2;
     app.OptOutpatientInpatientModeDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 end

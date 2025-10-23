@@ -40,6 +40,16 @@ classdef HistoricalScheduler
             end
 
             % Phase 1 - Optimize outpatients only
+            fprintf('\n[DEBUG] ========== PHASE 1 (Outpatients) ==========\n');
+            fprintf('[DEBUG] Outpatient cases: %d\n', numel(outpatientCases));
+            for i = 1:numel(outpatientCases)
+                if isfield(outpatientCases(i), 'requiredResourceIds')
+                    fprintf('[DEBUG]   Case %s: resources = %s\n', ...
+                        char(outpatientCases(i).caseID), ...
+                        strjoin(string(outpatientCases(i).requiredResourceIds), ', '));
+                end
+            end
+
             phase1Options = obj.buildPhase1Options();
             [phase1Daily, phase1Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(outpatientCases, phase1Options);
 
@@ -54,8 +64,32 @@ classdef HistoricalScheduler
             lockedConstraints = obj.convertScheduleToLockedConstraints(...
                 phase1Outcome.scheduleStruct, outpatientCases, obj.Options.LockedCaseConstraints);
 
+            fprintf('\n[DEBUG] ========== LOCKED CONSTRAINTS ==========\n');
+            fprintf('[DEBUG] Total locked constraints: %d\n', numel(lockedConstraints));
+            for i = 1:numel(lockedConstraints)
+                if isfield(lockedConstraints(i), 'requiredResourceIds')
+                    fprintf('[DEBUG]   Locked case %s: lab=%d, startTime=%.1f, resources=%s\n', ...
+                        char(lockedConstraints(i).caseID), ...
+                        lockedConstraints(i).assignedLab, ...
+                        lockedConstraints(i).startTime, ...
+                        strjoin(string(lockedConstraints(i).requiredResourceIds), ', '));
+                end
+            end
+
             % Phase 2 - Optimize inpatients with locked outpatients
+            fprintf('\n[DEBUG] ========== PHASE 2 (Inpatients) ==========\n');
+            fprintf('[DEBUG] Inpatient cases: %d\n', numel(inpatientCases));
+            for i = 1:numel(inpatientCases)
+                if isfield(inpatientCases(i), 'requiredResourceIds')
+                    fprintf('[DEBUG]   Case %s: resources = %s\n', ...
+                        char(inpatientCases(i).caseID), ...
+                        strjoin(string(inpatientCases(i).requiredResourceIds), ', '));
+                end
+            end
+
             phase2Options = obj.buildPhase2Options(phase1Outcome.scheduleStruct, lockedConstraints);
+            fprintf('[DEBUG] Phase 2 options - LockedCaseConstraints count: %d\n', numel(phase2Options.LockedCaseConstraints));
+
             [phase2Daily, phase2Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(inpatientCases, phase2Options);
 
             % Merge schedules
@@ -331,11 +365,24 @@ classdef HistoricalScheduler
             %   locked - Array of locked constraint structs with fields:
             %            caseID, startTime, assignedLab
 
+            % Define consistent struct template with all possible fields
+            constraintTemplate = struct(...
+                'caseID', '', ...
+                'startTime', NaN, ...
+                'assignedLab', NaN, ...
+                'requiredResourceIds', {{}}, ...
+                'procTime', NaN, ...
+                'setupTime', NaN, ...
+                'procStartTime', NaN, ...
+                'procEndTime', NaN);
+
             % Initialize with consistent struct template
             if isempty(existingLocked)
-                locked = struct('caseID', {}, 'startTime', {}, 'assignedLab', {}, 'requiredResourceIds', {});
+                locked = repmat(constraintTemplate, 0, 1);
             else
                 locked = existingLocked;
+                % Ensure existing locked constraints have all fields
+                locked = obj.ensureConstraintFields(locked, constraintTemplate);
             end
 
             % Build map from caseID to case struct (to get resource info)
@@ -350,18 +397,34 @@ classdef HistoricalScheduler
                 for caseIdx = 1:numel(labCases)
                     scheduledCase = labCases(caseIdx);
 
-                    constraint = struct();
+                    % Start with template to ensure all fields exist
+                    constraint = constraintTemplate;
                     constraint.caseID = scheduledCase.caseID;
                     constraint.startTime = scheduledCase.startTime;
                     constraint.assignedLab = labIdx;
                     constraint.requiredResourceIds = {};  % Default empty
 
-                    % Preserve resource assignments from original case
+                    % Preserve resource assignments and timing from original case
                     if isKey(caseMap, char(scheduledCase.caseID))
                         originalCase = caseMap(char(scheduledCase.caseID));
                         if isfield(originalCase, 'requiredResourceIds')
                             constraint.requiredResourceIds = originalCase.requiredResourceIds;
                         end
+                        % Add procedure timing for resource capacity calculations
+                        if isfield(originalCase, 'procTime')
+                            constraint.procTime = originalCase.procTime;
+                        end
+                        if isfield(originalCase, 'setupTime')
+                            constraint.setupTime = originalCase.setupTime;
+                        end
+                    end
+
+                    % Extract timing from scheduled case
+                    if isfield(scheduledCase, 'procStartTime')
+                        constraint.procStartTime = scheduledCase.procStartTime;
+                    end
+                    if isfield(scheduledCase, 'procEndTime')
+                        constraint.procEndTime = scheduledCase.procEndTime;
                     end
 
                     locked(end+1) = constraint; %#ok<AGROW>
@@ -623,6 +686,30 @@ classdef HistoricalScheduler
             outcome.exitflag = [phase1Outcome.exitflag, phase2Outcome.exitflag];
             outcome.scheduleStruct = combinedSchedule;
             outcome.usedFallback = false;
+        end
+
+        function constraints = ensureConstraintFields(~, constraints, template)
+            %ENSURECONSTRAINTFIELDS Ensure all constraints have fields from template
+
+            if isempty(constraints)
+                return;
+            end
+
+            templateFields = fieldnames(template);
+            existingFields = fieldnames(constraints);
+            missingFields = setdiff(templateFields, existingFields);
+
+            % Add missing fields with default values from template
+            for i = 1:numel(missingFields)
+                fieldName = missingFields{i};
+                defaultValue = template.(fieldName);
+                for idx = 1:numel(constraints)
+                    constraints(idx).(fieldName) = defaultValue;
+                end
+            end
+
+            % Reorder fields to match template
+            constraints = orderfields(constraints, templateFields);
         end
     end
 end

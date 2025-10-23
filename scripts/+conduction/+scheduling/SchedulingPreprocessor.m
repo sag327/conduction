@@ -37,6 +37,20 @@ classdef SchedulingPreprocessor
             % Process locked case constraints
             lockedConstraints = options.LockedCaseConstraints;
 
+            if ~isempty(lockedConstraints) && options.Verbose
+                fprintf('[DEBUG PREPROCESSOR] Processing %d locked constraints\n', numel(lockedConstraints));
+                for i = 1:min(3, numel(lockedConstraints))
+                    fprintf('[DEBUG PREPROCESSOR]   Constraint %d: caseID=%s', i, char(lockedConstraints(i).caseID));
+                    if isfield(lockedConstraints(i), 'requiredResourceIds')
+                        fprintf(', resources=%s', strjoin(string(lockedConstraints(i).requiredResourceIds), ', '));
+                    end
+                    if isfield(lockedConstraints(i), 'startTime')
+                        fprintf(', startTime=%.1f', lockedConstraints(i).startTime);
+                    end
+                    fprintf('\n');
+                end
+            end
+
             [lockedCaseMap, lockedStartTimes, lockedLabs] = conduction.scheduling.SchedulingPreprocessor.processLockedConstraints(lockedConstraints, cases);
 
             % Enhance operator availability with locked case busy windows
@@ -100,6 +114,10 @@ classdef SchedulingPreprocessor
             prepared.lockedLabs = lockedLabs;
             prepared.availableLabs = availableLabs;
             prepared.closedLabs = find(closedLabsMask);
+
+            % Extract locked resource usage for phase 2 capacity reduction
+            prepared.lockedResourceUsage = conduction.scheduling.SchedulingPreprocessor.extractLockedResourceUsage(...
+                lockedConstraints, options.TimeStep);
 
             resourceTypes = options.ResourceTypes;
             if isempty(resourceTypes)
@@ -283,6 +301,79 @@ classdef SchedulingPreprocessor
 
             % Return availability unchanged - locked cases handled by existing constraints
             % (This function is kept for backward compatibility but performs no operation)
+        end
+
+        function lockedResourceUsage = extractLockedResourceUsage(constraints, timeStep)
+            %EXTRACTLOCKEDRESOURCEUSAGE Extract resource usage from locked cases for capacity reduction
+            %
+            % Returns a struct with fields:
+            %   resourceIds: cell array of resource ID strings used by locked cases
+            %   timeWindows: struct array with fields {resourceId, startTime, endTime, duration}
+            %
+            % This is used to reduce available resource capacity during phase 2 optimization.
+
+            lockedResourceUsage = struct('resourceIds', {{}}, 'timeWindows', struct.empty);
+
+            if isempty(constraints)
+                return;
+            end
+
+            % Collect all time windows where locked cases use resources
+            timeWindows = struct('resourceId', {}, 'startTime', {}, 'endTime', {}, 'duration', {});
+
+            for i = 1:numel(constraints)
+                constraint = constraints(i);
+
+                % Check if this locked case has resource requirements
+                if ~isfield(constraint, 'requiredResourceIds') || isempty(constraint.requiredResourceIds)
+                    continue;
+                end
+
+                % Extract timing information (need procedure start and end)
+                if ~isfield(constraint, 'startTime') || isempty(constraint.startTime)
+                    continue;
+                end
+
+                % Calculate the time window when this case uses resources
+                % Resources are used during the procedure (not during setup/post/turnover)
+                procStartTime = constraint.startTime;
+                procEndTime = procStartTime;
+
+                % Try to get more accurate procedure timing if available
+                if isfield(constraint, 'procStartTime') && ~isempty(constraint.procStartTime)
+                    procStartTime = constraint.procStartTime;
+                end
+                if isfield(constraint, 'procEndTime') && ~isempty(constraint.procEndTime)
+                    procEndTime = constraint.procEndTime;
+                elseif isfield(constraint, 'procTime') && ~isempty(constraint.procTime)
+                    procEndTime = procStartTime + constraint.procTime;
+                end
+
+                if procEndTime <= procStartTime
+                    continue;  % Invalid timing, skip
+                end
+
+                % Add a time window for each resource this case uses
+                resourceIds = string(constraint.requiredResourceIds);
+                resourceIds = resourceIds(strlength(resourceIds) > 0);
+
+                for rid = reshape(resourceIds, 1, [])
+                    window = struct();
+                    window.resourceId = char(rid);
+                    window.startTime = procStartTime;
+                    window.endTime = procEndTime;
+                    window.duration = procEndTime - procStartTime;
+                    timeWindows(end+1) = window; %#ok<AGROW>
+                end
+            end
+
+            % Extract unique resource IDs
+            if ~isempty(timeWindows)
+                uniqueResourceIds = unique({timeWindows.resourceId});
+                lockedResourceUsage.resourceIds = uniqueResourceIds;
+            end
+
+            lockedResourceUsage.timeWindows = timeWindows;
         end
     end
 end

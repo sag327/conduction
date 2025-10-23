@@ -160,16 +160,24 @@ classdef SchedulingOptions
         end
 
         function tf = isTwoPhaseEnabled(obj)
-            % Two-phase is enabled if:
-            % 1. PrioritizeOutpatient is true (legacy compatibility), OR
-            % 2. OutpatientInpatientMode is TwoPhaseStrict or TwoPhaseAutoFallback
-            % AND CaseFilter is not "inpatient" only
+            % Two-phase is enabled based on OutpatientInpatientMode setting
+            % OutpatientInpatientMode takes precedence over legacy PrioritizeOutpatient
 
-            legacyTwoPhase = obj.PrioritizeOutpatient;
-            explicitTwoPhase = obj.OutpatientInpatientMode == "TwoPhaseStrict" || ...
-                               obj.OutpatientInpatientMode == "TwoPhaseAutoFallback";
+            % If explicit mode is SinglePhaseFlexible, use single-phase
+            if obj.OutpatientInpatientMode == "SinglePhaseFlexible"
+                tf = false;
+                return;
+            end
 
-            tf = (legacyTwoPhase || explicitTwoPhase) && obj.CaseFilter ~= "inpatient";
+            % If explicit mode is TwoPhaseStrict or TwoPhaseAutoFallback, use two-phase
+            if obj.OutpatientInpatientMode == "TwoPhaseStrict" || ...
+               obj.OutpatientInpatientMode == "TwoPhaseAutoFallback"
+                tf = obj.CaseFilter ~= "inpatient";
+                return;
+            end
+
+            % Legacy fallback: use PrioritizeOutpatient checkbox (for backward compatibility)
+            tf = obj.PrioritizeOutpatient && obj.CaseFilter ~= "inpatient";
         end
 
         function s = toStruct(obj)

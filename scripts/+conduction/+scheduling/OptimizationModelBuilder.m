@@ -425,8 +425,25 @@ classdef OptimizationModelBuilder
             A = A(1:ineqRowIdx, :);
             b = b(1:ineqRowIdx);
 
+            if verbose && ~isempty(prepared.lockedCaseMap)
+                fprintf('[DEBUG MODEL] Building resource constraints with %d locked cases\n', prepared.lockedCaseMap.Count);
+                fprintf('[DEBUG MODEL] Input cases for phase 2: %d (inpatients only)\n', numCases);
+                if isfield(prepared, 'lockedResourceUsage') && ~isempty(prepared.lockedResourceUsage.timeWindows)
+                    fprintf('[DEBUG MODEL] Locked resource usage: %d time windows will reduce capacity\n', ...
+                        numel(prepared.lockedResourceUsage.timeWindows));
+                else
+                    fprintf('[DEBUG MODEL] WARNING: Locked outpatient resources NOT included in capacity calculations\n');
+                end
+            end
+
+            % Pass locked resource usage to capacity constraint builder
+            lockedResourceUsage = struct('resourceIds', {{}}, 'timeWindows', struct.empty);
+            if isfield(prepared, 'lockedResourceUsage')
+                lockedResourceUsage = prepared.lockedResourceUsage;
+            end
+
             [resourceA, resourceb] = conduction.scheduling.OptimizationModelBuilder.buildResourceCapacityConstraints( ...
-                caseResourceMatrix, resourceCapacities, numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds);
+                caseResourceMatrix, resourceCapacities, numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds, lockedResourceUsage);
             if ~isempty(resourceA)
                 A = [A; resourceA];
                 b = [b; resourceb];
@@ -538,13 +555,16 @@ classdef OptimizationModelBuilder
 
     methods (Static, Access = private)
         function [resourceA, resourceb] = buildResourceCapacityConstraints(caseResourceMatrix, resourceCapacities, ...
-                numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds)
+                numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds, lockedResourceUsage)
 
         if nargin < 13
             verbose = false;
         end
         if nargin < 14
             resourceIds = string.empty(0, 1);
+        end
+        if nargin < 15
+            lockedResourceUsage = struct('resourceIds', {{}}, 'timeWindows', struct.empty);
         end
 
         if isempty(caseResourceMatrix) || isempty(resourceCapacities)
@@ -607,6 +627,13 @@ classdef OptimizationModelBuilder
             end
 
             startRowIdx = rowIdx;
+
+            % Get current resource ID for matching locked usage
+            currentResourceId = '';
+            if numel(resourceIds) >= resourceIdx
+                currentResourceId = char(resourceIds(resourceIdx));
+            end
+
             for tIdx = 1:numTimeSlots
                 currentTime = timeSlots(tIdx);
                 rowCols = [];
@@ -639,6 +666,21 @@ classdef OptimizationModelBuilder
                     continue;
                 end
 
+                % Calculate how many locked cases are using this resource at currentTime
+                lockedUsage = 0;
+                if ~isempty(lockedResourceUsage.timeWindows) && ~isempty(currentResourceId)
+                    for wIdx = 1:numel(lockedResourceUsage.timeWindows)
+                        window = lockedResourceUsage.timeWindows(wIdx);
+                        if strcmp(window.resourceId, currentResourceId) && ...
+                           window.startTime <= currentTime && window.endTime > currentTime
+                            lockedUsage = lockedUsage + 1;
+                        end
+                    end
+                end
+
+                % Reduce available capacity by locked usage
+                effectiveCapacity = max(0, capacity - lockedUsage);
+
                 rowIdx = rowIdx + 1;
                 if rowIdx > size(resourceA, 1)
                     % Grow sparse matrix if estimate was too small
@@ -646,7 +688,7 @@ classdef OptimizationModelBuilder
                     resourceb(rowIdx, 1) = 0;
                 end
                 resourceA(rowIdx, rowCols) = 1;
-                resourceb(rowIdx) = capacity;
+                resourceb(rowIdx) = effectiveCapacity;
             end
 
             resourceConstraintCounts(resourceIdx) = rowIdx - startRowIdx;
@@ -655,8 +697,24 @@ classdef OptimizationModelBuilder
                 if numel(resourceIds) >= resourceIdx
                     resName = resourceIds(resourceIdx);
                 end
-                fprintf('  Resource %d (%s): capacity=%g, cases=%d, constraints=%d\n', ...
-                    resourceIdx, resName, capacity, numel(resourceCases), resourceConstraintCounts(resourceIdx));
+
+                % Count how many locked cases use this resource
+                lockedCount = 0;
+                if ~isempty(lockedResourceUsage.timeWindows) && ~isempty(currentResourceId)
+                    for wIdx = 1:numel(lockedResourceUsage.timeWindows)
+                        if strcmp(lockedResourceUsage.timeWindows(wIdx).resourceId, currentResourceId)
+                            lockedCount = lockedCount + 1;
+                        end
+                    end
+                end
+
+                if lockedCount > 0
+                    fprintf('  Resource %d (%s): capacity=%g, cases=%d (+ %d locked), constraints=%d\n', ...
+                        resourceIdx, resName, capacity, numel(resourceCases), lockedCount, resourceConstraintCounts(resourceIdx));
+                else
+                    fprintf('  Resource %d (%s): capacity=%g, cases=%d, constraints=%d\n', ...
+                        resourceIdx, resName, capacity, numel(resourceCases), resourceConstraintCounts(resourceIdx));
+                end
             end
         end
 
