@@ -321,11 +321,21 @@ classdef SchedulingPreprocessor
             % Collect all time windows where locked cases use resources
             timeWindows = struct('resourceId', {}, 'startTime', {}, 'endTime', {}, 'duration', {});
 
+            % Debug: track skipped constraints
+            skippedCount = 0;
+            skippedReasons = {};
+
             for i = 1:numel(constraints)
                 constraint = constraints(i);
 
                 % Check if this locked case has resource requirements
                 if ~isfield(constraint, 'requiredResourceIds') || isempty(constraint.requiredResourceIds)
+                    skippedCount = skippedCount + 1;
+                    caseId = 'unknown';
+                    if isfield(constraint, 'caseID')
+                        caseId = char(constraint.caseID);
+                    end
+                    skippedReasons{end+1} = sprintf('Case %s: no requiredResourceIds', caseId); %#ok<AGROW>
                     continue;
                 end
 
@@ -374,6 +384,27 @@ classdef SchedulingPreprocessor
             end
 
             lockedResourceUsage.timeWindows = timeWindows;
+
+            % Debug output
+            fprintf('[DEBUG LOCKED RESOURCES] Processed %d locked constraints\n', numel(constraints));
+            fprintf('[DEBUG LOCKED RESOURCES] Created %d resource time windows\n', numel(timeWindows));
+            if skippedCount > 0
+                fprintf('[DEBUG LOCKED RESOURCES] Skipped %d constraints:\n', skippedCount);
+                for idx = 1:min(5, numel(skippedReasons))
+                    fprintf('  - %s\n', skippedReasons{idx});
+                end
+                if numel(skippedReasons) > 5
+                    fprintf('  ... and %d more\n', numel(skippedReasons) - 5);
+                end
+            end
+            if ~isempty(timeWindows)
+                fprintf('[DEBUG LOCKED RESOURCES] Sample time windows:\n');
+                for idx = 1:min(3, numel(timeWindows))
+                    w = timeWindows(idx);
+                    fprintf('  - Resource %s: %.1f-%.1f (%.1f min)\n', ...
+                        w.resourceId, w.startTime, w.endTime, w.duration);
+                end
+            end
         end
     end
 end

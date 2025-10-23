@@ -738,6 +738,13 @@ classdef OptimizationController < handle
                     continue;  % Skip if no lab assignment - can't lock without knowing lab
                 end
 
+                % Extract required resources for capacity reduction (RESOURCE-BLOCKING)
+                % This is critical for respecting resource constraints when locked cases are present
+                constraint.requiredResourceIds = {};
+                if isfield(locked, 'requiredResourceIds') && ~isempty(locked.requiredResourceIds)
+                    constraint.requiredResourceIds = locked.requiredResourceIds;
+                end
+
                 % Add to constraints array
                 if isempty(constraints)
                     constraints = constraint;

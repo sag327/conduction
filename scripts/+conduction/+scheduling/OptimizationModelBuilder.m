@@ -668,18 +668,32 @@ classdef OptimizationModelBuilder
 
                 % Calculate how many locked cases are using this resource at currentTime
                 lockedUsage = 0;
+                lockedCaseDetails = {};
                 if ~isempty(lockedResourceUsage.timeWindows) && ~isempty(currentResourceId)
                     for wIdx = 1:numel(lockedResourceUsage.timeWindows)
                         window = lockedResourceUsage.timeWindows(wIdx);
                         if strcmp(window.resourceId, currentResourceId) && ...
                            window.startTime <= currentTime && window.endTime > currentTime
                             lockedUsage = lockedUsage + 1;
+                            if verbose
+                                lockedCaseDetails{end+1} = sprintf('%.1f-%.1f', window.startTime, window.endTime); %#ok<AGROW>
+                            end
                         end
                     end
                 end
 
                 % Reduce available capacity by locked usage
                 effectiveCapacity = max(0, capacity - lockedUsage);
+
+                % Debug: Show when capacity is actually reduced
+                if verbose && lockedUsage > 0 && mod(tIdx, 30) == 1  % Every ~5 minutes
+                    resName = currentResourceId;
+                    if isempty(resName)
+                        resName = sprintf('Resource %d', resourceIdx);
+                    end
+                    fprintf('[DEBUG CAPACITY] Time %.1f: %s locked=%d, effective=%g (windows: %s)\n', ...
+                        currentTime, resName, lockedUsage, effectiveCapacity, strjoin(lockedCaseDetails, ', '));
+                end
 
                 rowIdx = rowIdx + 1;
                 if rowIdx > size(resourceA, 1)
