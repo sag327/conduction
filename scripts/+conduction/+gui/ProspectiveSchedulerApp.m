@@ -2849,10 +2849,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     if numel(colorValue) ~= 3 || any(~isfinite(colorValue))
                         colorValue = [0.45 0.45 0.45];
                     end
-                    pattern = string(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'Pattern', "solid"));
-                    isTracked = logical(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'IsTracked', true));
 
-                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue, pattern, "", isTracked); %#ok<AGROW>
+                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue); %#ok<AGROW>
                 catch
                     % Skip malformed entries
                 end

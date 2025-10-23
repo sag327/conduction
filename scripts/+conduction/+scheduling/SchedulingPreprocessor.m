@@ -103,7 +103,7 @@ classdef SchedulingPreprocessor
 
             resourceTypes = options.ResourceTypes;
             if isempty(resourceTypes)
-                prepared.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+                prepared.resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
                 prepared.resourceIds = string.empty(0, 1);
                 prepared.resourceCapacities = double.empty(0, 1);
                 prepared.caseResourceMatrix = false(prepared.numCases, 0);

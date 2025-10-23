@@ -208,7 +208,7 @@ classdef SchedulingOptions
         end
 
         function resources = normalizeResourceTypes(candidate)
-            base = struct('Id', "", 'Name', "", 'Capacity', 0, 'Color', [0.5 0.5 0.5], 'Pattern', "", 'IsTracked', true);
+            base = struct('Id', "", 'Name', "", 'Capacity', 0, 'Color', [0.5 0.5 0.5]);
 
             if nargin == 0 || isempty(candidate)
                 resources = repmat(base, 0, 1);
@@ -256,18 +256,6 @@ classdef SchedulingOptions
                     resources(idx).Color = colorValue;
                 else
                     resources(idx).Color = base.Color;
-                end
-
-                if isfield(entry, 'Pattern') && ~isempty(entry.Pattern)
-                    resources(idx).Pattern = string(entry.Pattern);
-                else
-                    resources(idx).Pattern = base.Pattern;
-                end
-
-                if isfield(entry, 'IsTracked') && ~isempty(entry.IsTracked)
-                    resources(idx).IsTracked = logical(entry.IsTracked);
-                else
-                    resources(idx).IsTracked = base.IsTracked;
                 end
             end
         end

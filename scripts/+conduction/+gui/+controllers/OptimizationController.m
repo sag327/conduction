@@ -283,7 +283,7 @@ classdef OptimizationController < handle
             numLabs = max(1, round(app.Opts.labs));
             startTimes = repmat({'08:00'}, 1, numLabs);
 
-            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
             if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
                 store = app.CaseManager.getResourceStore();
                 if ~isempty(store) && isvalid(store)

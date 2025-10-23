@@ -426,7 +426,7 @@ classdef OptimizationModelBuilder
             b = b(1:ineqRowIdx);
 
             [resourceA, resourceb] = conduction.scheduling.OptimizationModelBuilder.buildResourceCapacityConstraints( ...
-                caseResourceMatrix, resourceCapacities, numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes);
+                caseResourceMatrix, resourceCapacities, numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds);
             if ~isempty(resourceA)
                 A = [A; resourceA];
                 b = [b; resourceb];
@@ -538,9 +538,19 @@ classdef OptimizationModelBuilder
 
     methods (Static, Access = private)
         function [resourceA, resourceb] = buildResourceCapacityConstraints(caseResourceMatrix, resourceCapacities, ...
-                numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes)
+                numCases, numLabs, numTimeSlots, numVars, validTimeSlots, timeSlots, getVarIndex, labPreferences, caseSetupTimes, caseProcTimes, verbose, resourceIds)
+
+        if nargin < 13
+            verbose = false;
+        end
+        if nargin < 14
+            resourceIds = string.empty(0, 1);
+        end
 
         if isempty(caseResourceMatrix) || isempty(resourceCapacities)
+            if verbose
+                fprintf('\nResource constraints: SKIPPED (no resources defined)\n');
+            end
             resourceA = sparse(0, numVars);
             resourceb = zeros(0, 1);
             return;
@@ -548,9 +558,16 @@ classdef OptimizationModelBuilder
 
         numResources = size(caseResourceMatrix, 2);
         if numResources == 0
+            if verbose
+                fprintf('\nResource constraints: SKIPPED (numResources=0)\n');
+            end
             resourceA = sparse(0, numVars);
             resourceb = zeros(0, 1);
             return;
+        end
+
+        if verbose
+            fprintf('\nResource constraints: Building for %d resources...\n', numResources);
         end
 
         constraintEstimate = max(1, numResources * numTimeSlots);
@@ -559,21 +576,37 @@ classdef OptimizationModelBuilder
         resourceb = zeros(constraintEstimate, 1);
 
         rowIdx = 0;
+        resourceConstraintCounts = zeros(numResources, 1);
 
         for resourceIdx = 1:numResources
             resourceCases = find(caseResourceMatrix(:, resourceIdx));
             if isempty(resourceCases)
+                if verbose
+                    resName = resourceIdx;
+                    if numel(resourceIds) >= resourceIdx
+                        resName = resourceIds(resourceIdx);
+                    end
+                    fprintf('  Resource %d (%s): SKIPPED (no cases assigned)\n', resourceIdx, resName);
+                end
                 continue;
             end
 
             capacity = resourceCapacities(resourceIdx);
             if isinf(capacity)
+                if verbose
+                    resName = resourceIdx;
+                    if numel(resourceIds) >= resourceIdx
+                        resName = resourceIds(resourceIdx);
+                    end
+                    fprintf('  Resource %d (%s): SKIPPED (infinite capacity)\n', resourceIdx, resName);
+                end
                 continue;
             end
             if isempty(capacity) || ~isfinite(capacity) || capacity < 0
                 capacity = 0;
             end
 
+            startRowIdx = rowIdx;
             for tIdx = 1:numTimeSlots
                 currentTime = timeSlots(tIdx);
                 rowCols = [];
@@ -615,10 +648,24 @@ classdef OptimizationModelBuilder
                 resourceA(rowIdx, rowCols) = 1;
                 resourceb(rowIdx) = capacity;
             end
+
+            resourceConstraintCounts(resourceIdx) = rowIdx - startRowIdx;
+            if verbose
+                resName = resourceIdx;
+                if numel(resourceIds) >= resourceIdx
+                    resName = resourceIds(resourceIdx);
+                end
+                fprintf('  Resource %d (%s): capacity=%g, cases=%d, constraints=%d\n', ...
+                    resourceIdx, resName, capacity, numel(resourceCases), resourceConstraintCounts(resourceIdx));
+            end
         end
 
         resourceA = resourceA(1:rowIdx, :);
         resourceb = resourceb(1:rowIdx);
+
+        if verbose
+            fprintf('Resource constraints: Generated %d total constraint rows\n', rowIdx);
+        end
         end
     end
 end
