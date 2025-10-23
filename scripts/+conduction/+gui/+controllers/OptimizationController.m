@@ -138,6 +138,19 @@ classdef OptimizationController < handle
                 end
 
                 app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, metadata);
+
+                % Check for infeasibility (TwoPhaseStrict mode failure)
+                if isfield(outcome, 'infeasible') && outcome.infeasible
+                    app.OptimizationController.displayInfeasibilityError(app, outcome);
+                    return;  % Don't proceed with normal success handling
+                end
+
+                % Check for fallback warning (TwoPhaseAutoFallback triggered)
+                if isfield(outcome, 'usedFallback') && outcome.usedFallback
+                    app.OptimizationController.displayFallbackWarning(app, outcome);
+                end
+
+                % Check for resource violations
                 if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
                     app.OptimizationController.displayResourceViolations(app, outcome.ResourceViolations);
                 end
@@ -291,6 +304,12 @@ classdef OptimizationController < handle
                 end
             end
 
+            % Get OutpatientInpatientMode with fallback to default
+            outpatientInpatientMode = "TwoPhaseAutoFallback";
+            if isfield(app.Opts, 'outpatientInpatientMode') && ~isempty(app.Opts.outpatientInpatientMode)
+                outpatientInpatientMode = string(app.Opts.outpatientInpatientMode);
+            end
+
             scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
                 'NumLabs', numLabs, ...
                 'LabStartTimes', startTimes, ...
@@ -303,7 +322,8 @@ classdef OptimizationController < handle
                 'AvailableLabs', app.AvailableLabIds, ...
                 'LockedCaseConstraints', lockedConstraints, ...
                 'ResourceTypes', resourceTypes, ...
-                'Verbose', true);
+                'Verbose', true, ...
+                'OutpatientInpatientMode', outpatientInpatientMode);
         end
 
         function showOptimizationOptionsDialog(~, app)
@@ -548,6 +568,12 @@ classdef OptimizationController < handle
                     selectedLabs = labIds;
                 end
 
+                % Get OutpatientInpatientMode with fallback to default
+                outpatientInpatientMode = "TwoPhaseAutoFallback";
+                if ~isempty(app.OptOutpatientInpatientModeDropDown) && isvalid(app.OptOutpatientInpatientModeDropDown)
+                    outpatientInpatientMode = string(app.OptOutpatientInpatientModeDropDown.Value);
+                end
+
                 newOpts = struct( ...
                     'turnover', app.OptTurnoverSpinner.Value, ...
                     'setup', app.OptSetupSpinner.Value, ...
@@ -557,7 +583,8 @@ classdef OptimizationController < handle
                     'prioritizeOutpt', logical(app.OptPrioritizeOutpatientCheckBox.Value), ...
                     'caseFilter', string(app.OptFilterDropDown.Value), ...
                     'metric', string(app.OptMetricDropDown.Value), ...
-                    'labs', numLabsValue);
+                    'labs', numLabsValue, ...
+                    'outpatientInpatientMode', outpatientInpatientMode);
 
                 app.Opts = newOpts;
                 app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
@@ -727,6 +754,63 @@ classdef OptimizationController < handle
                     constraints(end+1) = constraint; %#ok<AGROW>
                 end
             end
+        end
+
+        function displayInfeasibilityError(~, app, outcome)
+            %DISPLAYINFEASIBILITYERROR Show error when TwoPhaseStrict mode fails
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            msg = sprintf(['Cannot schedule all inpatients due to resource constraints.\n\n' ...
+                'Please adjust resource capacity, reduce case load, or change\n' ...
+                'outpatient/inpatient optimization handling option.']);
+
+            if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
+                violations = outcome.ResourceViolations;
+                msg = [msg sprintf('\n\nResource violations detected:\n')];
+                maxViolations = min(3, numel(violations));
+                for idx = 1:maxViolations
+                    v = violations(idx);
+                    msg = [msg sprintf('  • %s (capacity=%d, usage=%d) at time %d-%d\n', ...
+                        char(v.ResourceName), v.Capacity, v.ActualUsage, v.StartTime, v.EndTime)];
+                end
+                if numel(violations) > maxViolations
+                    msg = [msg sprintf('  ...and %d more violations\n', numel(violations) - maxViolations)];
+                end
+            end
+
+            uialert(app.UIFigure, msg, 'Optimization Failed', 'Icon', 'error');
+        end
+
+        function displayFallbackWarning(~, app, outcome)
+            %DISPLAYFALLBACKWARNING Show warning when TwoPhaseAutoFallback triggers
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            msg = sprintf('⚠ Resource Constraints Override\n\n');
+
+            if isfield(outcome, 'conflictStats') && ~isempty(outcome.conflictStats)
+                stats = outcome.conflictStats;
+                msg = [msg sprintf(['Resource capacity limits required %d inpatient case(s) ' ...
+                    'to be scheduled before some outpatients.\n\n'], stats.inpatientsMovedEarly)];
+
+                if isfield(stats, 'affectedCases') && ~isempty(stats.affectedCases)
+                    msg = [msg 'Affected cases:\n'];
+                    maxCases = min(5, numel(stats.affectedCases));
+                    for idx = 1:maxCases
+                        msg = [msg sprintf('  • %s\n', char(stats.affectedCases{idx}))];
+                    end
+                    if numel(stats.affectedCases) > maxCases
+                        msg = [msg sprintf('  ...and %d more cases\n', numel(stats.affectedCases) - maxCases)];
+                    end
+                end
+            else
+                msg = [msg 'Some inpatients were scheduled before outpatients to satisfy resource constraints.'];
+            end
+
+            uialert(app.UIFigure, msg, 'Optimization Notice', 'Icon', 'warning');
         end
 
         function displayResourceViolations(~, app, violations)

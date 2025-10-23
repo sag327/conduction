@@ -39,47 +39,69 @@ classdef HistoricalScheduler
                 return;
             end
 
-            baseStruct = obj.Options.toStruct();
-            baseStruct.PrioritizeOutpatient = false;
-            baseStruct.CaseFilter = 'all';
-            baseStruct.OperatorAvailability = containers.Map('KeyType','char','ValueType','double');
-
-            phase1Options = conduction.scheduling.SchedulingOptions.fromArgs(baseStruct);
+            % Phase 1 - Optimize outpatients only
+            phase1Options = obj.buildPhase1Options();
             [phase1Daily, phase1Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(outpatientCases, phase1Options);
 
             if isempty(inpatientCases)
+                % No inpatients to schedule
                 dailySchedule = phase1Daily;
-                outcome = struct('phase1', phase1Outcome, ...
-                    'objectiveValue', phase1Outcome.objectiveValue, ...
-                    'exitflag', phase1Outcome.exitflag, ...
-                    'scheduleStruct', phase1Outcome.scheduleStruct, ...
-                    'resultsMetadata', phase1Outcome.resultsMetadata);
+                outcome = obj.buildPhase1OnlyOutcome(phase1Outcome);
                 return;
             end
 
-            [updatedStarts, operatorAvailability] = obj.calculateUpdatedLabAvailability( ...
-                phase1Outcome.scheduleStruct, obj.Options.LabStartTimes);
+            % Convert phase 1 results to locked constraints for phase 2
+            lockedConstraints = obj.convertScheduleToLockedConstraints(...
+                phase1Outcome.scheduleStruct, outpatientCases, obj.Options.LockedCaseConstraints);
 
-            phase2Struct = obj.Options.toStruct();
-            phase2Struct.PrioritizeOutpatient = false;
-            phase2Struct.CaseFilter = 'all';
-            phase2Struct.LabStartTimes = updatedStarts;
-            phase2Struct.OperatorAvailability = operatorAvailability;
-
-            phase2Options = conduction.scheduling.SchedulingOptions.fromArgs(phase2Struct);
+            % Phase 2 - Optimize inpatients with locked outpatients
+            phase2Options = obj.buildPhase2Options(phase1Outcome.scheduleStruct, lockedConstraints);
             [phase2Daily, phase2Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(inpatientCases, phase2Options);
 
-            combinedSchedule = obj.mergeSchedules(phase1Outcome.scheduleStruct, phase2Outcome.scheduleStruct);
-            mergedResults = obj.mergeResultsMetadata(combinedSchedule, phase1Outcome, phase2Outcome);
-            dailySchedule = conduction.DailySchedule.fromLegacyStruct(combinedSchedule, mergedResults);
+            % Merge schedules
+            combinedSchedule = obj.mergeSchedules(phase1Outcome.scheduleStruct, ...
+                phase2Outcome.scheduleStruct);
 
-            outcome = struct();
-            outcome.phase1 = phase1Outcome;
-            outcome.phase2 = phase2Outcome;
-            outcome.objectiveValue = phase1Outcome.objectiveValue + phase2Outcome.objectiveValue;
-            outcome.exitflag = [phase1Outcome.exitflag, phase2Outcome.exitflag];
-            outcome.scheduleStruct = combinedSchedule;
-            outcome.resultsMetadata = mergedResults;
+            % Check if fallback is needed
+            needsFallback = obj.shouldFallback(phase2Outcome, combinedSchedule);
+
+            if needsFallback
+                if obj.Options.OutpatientInpatientMode == "TwoPhaseAutoFallback"
+                    % Retry with single-phase optimization
+                    [dailySchedule, outcome] = obj.fallbackToSinglePhase(cases, ...
+                        phase1Outcome, phase2Outcome);
+                    outcome.usedFallback = true;
+                    outcome.fallbackReason = 'Resource capacity constraints prevented two-phase solution';
+                elseif obj.Options.OutpatientInpatientMode == "TwoPhaseStrict"
+                    % Mark as infeasible, return diagnostic info
+                    mergedResults = obj.mergeResultsMetadata(combinedSchedule, ...
+                        phase1Outcome, phase2Outcome);
+                    dailySchedule = conduction.DailySchedule.fromLegacyStruct(...
+                        combinedSchedule, mergedResults);
+
+                    outcome = obj.buildFailedOutcome(phase1Outcome, phase2Outcome, ...
+                        combinedSchedule);
+                    outcome.infeasible = true;
+                    outcome.infeasibilityReason = 'Resource capacity constraints';
+                    outcome.ResourceViolations = obj.detectResourceViolations(...
+                        combinedSchedule, obj.Options.ResourceTypes);
+                end
+            else
+                % Success - return merged schedule
+                mergedResults = obj.mergeResultsMetadata(combinedSchedule, ...
+                    phase1Outcome, phase2Outcome);
+                dailySchedule = conduction.DailySchedule.fromLegacyStruct(...
+                    combinedSchedule, mergedResults);
+
+                outcome = struct();
+                outcome.phase1 = phase1Outcome;
+                outcome.phase2 = phase2Outcome;
+                outcome.objectiveValue = phase1Outcome.objectiveValue + phase2Outcome.objectiveValue;
+                outcome.exitflag = [phase1Outcome.exitflag, phase2Outcome.exitflag];
+                outcome.scheduleStruct = combinedSchedule;
+                outcome.resultsMetadata = mergedResults;
+                outcome.usedFallback = false;
+            end
         end
 
         function cases = applyCaseFilter(~, cases, filter)
@@ -535,6 +557,57 @@ classdef HistoricalScheduler
             baseStruct.OutpatientInpatientMode = 'SinglePhaseFlexible';
 
             options = conduction.scheduling.SchedulingOptions.fromArgs(baseStruct);
+        end
+
+        function options = buildPhase1Options(obj)
+            %BUILDPHASE1OPTIONS Configure options for phase 1 (outpatients only)
+
+            baseStruct = obj.Options.toStruct();
+            baseStruct.PrioritizeOutpatient = false;
+            baseStruct.CaseFilter = 'all';
+            baseStruct.OperatorAvailability = containers.Map('KeyType','char','ValueType','double');
+
+            options = conduction.scheduling.SchedulingOptions.fromArgs(baseStruct);
+        end
+
+        function options = buildPhase2Options(obj, phase1Schedule, lockedConstraints)
+            %BUILDPHASE2OPTIONS Configure options for phase 2 (inpatients with locked outpatients)
+
+            [updatedStarts, operatorAvailability] = obj.calculateUpdatedLabAvailability(...
+                phase1Schedule, obj.Options.LabStartTimes);
+
+            phase2Struct = obj.Options.toStruct();
+            phase2Struct.PrioritizeOutpatient = false;
+            phase2Struct.CaseFilter = 'all';
+            phase2Struct.LabStartTimes = updatedStarts;
+            phase2Struct.OperatorAvailability = operatorAvailability;
+            phase2Struct.LockedCaseConstraints = lockedConstraints;
+
+            options = conduction.scheduling.SchedulingOptions.fromArgs(phase2Struct);
+        end
+
+        function outcome = buildPhase1OnlyOutcome(obj, phase1Outcome)
+            %BUILDPHASE1ONLYOUTCOME Build outcome struct when only outpatients were scheduled
+
+            outcome = struct(...
+                'phase1', phase1Outcome, ...
+                'objectiveValue', phase1Outcome.objectiveValue, ...
+                'exitflag', phase1Outcome.exitflag, ...
+                'scheduleStruct', phase1Outcome.scheduleStruct, ...
+                'resultsMetadata', phase1Outcome.resultsMetadata, ...
+                'usedFallback', false);
+        end
+
+        function outcome = buildFailedOutcome(obj, phase1Outcome, phase2Outcome, combinedSchedule)
+            %BUILDFAILEDOUTCOME Build outcome struct for TwoPhaseStrict failure
+
+            outcome = struct();
+            outcome.phase1 = phase1Outcome;
+            outcome.phase2 = phase2Outcome;
+            outcome.objectiveValue = phase1Outcome.objectiveValue + phase2Outcome.objectiveValue;
+            outcome.exitflag = [phase1Outcome.exitflag, phase2Outcome.exitflag];
+            outcome.scheduleStruct = combinedSchedule;
+            outcome.usedFallback = false;
         end
     end
 end
