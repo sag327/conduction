@@ -318,7 +318,7 @@ classdef HistoricalScheduler
         end
     end
 
-    methods (Access = private)
+    methods (Access = {?matlab.unittest.TestCase, ?conduction.scheduling.HistoricalScheduler})
         function locked = convertScheduleToLockedConstraints(obj, scheduleStruct, cases, existingLocked)
             %CONVERTSCHEDULETOLOCKEDCONSTRAINTS Build locked case constraints from phase 1 schedule
             %
@@ -331,7 +331,12 @@ classdef HistoricalScheduler
             %   locked - Array of locked constraint structs with fields:
             %            caseID, startTime, assignedLab
 
-            locked = existingLocked;  % Start with existing locks
+            % Initialize with consistent struct template
+            if isempty(existingLocked)
+                locked = struct('caseID', {}, 'startTime', {}, 'assignedLab', {}, 'requiredResourceIds', {});
+            else
+                locked = existingLocked;
+            end
 
             % Build map from caseID to case struct (to get resource info)
             caseMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
@@ -349,6 +354,7 @@ classdef HistoricalScheduler
                     constraint.caseID = scheduledCase.caseID;
                     constraint.startTime = scheduledCase.startTime;
                     constraint.assignedLab = labIdx;
+                    constraint.requiredResourceIds = {};  % Default empty
 
                     % Preserve resource assignments from original case
                     if isKey(caseMap, char(scheduledCase.caseID))
@@ -369,7 +375,16 @@ classdef HistoricalScheduler
             % Returns array of violation structs with fields:
             %   ResourceId, ResourceName, StartTime, EndTime, Capacity, ActualUsage, CaseIds
 
-            violations = struct([]);
+            % Initialize with template to ensure consistent struct fields
+            violationTemplate = struct(...
+                'ResourceId', "", ...
+                'ResourceName', "", ...
+                'StartTime', 0, ...
+                'EndTime', 0, ...
+                'Capacity', 0, ...
+                'ActualUsage', 0, ...
+                'CaseIds', {{}});
+            violations = repmat(violationTemplate, 0, 1);
 
             if isempty(resourceTypes)
                 return;
