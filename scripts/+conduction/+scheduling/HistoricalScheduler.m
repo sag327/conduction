@@ -708,6 +708,14 @@ classdef HistoricalScheduler
                 end
             end
 
+            % Remove extra fields that aren't in template
+            % GUI constraints may have operator, caseNumber, endTime that scheduler doesn't need
+            fieldsAfterAdding = fieldnames(constraints);
+            extraFields = setdiff(fieldsAfterAdding, templateFields);
+            if ~isempty(extraFields)
+                constraints = rmfield(constraints, extraFields);
+            end
+
             % Reorder fields to match template
             constraints = orderfields(constraints, templateFields);
         end
