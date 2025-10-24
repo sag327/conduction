@@ -53,6 +53,31 @@ classdef CaseManager < handle
             end
         end
 
+        function delete(obj)
+            % Destructor: Clean up to break circular references and release conduction objects
+
+            % Clear listeners first to prevent callbacks during cleanup
+            obj.ChangeListeners = {};
+
+            % Clear conduction class objects
+            obj.HistoricalCollection = conduction.ScheduleCollection.empty;
+            obj.Cases = conduction.gui.models.ProspectiveCase.empty;
+            obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;
+
+            % Clear maps containing Operator and Procedure objects
+            if ~isempty(obj.KnownOperators)
+                obj.KnownOperators = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            end
+            if ~isempty(obj.KnownProcedures)
+                obj.KnownProcedures = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            end
+
+            % Delete ResourceStore
+            if ~isempty(obj.ResourceStore) && isvalid(obj.ResourceStore)
+                delete(obj.ResourceStore);
+            end
+        end
+
         function store = getResourceStore(obj)
             if isempty(obj.ResourceStore) || ~isvalid(obj.ResourceStore)
                 obj.ResourceStore = conduction.gui.stores.ResourceStore();

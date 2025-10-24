@@ -903,6 +903,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
             app.UIFigure.KeyPressFcn = @(src, event) app.onGlobalKeyPress(event);
+            app.UIFigure.CloseRequestFcn = @(~, ~) delete(app);
 
             % Root layout: header, content
             app.MainGridLayout = uigridlayout(app.UIFigure);
@@ -1364,10 +1365,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 delete(app.DrawerResourcesChecklist);
             end
 
-            if ~isempty(app.ResourceManagerWindow) && isvalid(app.ResourceManagerWindow)
-                delete(app.ResourceManagerWindow);
-            end
-
             if ~isempty(app.ResourceLegend) && isvalid(app.ResourceLegend)
                 delete(app.ResourceLegend);
             end
@@ -1383,6 +1380,56 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if ~isempty(app.CasesView) && isvalid(app.CasesView)
                 delete(app.CasesView);
+            end
+
+            % Clear schedule objects to release conduction class instances
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.SimulatedSchedule = conduction.DailySchedule.empty;
+
+            % Clear CaseDragController app reference to break circular dependency
+            if ~isempty(app.CaseDragController) && isvalid(app.CaseDragController)
+                app.CaseDragController.clearRegistry();
+            end
+
+            % Delete controllers
+            if ~isempty(app.ScheduleRenderer) && isvalid(app.ScheduleRenderer)
+                delete(app.ScheduleRenderer);
+            end
+            if ~isempty(app.DrawerController) && isvalid(app.DrawerController)
+                delete(app.DrawerController);
+            end
+            if ~isempty(app.OptimizationController) && isvalid(app.OptimizationController)
+                delete(app.OptimizationController);
+            end
+            if ~isempty(app.AnalyticsRenderer) && isvalid(app.AnalyticsRenderer)
+                delete(app.AnalyticsRenderer);
+            end
+            if ~isempty(app.DurationSelector) && isvalid(app.DurationSelector)
+                delete(app.DurationSelector);
+            end
+            if ~isempty(app.TestingModeController) && isvalid(app.TestingModeController)
+                delete(app.TestingModeController);
+            end
+            if ~isempty(app.CaseStatusController) && isvalid(app.CaseStatusController)
+                delete(app.CaseStatusController);
+            end
+            if ~isempty(app.CaseDragController) && isvalid(app.CaseDragController)
+                delete(app.CaseDragController);
+            end
+
+            % Delete CaseStore (holds reference to CaseManager)
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                delete(app.CaseStore);
+            end
+
+            % Delete CaseManager (now has destructor to clear ScheduleCollection, Operator, Procedure, Lab, CaseRequest objects)
+            if ~isempty(app.CaseManager) && isvalid(app.CaseManager)
+                delete(app.CaseManager);
+            end
+
+            % Clear OperatorColors map
+            if ~isempty(app.OperatorColors)
+                app.OperatorColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
             end
 
             delete(app.UIFigure);
