@@ -61,11 +61,29 @@ classdef OptimizationController < handle
                 app.LockedCaseIds = string.empty;
             end
 
+            % FIRST-CASE: Validate first case constraints before optimization
+            numLabs = max(1, round(app.Opts.labs));
+            [isImpossible, warningMsg, adjustedCases] = ...
+                conduction.scheduling.LockedCaseConflictValidator.validateFirstCaseConstraints(...
+                    casesStruct, numLabs);
+
+            if isImpossible
+                % Show warning but continue with adjusted cases
+                uialert(app.UIFigure, warningMsg, 'First Case Constraint Warning', 'Icon', 'warning');
+                casesStruct = adjustedCases;  % Use adjusted cases with excess deprioritized
+            end
+
             % CASE-LOCKING: Build locked case constraints for optimizer
             % The optimizer will enforce these as hard constraints during optimization
             lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
 
-            % CONFLICT-DETECTION: Validate locked case constraints before optimization
+            % FIRST-CASE: Convert first cases to locked constraints
+            % Build lab start times for conversion
+            labStartTimes = repmat({'08:00'}, 1, numLabs);
+            lockedConstraints = app.OptimizationController.convertFirstCasesToLockedConstraints(...
+                casesStruct, numLabs, labStartTimes, lockedConstraints);
+
+            % CONFLICT-DETECTION: Validate combined locked case constraints before optimization
             % Check for impossible conflicts (same operator/lab at overlapping times)
             [hasConflicts, conflictReport] = conduction.scheduling.LockedCaseConflictValidator.validate(lockedConstraints);
             if hasConflicts
@@ -752,6 +770,169 @@ classdef OptimizationController < handle
                     constraints(end+1) = constraint; %#ok<AGROW>
                 end
             end
+        end
+
+        function lockedConstraints = convertFirstCasesToLockedConstraints(obj, casesStruct, numLabs, labStartTimes, existingLockedConstraints)
+            %CONVERTFIRSTCASESTOLOCKED Convert first case constraints to locked constraints
+            %   For each case with priority == 1, creates a locked constraint at lab start time
+            %
+            %   Inputs:
+            %       casesStruct - struct array of cases with priority field
+            %       numLabs - number of available labs
+            %       labStartTimes - cell array of lab start times (e.g., {'08:00', '08:00', ...})
+            %       existingLockedConstraints - struct array of existing locked constraints
+            %
+            %   Returns:
+            %       lockedConstraints - combined locked constraints (existing + first cases)
+
+            % Ensure existing locked constraints have all required fields
+            if ~isempty(existingLockedConstraints)
+                % Add caseNumber field if missing
+                if ~isfield(existingLockedConstraints, 'caseNumber')
+                    for i = 1:numel(existingLockedConstraints)
+                        existingLockedConstraints(i).caseNumber = NaN;
+                    end
+                end
+            end
+
+            lockedConstraints = existingLockedConstraints;
+
+            if isempty(casesStruct)
+                return;
+            end
+
+            % Find cases with priority == 1 (first case constraint)
+            priorities = [casesStruct.priority];
+            firstCaseIndices = find(priorities == 1);
+
+            if isempty(firstCaseIndices)
+                return;
+            end
+
+            % Track which labs already have first cases assigned
+            labFirstCaseAssigned = false(1, numLabs);
+
+            % Check existing locked constraints for lab start time assignments
+            if ~isempty(existingLockedConstraints)
+                for i = 1:numel(existingLockedConstraints)
+                    constraint = existingLockedConstraints(i);
+                    if isfield(constraint, 'assignedLab') && isfield(constraint, 'startTime')
+                        labIdx = double(constraint.assignedLab);
+                        startTime = double(constraint.startTime);
+
+                        % Check if this constraint is at lab start time (within 1 minute tolerance)
+                        if labIdx >= 1 && labIdx <= numLabs
+                            labStartMinutes = obj.parseTimeToMinutes(labStartTimes{labIdx});
+                            if abs(startTime - labStartMinutes) < 1
+                                labFirstCaseAssigned(labIdx) = true;
+                            end
+                        end
+                    end
+                end
+            end
+
+            % Convert first cases to locked constraints
+            nextLabIdx = 1;  % Round-robin lab assignment
+            for i = 1:numel(firstCaseIndices)
+                caseIdx = firstCaseIndices(i);
+                caseData = casesStruct(caseIdx);
+
+                % Determine lab assignment
+                assignedLab = [];
+
+                % Check if case has specific lab constraint
+                if isfield(caseData, 'preferredLab') && ~isempty(caseData.preferredLab) && ~isnan(caseData.preferredLab)
+                    specificLab = double(caseData.preferredLab);
+                    if specificLab >= 1 && specificLab <= numLabs
+                        assignedLab = specificLab;
+                    end
+                end
+
+                % Otherwise, find next available lab using round-robin
+                if isempty(assignedLab)
+                    attempts = 0;
+                    while attempts < numLabs
+                        if ~labFirstCaseAssigned(nextLabIdx)
+                            assignedLab = nextLabIdx;
+                            break;
+                        end
+                        nextLabIdx = nextLabIdx + 1;
+                        if nextLabIdx > numLabs
+                            nextLabIdx = 1;
+                        end
+                        attempts = attempts + 1;
+                    end
+                end
+
+                % Skip if no lab available (already validated in validation method, but double-check)
+                if isempty(assignedLab)
+                    continue;
+                end
+
+                % Mark lab as assigned
+                labFirstCaseAssigned(assignedLab) = true;
+
+                % Calculate timing
+                labStartMinutes = obj.parseTimeToMinutes(labStartTimes{assignedLab});
+                setupTime = double(obj.getFieldOr(caseData, 'setupTime', 0));
+                procTime = double(obj.getFieldOr(caseData, 'procTime', 0));
+                postTime = double(obj.getFieldOr(caseData, 'postTime', 0));
+                turnoverTime = double(obj.getFieldOr(caseData, 'turnoverTime', 0));
+
+                startTime = labStartMinutes;
+                procStartTime = startTime + setupTime;
+                procEndTime = procStartTime + procTime;
+                endTime = procEndTime + postTime + turnoverTime;
+
+                % Create locked constraint
+                constraint = struct();
+                constraint.caseID = char(string(caseData.caseID));
+                constraint.operator = char(string(obj.getFieldOr(caseData, 'operator', 'Unknown')));
+
+                % Add case number if available
+                if isfield(caseData, 'caseNumber') && ~isempty(caseData.caseNumber)
+                    constraint.caseNumber = double(caseData.caseNumber);
+                else
+                    constraint.caseNumber = NaN;
+                end
+
+                constraint.startTime = startTime;
+                constraint.procStartTime = procStartTime;
+                constraint.procEndTime = procEndTime;
+                constraint.endTime = endTime;
+                constraint.assignedLab = assignedLab;
+
+                % Extract required resources
+                constraint.requiredResourceIds = {};
+                if isfield(caseData, 'requiredResourceIds') && ~isempty(caseData.requiredResourceIds)
+                    constraint.requiredResourceIds = caseData.requiredResourceIds;
+                end
+
+                % Add to locked constraints array
+                if isempty(lockedConstraints)
+                    lockedConstraints = constraint;
+                else
+                    lockedConstraints(end+1) = constraint; %#ok<AGROW>
+                end
+
+                % Move to next lab for round-robin
+                nextLabIdx = nextLabIdx + 1;
+                if nextLabIdx > numLabs
+                    nextLabIdx = 1;
+                end
+            end
+        end
+
+        function minutes = parseTimeToMinutes(~, timeStr)
+            %PARSETIMETOMINUTES Convert HH:MM time string to minutes from midnight
+            tokens = regexp(timeStr, '(\d+):(\d+)', 'tokens');
+            if isempty(tokens)
+                minutes = 480;  % Default to 08:00 if parse fails
+                return;
+            end
+            hours = str2double(tokens{1}{1});
+            mins = str2double(tokens{1}{2});
+            minutes = hours * 60 + mins;
         end
 
         function displayInfeasibilityError(~, app, outcome)

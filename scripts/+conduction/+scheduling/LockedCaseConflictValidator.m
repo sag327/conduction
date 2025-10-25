@@ -42,6 +42,58 @@ classdef LockedCaseConflictValidator
             end
         end
 
+        function [isImpossible, warningMsg, adjustedCases] = validateFirstCaseConstraints(cases, numLabs)
+            %VALIDATEFIRSTCASECONSTRAINTS Validate "First Case of Day" constraints
+            %   Checks if more cases are marked as "first case" than available labs
+            %
+            %   [isImpossible, warningMsg, adjustedCases] = validateFirstCaseConstraints(cases, numLabs)
+            %
+            %   Inputs:
+            %       cases - struct array of cases with priority field
+            %       numLabs - number of available labs
+            %
+            %   Returns:
+            %       isImpossible - true if more first cases than labs
+            %       warningMsg - user-friendly warning message
+            %       adjustedCases - cases with excess first cases demoted to priority=0
+
+            isImpossible = false;
+            warningMsg = '';
+            adjustedCases = cases;
+
+            if isempty(cases)
+                return;
+            end
+
+            % Count cases with priority == 1 (first case constraint)
+            priorities = [cases.priority];
+            firstCaseIndices = find(priorities == 1);
+            firstCaseCount = numel(firstCaseIndices);
+
+            if firstCaseCount <= numLabs
+                % Feasible: enough labs for all first cases
+                return;
+            end
+
+            % Too many first cases - need to demote excess
+            isImpossible = true;
+            excessCount = firstCaseCount - numLabs;
+
+            % Keep first N cases as priority (deterministic by order)
+            demoteIndices = firstCaseIndices((numLabs+1):end);
+
+            % Demote excess cases to priority = 0
+            for i = 1:numel(demoteIndices)
+                adjustedCases(demoteIndices(i)).priority = 0;
+            end
+
+            % Build warning message
+            warningMsg = sprintf(['You have %d cases marked as ''First Case of Day'' but only %d labs available.\n\n', ...
+                                  'The first %d cases will be scheduled as first cases. ', ...
+                                  'The remaining %d will be scheduled as normal cases.'], ...
+                                 firstCaseCount, numLabs, numLabs, excessCount);
+        end
+
         function conflicts = detectOperatorConflicts(lockedConstraints)
             %DETECTOPERATORCONFLICTS Find locked cases with same operator at overlapping times
             %   Returns cell array of conflict descriptions
