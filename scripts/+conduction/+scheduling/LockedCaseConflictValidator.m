@@ -38,7 +38,7 @@ classdef LockedCaseConflictValidator
                 conflictReport.operatorConflicts = operatorConflicts;
                 conflictReport.labConflicts = labConflicts;
                 conflictReport.message = conduction.scheduling.LockedCaseConflictValidator.formatConflictMessage(...
-                    operatorConflicts, labConflicts);
+                    operatorConflicts, labConflicts, lockedConstraints);
             end
         end
 
@@ -321,30 +321,175 @@ classdef LockedCaseConflictValidator
             end
         end
 
-        function message = formatConflictMessage(operatorConflicts, labConflicts)
+        function analysis = analyzeFirstCaseConflicts(lockedConstraints)
+            %ANALYZEFIRSTCASECONFLICTS Analyze first case related conflicts
+            %   Returns struct with first case conflict details
+
+            analysis = struct();
+            analysis.hasFirstCaseConflicts = false;
+            analysis.totalFirstCases = 0;
+            analysis.labsWithConflicts = [];
+            analysis.firstCaseIds = {};
+            analysis.totalLabs = 0;
+
+            if isempty(lockedConstraints)
+                return;
+            end
+
+            % Detect lab start time (08:00 = 480 minutes)
+            LAB_START_TIME = 480;
+            TIME_TOLERANCE = 1;  % 1 minute tolerance
+
+            % Find all constraints at lab start time
+            startTimeConstraints = [];
+            for i = 1:numel(lockedConstraints)
+                constraint = lockedConstraints(i);
+                if isfield(constraint, 'startTime') && ~isempty(constraint.startTime)
+                    startTime = double(constraint.startTime);
+                    if abs(startTime - LAB_START_TIME) < TIME_TOLERANCE
+                        startTimeConstraints(end+1) = i; %#ok<AGROW>
+                    end
+                end
+            end
+
+            if isempty(startTimeConstraints)
+                return;
+            end
+
+            analysis.totalFirstCases = numel(startTimeConstraints);
+
+            % Group by lab to find conflicts
+            labMap = containers.Map('KeyType', 'double', 'ValueType', 'any');
+
+            for i = 1:numel(startTimeConstraints)
+                idx = startTimeConstraints(i);
+                constraint = lockedConstraints(idx);
+
+                if ~isfield(constraint, 'assignedLab') || isempty(constraint.assignedLab)
+                    continue;
+                end
+
+                labIdx = double(constraint.assignedLab);
+
+                % Extract case identifier
+                caseId = '';
+                if isfield(constraint, 'caseID')
+                    caseId = char(string(constraint.caseID));
+                end
+
+                % Track case IDs
+                analysis.firstCaseIds{end+1} = caseId;
+
+                % Group by lab
+                if isKey(labMap, labIdx)
+                    cases = labMap(labIdx);
+                    cases{end+1} = caseId;
+                    labMap(labIdx) = cases;
+                else
+                    labMap(labIdx) = {caseId};
+                end
+            end
+
+            % Find labs with multiple cases at start time (conflicts)
+            labs = cell2mat(keys(labMap));
+            analysis.totalLabs = max(labs);  % Approximate total labs
+
+            for i = 1:numel(labs)
+                labIdx = labs(i);
+                cases = labMap(labIdx);
+                if numel(cases) > 1
+                    analysis.labsWithConflicts(end+1) = labIdx;
+                end
+            end
+
+            % Determine if this is primarily a first case conflict
+            % Only flag as first case conflict if there are actual conflicts (not just counting)
+            if ~isempty(analysis.labsWithConflicts)
+                analysis.hasFirstCaseConflicts = true;
+            end
+        end
+
+        function message = formatConflictMessage(operatorConflicts, labConflicts, lockedConstraints)
             %FORMATCONFLICTMESSAGE Create user-friendly error message
 
+            % Analyze for first case conflicts
+            if nargin >= 3 && ~isempty(lockedConstraints)
+                firstCaseAnalysis = conduction.scheduling.LockedCaseConflictValidator.analyzeFirstCaseConflicts(lockedConstraints);
+            else
+                firstCaseAnalysis = struct('hasFirstCaseConflicts', false);
+            end
+
             lines = {};
-            lines{end+1} = 'Cannot optimize: Locked cases have impossible conflicts.';
-            lines{end+1} = '';
+
+            % Check if this is primarily a first case conflict
+            if firstCaseAnalysis.hasFirstCaseConflicts
+                lines{end+1} = 'Cannot optimize: First Case constraints conflict with existing locked cases.';
+                lines{end+1} = '';
+
+                % First case analysis section
+                lines{end+1} = 'First Case Analysis:';
+                lines{end+1} = sprintf('  • %d cases marked as "First Case of Day"', firstCaseAnalysis.totalFirstCases);
+
+                if firstCaseAnalysis.totalLabs > 0
+                    lines{end+1} = sprintf('  • %d labs available', firstCaseAnalysis.totalLabs);
+                end
+
+                if ~isempty(firstCaseAnalysis.labsWithConflicts)
+                    labsList = strjoin(arrayfun(@num2str, firstCaseAnalysis.labsWithConflicts, 'UniformOutput', false), ', ');
+                    lines{end+1} = sprintf('  • Labs %s already have locked cases at 08:00', labsList);
+                end
+
+                lines{end+1} = '';
+            else
+                lines{end+1} = 'Cannot optimize: Locked cases have impossible conflicts.';
+                lines{end+1} = '';
+            end
+
+            % Show conflicts
+            if ~isempty(labConflicts)
+                lines{end+1} = 'Conflicts Detected:';
+                maxConflicts = min(5, numel(labConflicts));
+                for i = 1:maxConflicts
+                    lines{end+1} = sprintf('  • %s', labConflicts{i});
+                end
+                if numel(labConflicts) > maxConflicts
+                    lines{end+1} = sprintf('  ...and %d more conflicts', numel(labConflicts) - maxConflicts);
+                end
+                lines{end+1} = '';
+            end
 
             if ~isempty(operatorConflicts)
                 lines{end+1} = 'Operator Conflicts:';
-                for i = 1:numel(operatorConflicts)
+                maxConflicts = min(5, numel(operatorConflicts));
+                for i = 1:maxConflicts
                     lines{end+1} = sprintf('  • %s', operatorConflicts{i});
                 end
-                lines{end+1} = '';
-            end
-
-            if ~isempty(labConflicts)
-                lines{end+1} = 'Lab Conflicts:';
-                for i = 1:numel(labConflicts)
-                    lines{end+1} = sprintf('  • %s', labConflicts{i});
+                if numel(operatorConflicts) > maxConflicts
+                    lines{end+1} = sprintf('  ...and %d more conflicts', numel(operatorConflicts) - maxConflicts);
                 end
                 lines{end+1} = '';
             end
 
-            lines{end+1} = 'Unlock one case in each conflicting pair to proceed.';
+            % Resolution steps
+            if firstCaseAnalysis.hasFirstCaseConflicts
+                lines{end+1} = 'To resolve:';
+
+                if firstCaseAnalysis.totalFirstCases > firstCaseAnalysis.totalLabs
+                    excessCount = firstCaseAnalysis.totalFirstCases - firstCaseAnalysis.totalLabs;
+                    lines{end+1} = sprintf('  1. Remove "First Case" constraint from at least %d cases, OR', excessCount);
+                else
+                    lines{end+1} = '  1. Remove "First Case" constraint from some cases, OR';
+                end
+
+                if ~isempty(firstCaseAnalysis.labsWithConflicts)
+                    labsList = strjoin(arrayfun(@num2str, firstCaseAnalysis.labsWithConflicts, 'UniformOutput', false), ', ');
+                    lines{end+1} = sprintf('  2. Unlock existing cases at 08:00 in Labs %s, OR', labsList);
+                end
+
+                lines{end+1} = '  3. Adjust lab availability or reduce number of labs';
+            else
+                lines{end+1} = 'Unlock one case in each conflicting pair to proceed.';
+            end
 
             message = strjoin(lines, newline);
         end

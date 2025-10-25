@@ -61,24 +61,13 @@ classdef OptimizationController < handle
                 app.LockedCaseIds = string.empty;
             end
 
-            % FIRST-CASE: Validate first case constraints before optimization
-            numLabs = max(1, round(app.Opts.labs));
-            [isImpossible, warningMsg, adjustedCases] = ...
-                conduction.scheduling.LockedCaseConflictValidator.validateFirstCaseConstraints(...
-                    casesStruct, numLabs);
-
-            if isImpossible
-                % Show warning but continue with adjusted cases
-                uialert(app.UIFigure, warningMsg, 'First Case Constraint Warning', 'Icon', 'warning');
-                casesStruct = adjustedCases;  % Use adjusted cases with excess deprioritized
-            end
-
             % CASE-LOCKING: Build locked case constraints for optimizer
             % The optimizer will enforce these as hard constraints during optimization
             lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
 
             % FIRST-CASE: Convert first cases to locked constraints
             % Build lab start times for conversion
+            numLabs = max(1, round(app.Opts.labs));
             labStartTimes = repmat({'08:00'}, 1, numLabs);
             lockedConstraints = app.OptimizationController.convertFirstCasesToLockedConstraints(...
                 casesStruct, numLabs, labStartTimes, lockedConstraints);
