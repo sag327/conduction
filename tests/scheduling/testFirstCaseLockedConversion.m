@@ -148,6 +148,20 @@ classdef testFirstCaseLockedConversion < matlab.unittest.TestCase
             assignedLabs = [lockedConstraints.assignedLab];
             testCase.verifyEqual(sort(assignedLabs), [1 2 3 4], 'Should assign to labs 1-4 in order');
         end
+
+        function testTooManyFirstCasesRaisesError(testCase)
+            % Test: 3 first cases, 2 labs -> should raise error
+            cases = testCase.createMockCases([1 1 1], {'Dr. A', 'Dr. B', 'Dr. C'}, [60 60 60]);
+            numLabs = 2;
+            labStartTimes = repmat({'08:00'}, 1, numLabs);
+            existingLocked = struct([]);
+
+            controller = conduction.gui.controllers.OptimizationController();
+
+            % Should throw error with specific identifier
+            testCase.verifyError(@() controller.convertFirstCasesToLockedConstraints(...
+                cases, numLabs, labStartTimes, existingLocked), 'FirstCase:TooManyConstraints');
+        end
     end
 
     methods (Static)

@@ -69,8 +69,18 @@ classdef OptimizationController < handle
             % Build lab start times for conversion
             numLabs = max(1, round(app.Opts.labs));
             labStartTimes = repmat({'08:00'}, 1, numLabs);
-            lockedConstraints = app.OptimizationController.convertFirstCasesToLockedConstraints(...
-                casesStruct, numLabs, labStartTimes, lockedConstraints);
+
+            try
+                lockedConstraints = app.OptimizationController.convertFirstCasesToLockedConstraints(...
+                    casesStruct, numLabs, labStartTimes, lockedConstraints);
+            catch ME
+                if strcmp(ME.identifier, 'FirstCase:TooManyConstraints')
+                    uialert(app.UIFigure, ME.message, 'First Case Constraint Error', 'Icon', 'error');
+                    return;
+                else
+                    rethrow(ME);
+                end
+            end
 
             % CONFLICT-DETECTION: Validate combined locked case constraints before optimization
             % Check for impossible conflicts (same operator/lab at overlapping times)
@@ -822,6 +832,8 @@ classdef OptimizationController < handle
 
             % Convert first cases to locked constraints
             nextLabIdx = 1;  % Round-robin lab assignment
+            skippedFirstCases = {};  % Track cases that couldn't be assigned
+
             for i = 1:numel(firstCaseIndices)
                 caseIdx = firstCaseIndices(i);
                 caseData = casesStruct(caseIdx);
@@ -853,8 +865,19 @@ classdef OptimizationController < handle
                     end
                 end
 
-                % Skip if no lab available (already validated in validation method, but double-check)
+                % Track skipped cases instead of silently continuing
                 if isempty(assignedLab)
+                    % Extract case identifier for error message
+                    caseId = '';
+                    if isfield(caseData, 'caseID')
+                        caseId = char(string(caseData.caseID));
+                    end
+                    caseNumber = NaN;
+                    if isfield(caseData, 'caseNumber') && ~isempty(caseData.caseNumber)
+                        caseNumber = double(caseData.caseNumber);
+                    end
+
+                    skippedFirstCases{end+1} = struct('caseID', caseId, 'caseNumber', caseNumber);
                     continue;
                 end
 
@@ -909,6 +932,39 @@ classdef OptimizationController < handle
                 if nextLabIdx > numLabs
                     nextLabIdx = 1;
                 end
+            end
+
+            % Check if any first cases were skipped
+            if ~isempty(skippedFirstCases)
+                % Build error message
+                totalFirstCases = numel(firstCaseIndices);
+                skippedCount = numel(skippedFirstCases);
+                assignedCount = totalFirstCases - skippedCount;
+
+                % Format skipped case names
+                skippedNames = {};
+                for i = 1:numel(skippedFirstCases)
+                    skipped = skippedFirstCases{i};
+                    if ~isnan(skipped.caseNumber)
+                        skippedNames{end+1} = sprintf('Case %d', round(skipped.caseNumber));
+                    else
+                        skippedNames{end+1} = skipped.caseID;
+                    end
+                end
+
+                errorMsg = sprintf(['Cannot optimize: Too many "First Case" constraints.\n\n', ...
+                                    'First Case Analysis:\n', ...
+                                    '  • %d cases marked as "First Case of Day"\n', ...
+                                    '  • Only %d labs available\n', ...
+                                    '  • %d cases successfully assigned to lab start times\n', ...
+                                    '  • %d cases could not be assigned: %s\n\n', ...
+                                    'To resolve:\n', ...
+                                    '  1. Remove "First Case" constraint from at least %d cases, OR\n', ...
+                                    '  2. Increase number of available labs to %d or more'], ...
+                               totalFirstCases, numLabs, assignedCount, skippedCount, ...
+                               strjoin(skippedNames, ', '), skippedCount, totalFirstCases);
+
+                error('FirstCase:TooManyConstraints', '%s', errorMsg);
             end
         end
 
