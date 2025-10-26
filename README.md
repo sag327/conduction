@@ -1,19 +1,41 @@
 # Conduction
 
-Conduction is a MATLAB toolbox for scheduling and analysing electrophysiology (EP) lab activity. It combines an interactive GUI for prospective planning with a composable optimisation and analytics library that can be scripted for batch experimentation.
+Conduction is a MATLAB toolbox for scheduling and analyzing electrophysiology (EP) lab activity. It combines an interactive GUI for prospective planning with a composable optimization and analytics library that can be scripted for batch experimentation.
 
 ## Feature Highlights
-- **Prospective Scheduler GUI** – Build a day-of-surgery plan, optimise with ILP, and inspect results without leaving MATLAB.
-- **Right‑hand case inspector** – Click any schedule block to view detailed timing, lab assignment, and solver diagnostics in a slide‑in drawer.
-- **Analyze tab** – Switch to the utilisation view to plot operator procedure, idle, and overtime hours for the optimised day.
-- **Configurable optimisation engine** – Tune lab counts, turnover/setup/post durations, objective metrics, admission defaults, and filtering straight from the UI (or scripts).
-- **Rich analytics** – Daily and operator analysers expose KPIs (idle time, flips, makespan, utilisation ratios) for GUI display or downstream reporting.
-- **Dark‑mode visualisation** – `conduction.visualizeDailySchedule` supports embedding into existing axes (used by the GUI) or standalone figure generation.
+
+### Prospective Scheduler GUI
+- **Interactive case management** – Add, edit, and manage prospective cases with operators, procedures, durations, and constraints
+- **Four-tab workflow** – Add cases, review queue (Cases tab), configure resources, and tune optimization parameters
+- **Drag-and-drop case reordering** – Re-sequence cases visually on the schedule with automatic overlap detection
+- **Resource management** – Define custom resource types (e.g., Anesthesia, Equipment) with capacity limits and assign to cases
+- **Right-hand case inspector** – Click any schedule block to view detailed timing, lab assignment, resource usage, and solver diagnostics in a slide-in drawer
+- **Dual canvas tabs** – Switch between Schedule view (Gantt chart) and Analyze view (operator utilization bar charts)
+- **Configurable optimization** – Tune lab counts, turnover/setup/post durations, objective metrics (operator idle, lab idle, makespan, operator overtime), admission defaults, and first-case constraints directly in the UI
+- **Session save/load** – Export and import complete sessions including cases, schedules, optimization results, and resource definitions
+- **Testing mode** – Load historical clinical data to pre-populate operators, procedures, and statistics
+
+### Resource System
+- **Resource types** – Create and manage shared resources with custom names, capacities, and color coding
+- **Default resources** – Mark resources as defaults to automatically assign them to new cases
+- **Visual resource legend** – Highlight cases by resource assignment with color-coded indicators
+- **Resource constraints in optimization** – Capacity limits enforced during scheduling
+
+### Rich Analytics
+- **Daily metrics** – Case counts, makespan, lab utilization ratios, idle time
+- **Operator analysis** – Per-operator idle time, overtime, flip ratios, turnover statistics
+- **Procedure analysis** – Mean, median, P70, P90 durations overall and per-operator
+- **Batch optimization** – Run optimization across multiple days in a schedule collection
+- **Collection-level analytics** – Aggregate statistics across date ranges
+
+### Dark-Mode Visualization
+- `conduction.visualizeDailySchedule` supports embedding into existing axes (used by the GUI) or standalone figure generation
+- Consistent dark background with light labels across all charts
 
 ## Requirements
-- MATLAB R2023b or newer (tested on R2024a).
-- Optimization Toolbox (required by the ILP scheduler).
-- Access to the project root on the MATLAB path.
+- MATLAB R2025a or newer (tested on R2025a)
+- Optimization Toolbox (required by the ILP scheduler)
+- Access to the project root on the MATLAB path
 
 ## Setup
 1. Clone the repository and open MATLAB in the project root.
@@ -29,51 +51,73 @@ clear classes
 conduction.launchSchedulerGUI
 ```
 
-### Layout
-- **Left column** – Case creation (Add/Edit), queue management (Cases tab), and optimisation parameters.
-- **Top bar** – Date picker, optimisation trigger, testing toggle, and undo placeholder.
-- **Center canvas** – Two-tab control with:
-  - **Schedule** tab: the optimised day rendered by `visualizeDailySchedule`.
-  - **Analyze** tab: operator utilisation bar chart (procedure, idle, overtime hours).
-- **Drawer inspector** – Click any schedule block to reveal case, timing, lab assignment, and solver logs.
-- **KPI footer** – Live metrics for case count, last-out, operator idle, lab idle, and flip ratio.
+Or with historical data for Testing Mode:
+```matlab
+conduction.launchSchedulerGUI(datetime('2025-01-15'), 'clinicalData/exampleDataset.xlsx')
+```
+
+### GUI Layout
+- **Left column (4 tabs)**:
+  - **Add** – Create new cases with operator, procedure, duration, admission type, constraints, and resource assignments
+  - **Cases** – Queue management table with edit/delete, undock to separate window
+  - **Optimization** – Configure labs, turnover times, objective metric, admission defaults, first-case constraints
+  - **Resources** – Define resource types, set capacities, mark defaults for new cases
+- **Top bar** – Date picker, Save/Load Session buttons, optimization trigger, Testing Mode toggle
+- **Center canvas (2 tabs)**:
+  - **Schedule** – Gantt chart rendered by `visualizeDailySchedule`, drag cases to reorder
+  - **Analyze** – Operator utilization bar charts (procedure, idle, overtime hours)
+- **Drawer inspector** – Click any schedule block to reveal case details, timing breakdown, lab assignment, resource usage, and solver logs
+- **KPI footer** – Live metrics for case count, last-out time, operator idle, lab idle, and flip ratio
 
 ### Typical Workflow
-1. Load historical/clinical data (optional) to seed procedure statistics.
-2. Add prospective cases (operator, procedure, duration selection, constraints).
-3. Adjust optimisation options (labs, turnover, objective metric, admission defaults).
-4. Click **Optimize Schedule**.
-5. Review the **Schedule** tab; click blocks to inspect details in the drawer.
-6. Switch to **Analyze** to compare operator utilisation.
-7. Iterate on options or case mix as needed.
+1. **(Optional)** Load historical/clinical data via Testing Mode to seed operator/procedure statistics
+2. **Add prospective cases** – Use Add tab to define cases with operators, procedures, durations, constraints
+3. **Assign resources** – Select required resources (e.g., Anesthesia) for each case or set defaults in Resources tab
+4. **Configure optimization** – Adjust labs available, turnover times, objective metric (operator idle, makespan, etc.)
+5. **Click Optimize Schedule** – Run ILP solver
+6. **Review Schedule tab** – Click blocks to inspect details, drag cases to reorder if needed
+7. **Switch to Analyze tab** – Compare operator utilization
+8. **Save session** – Export complete state for later resumption
+9. **Iterate** – Modify cases, resources, or options as needed
 
-### Drawer Tips
-- Case drawer opens automatically on schedule block click and animates closed via the **Close** button or when a new optimisation is required.
-- Diagnostics include objective value, exit flags, and solver messages (two-phase runs are summarised per phase).
+### Drawer Inspector
+- Opens automatically on schedule block click
+- Displays case ID, operator, procedure, admission type, assigned lab
+- Shows timing breakdown (setup, procedure, post, turnover)
+- Lists assigned resources
+- Provides solver diagnostics (objective value, exit flags, messages) for two-phase runs
+- Lock button to freeze lab assignment for re-optimization
+
+### Resource Management
+- **Resources tab** – Create/edit/delete resource types
+- **Details panel** – Name and capacity fields with Save/Reset buttons (enabled only when changes exist)
+- **Default for New Cases** – Checkboxes to mark resources as defaults
+- **Resource legend** – Visual indicators on schedule for resource-constrained cases
+- **Capacity enforcement** – Optimization respects resource limits across concurrent cases
 
 ## Command-Line Usage
 
-### Optimise a Single Day Programmatically
+### Optimize a Single Day Programmatically
 ```matlab
-% Prepare cases (struct array with required optimisation fields)
+% Prepare cases (struct array with required optimization fields)
 cases = conduction.examples.sampleCases();   % replace with your loader
 
 % Configure scheduling options
 options = conduction.scheduling.SchedulingOptions.fromArgs( ...
     'NumLabs', 4, ...
-    'TurnoverTime', 25, ...
+    'TurnoverTime', 15, ...
     'OptimizationMetric', "operatorIdle", ...
     'PrioritizeOutpatient', true);
 
-% Run the optimiser
+% Run the optimizer
 [dailySchedule, outcome] = conduction.optimizeDailySchedule(cases, options);
 
-% Visualise and inspect
+% Visualize and inspect
 conduction.visualizeDailySchedule(dailySchedule, 'Title', 'Prospective Plan');
 disp(outcome.objectiveValue);
 ```
 
-### Run Analytics on an Optimised Day
+### Run Analytics on an Optimized Day
 ```matlab
 metrics = conduction.analytics.DailyAnalyzer.analyze(dailySchedule);
 operator = conduction.analytics.OperatorAnalyzer.analyze(dailySchedule);
@@ -84,28 +128,39 @@ fprintf('Last case ends at: %02d:%02d\n', floor(lastOutMinutes/60), mod(round(la
 fprintf('Total operator idle minutes: %.1f\n', operator.departmentMetrics.totalOperatorIdleMinutes);
 ```
 
-### Batch Optimisation Across a Collection
+### Batch Optimization Across a Collection
 ```matlab
-collection = conduction.ScheduleCollection.fromFile('clinicalData/exampleDataset.mat');
-batchOptions = conduction.configureOptimization('NumLabs', 5, 'TurnoverTime', 30);
-optimizer = conduction.batch.Optimizer(collection, 'SchedulingOptions', batchOptions);
-results = optimizer.run();
+collection = conduction.ScheduleCollection.fromFile('clinicalData/exampleDataset.xlsx');
+config = conduction.configureOptimization('NumLabs', 5, 'TurnoverTime', 15);
+batchResult = conduction.optimizeScheduleCollection(collection, config, 'Parallel', false, 'ShowProgress', true);
 
-summaryTable = results.toTable();
-head(summaryTable)
+% Analyze optimized collection
+summary = conduction.analytics.analyzeScheduleCollection(batchResult.optimizedCollection);
+conduction.analytics.plotOperatorTurnovers(summary);
 ```
 
 ## Directory Layout
-- `scripts/+conduction/+gui/` – App Designer implementation, controllers, and GUI helpers.
-- `scripts/+conduction/+analytics/` – Daily and operator analyzers, KPI utilities.
-- `scripts/+conduction/+scheduling/` – ILP scheduler, preprocessing, and result assembly.
-- `scripts/+conduction/+plotting/` – Shared plotting utilities and operator trend charts.
-- `scripts/+conduction/batch/` – Batch optimisation workflows.
-- `clinicalData/` – Sample datasets for testing and regression comparisons.
+- `scripts/+conduction/+gui/` – GUI implementation
+  - `ProspectiveSchedulerApp.m` – Main app shell
+  - `+controllers/` – Business logic (ScheduleRenderer, OptimizationController, DrawerController, CaseManager, etc.)
+  - `+components/` – Reusable UI components (ResourceChecklist, CaseTableView, ResourceLegend)
+  - `+stores/` – Data stores (CaseStore, ResourceStore)
+  - `+models/` – Data models (ProspectiveCase, ResourceType)
+  - `+utils/` – Utilities (FormStateManager, Icons)
+  - `+app/` – UI builders for tabs, sections, and panels
+  - `+session/` – Session save/load serializers
+- `scripts/+conduction/+analytics/` – Daily, operator, and procedure analyzers, KPI utilities
+- `scripts/+conduction/+scheduling/` – ILP scheduler, preprocessing, and result assembly
+- `scripts/+conduction/+plotting/` – Shared plotting utilities and operator trend charts
+- `scripts/+conduction/batch/` – Batch optimization workflows
+- `clinicalData/` – Sample datasets for testing and regression comparisons
+- `tests/` – Unit and integration tests
+- `docs/` – Architecture and developer documentation
 
 ## Versioning
 - Project version is tracked in the root `VERSION` file and surfaced via `conduction.version()`.
-- Releases are tagged on `main` (`vMAJOR.MINOR.PATCH`); the latest is **v0.2.1** (drawer inspector + analyse tab).
+- Releases are tagged on `main` (`vMAJOR.MINOR.PATCH`); the latest is **v0.7.0**.
+- Use `conduction.bumpVersion('patch'|'minor'|'major')` to automate the bump/commit/tag steps (add `'DryRun', true` to preview, `'Push', true` to push immediately).
 
 ## Contributing
 1. Create a feature branch from `main`.
@@ -115,8 +170,9 @@ head(summaryTable)
 
 ## Support & Troubleshooting
 - **GUI does not update after code changes** – Run `clear classes` before relaunching the app to flush cached class definitions.
-- **Optimiser failures** – Check the drawer log for solver messages; ensure the Optimization Toolbox is licensed and cases include required fields (`operator`, `procTime`, etc.).
-- **Dark-mode readability** – All embedded axes (schedule and analyse tabs) adopt a black background with light labels; if you embed visuals elsewhere, reuse the provided plotting helpers.
+- **Optimizer failures** – Check the drawer log for solver messages; ensure the Optimization Toolbox is licensed and cases include required fields (`operator`, `procTime`, etc.).
+- **Dark-mode readability** – All embedded axes (schedule and analyze tabs) adopt a black background with light labels; if you embed visuals elsewhere, reuse the provided plotting helpers.
+- **Resource checkboxes not updating** – The Default Resources panel refreshes automatically when resources are created/deleted; if issues persist, check ResourceStore event listeners.
 
 For additional examples or questions, open an issue or contact the maintainers.
 
@@ -130,14 +186,36 @@ For additional examples or questions, open an issue or contact the maintainers.
 
 ### Architecture At A Glance
 
-- App shell: `scripts/+conduction/+gui/ProspectiveSchedulerApp.m`
-- Controllers: `scripts/+conduction/+gui/+controllers/` (renderer, optimization, drawer, testing, duration, case status)
-- View helpers: `scripts/+conduction/+gui/+app/` (tab layouts, drawer UI, testing panel, available labs, analytics tab)
-- Session serde: `scripts/+conduction/+session/`
+- **App shell**: `scripts/+conduction/+gui/ProspectiveSchedulerApp.m`
+- **Controllers**: `scripts/+conduction/+gui/+controllers/`
+  - ScheduleRenderer – Schedule drawing, drag-and-drop, NOW line, analytics refresh
+  - OptimizationController – Options management, execution, status updates
+  - DrawerController – Drawer UI content, case locks, solver diagnostics
+  - CaseManager – Case CRUD, current time tracking, completed archive
+  - CaseDragController – Drag-and-drop case reordering with overlap detection
+  - TestingModeController – Historical data loading and operator/procedure statistics
+  - DurationSelector – Duration field management
+  - CaseStatusController – Real-time case status tracking
+  - AnalyticsRenderer – Operator utilization charts
+- **Stores**: `scripts/+conduction/+gui/+stores/`
+  - CaseStore – Manages ProspectiveCase collection with event notifications
+  - ResourceStore – Manages ResourceType collection with capacity tracking
+- **Components**: `scripts/+conduction/+gui/+components/`
+  - ResourceChecklist – Multi-select resource assignment UI
+  - CaseTableView – Sortable, filterable case queue table
+  - ResourceLegend – Visual resource indicators on schedule
+- **Utilities**: `scripts/+conduction/+gui/+utils/`
+  - FormStateManager – Reusable dirty state tracking for Save/Reset buttons
+  - Icons – SVG icon rendering for UI buttons
+- **View helpers**: `scripts/+conduction/+gui/+app/` – Tab layouts, drawer UI, testing panel, available labs, analytics tab
+- **Session serde**: `scripts/+conduction/+session/` – Save/load serializers for DailySchedule, ProspectiveCase, OperatorColors, ResourceTypes
 
-Design notes:
-- Helper-built UI binds callbacks using function handles (not `createCallbackFcn`) so builders can live outside the app class.
-- Time Control uses a NOW line; drag end triggers `ScheduleRenderer.updateCaseStatusesByTime` and re-renders with `app.SimulatedSchedule`.
-- Completed archive vs simulated status: `CaseManager.getCompletedCases()` is persistent; simulated completion is reflected via `ProspectiveCase.CaseStatus == "completed"`.
+**Design notes**:
+- Helper-built UI binds callbacks using function handles (not `createCallbackFcn`) so builders can live outside the app class
+- Controllers are instantiated in `ProspectiveSchedulerApp` and accept `app` as first parameter
+- CaseStore and ResourceStore fire events (`CasesChanged`, `TypesChanged`) to trigger UI updates
+- FormStateManager pattern enables reusable dirty state tracking for forms with Save/Reset buttons
+- Time Control uses a NOW line; drag triggers `ScheduleRenderer.updateCaseStatusesByTime` and re-renders with `app.SimulatedSchedule`
+- Completed archive vs simulated status: `CaseManager.getCompletedCases()` is persistent; simulated completion is reflected via `ProspectiveCase.CaseStatus == "completed"`
 
-See also: `docs/Architecture-Overview.md`, `docs/TimeControl-Design.md`, `docs/Developer-Quickstart.md`.
+See also: `docs/Architecture-Overview.md`, `docs/Developer-Quickstart.md`.
