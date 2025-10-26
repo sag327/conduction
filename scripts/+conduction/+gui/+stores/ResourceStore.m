@@ -299,15 +299,18 @@ classdef ResourceStore < handle
 
         function color = nextPaletteColor(obj)
             %NEXTPALETTECOLOR Get next color from palette (cycles through 6 distinct colors)
-            %   Palette avoids inpatient teal [0, 0.75, 0.82] and outpatient orange [1, 0.65, 0.15]
+            %   Palette avoids:
+            %     - Inpatient teal [0, 0.75, 0.82]
+            %     - Outpatient orange [1, 0.65, 0.15]
+            %     - Red (reserved for locked cases)
 
             palette = [
                 0.2039 0.6588 0.3255;  % Deep Green
-                0.8941 0.1020 0.1098;  % Crimson Red
                 0.5961 0.3059 0.6392;  % Royal Purple
                 0.9686 0.7137 0.8235;  % Hot Pink
                 0.55 0.27 0.07;        % Chocolate Brown
-                0.72 0.11 0.55         % Deep Magenta
+                0.72 0.11 0.55;        % Deep Magenta
+                0.20 0.60 0.80         % Sky Blue
             ];
             obj.PaletteIndex = obj.PaletteIndex + 1;
             color = palette(mod(obj.PaletteIndex-1, size(palette,1)) + 1, :);

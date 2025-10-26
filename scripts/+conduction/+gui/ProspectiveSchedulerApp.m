@@ -53,11 +53,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerSetupSpinner          matlab.ui.control.Spinner   % DURATION-EDITING: Setup time spinner
         DrawerProcSpinner           matlab.ui.control.Spinner   % DURATION-EDITING: Procedure time spinner
         DrawerPostSpinner           matlab.ui.control.Spinner   % DURATION-EDITING: Post time spinner
-        DrawerMetricValueLabel      matlab.ui.control.Label
-        DrawerLabsValueLabel        matlab.ui.control.Label
-        DrawerTimingsValueLabel     matlab.ui.control.Label
-        DrawerOptimizationTitle     matlab.ui.control.Label
-        DrawerOptimizationGrid      matlab.ui.container.GridLayout
         DrawerHistogramTitle        matlab.ui.control.Label
         DrawerHistogramPanel        matlab.ui.container.Panel
         DrawerHistogramAxes         matlab.ui.control.UIAxes

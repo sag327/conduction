@@ -45,7 +45,7 @@ function buildDrawerUI(app)
     contentPanel.BorderType = 'line';
 
     contentGrid = uigridlayout(contentPanel);
-    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
+    contentGrid.RowHeight = {36, 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 230};
     contentGrid.ColumnWidth = {'1x'};
     contentGrid.Padding = [16 18 16 18];
     contentGrid.RowSpacing = 12;
@@ -129,36 +129,15 @@ function buildDrawerUI(app)
     createDurationRow(app, 2, 'Procedure', 'DrawerProcSpinner');
     createDurationRow(app, 3, 'Post', 'DrawerPostSpinner');
 
-    app.DrawerOptimizationTitle = uilabel(contentGrid);
-    app.DrawerOptimizationTitle.Text = 'Optimization Details';
-    app.DrawerOptimizationTitle.FontWeight = 'bold';
-    app.DrawerOptimizationTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerOptimizationTitle.Layout.Row = 9;
-    app.DrawerOptimizationTitle.Layout.Column = 1;
-
-    app.DrawerOptimizationGrid = uigridlayout(contentGrid);
-    app.DrawerOptimizationGrid.Layout.Row = 10;
-    app.DrawerOptimizationGrid.Layout.Column = 1;
-    app.DrawerOptimizationGrid.RowHeight = repmat({'fit'}, 1, 3);
-    app.DrawerOptimizationGrid.ColumnWidth = {90, '1x'};
-    app.DrawerOptimizationGrid.RowSpacing = 4;
-    app.DrawerOptimizationGrid.ColumnSpacing = 12;
-    app.DrawerOptimizationGrid.Padding = [0 8 0 0];
-    app.DrawerOptimizationGrid.BackgroundColor = app.Drawer.BackgroundColor;
-
-    createOptimizationRow(app, 1, 'Metric', 'DrawerMetricValueLabel');
-    createOptimizationRow(app, 2, 'Labs', 'DrawerLabsValueLabel');
-    createOptimizationRow(app, 3, 'Timings', 'DrawerTimingsValueLabel');
-
     app.DrawerHistogramTitle = uilabel(contentGrid);
     app.DrawerHistogramTitle.Text = 'Historical Durations';
     app.DrawerHistogramTitle.FontWeight = 'bold';
     app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerHistogramTitle.Layout.Row = 11;
+    app.DrawerHistogramTitle.Layout.Row = 9;
     app.DrawerHistogramTitle.Layout.Column = 1;
 
     app.DrawerHistogramPanel = uipanel(contentGrid);
-    app.DrawerHistogramPanel.Layout.Row = 12;
+    app.DrawerHistogramPanel.Layout.Row = 10;
     app.DrawerHistogramPanel.Layout.Column = 1;
     app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
     app.DrawerHistogramPanel.BorderType = 'none';
@@ -183,23 +162,6 @@ function createInspectorRow(app, rowIndex, labelText, valuePropName)
     staticLabel.Layout.Column = 1;
 
     valueLabel = uilabel(app.DrawerInspectorGrid);
-    valueLabel.Text = '--';
-    valueLabel.FontColor = [0.95 0.95 0.95];
-    valueLabel.Layout.Row = rowIndex;
-    valueLabel.Layout.Column = 2;
-    valueLabel.WordWrap = 'on';
-
-    app.(valuePropName) = valueLabel;
-end
-
-function createOptimizationRow(app, rowIndex, labelText, valuePropName)
-    staticLabel = uilabel(app.DrawerOptimizationGrid);
-    staticLabel.Text = labelText;
-    staticLabel.FontColor = [0.7 0.7 0.7];
-    staticLabel.Layout.Row = rowIndex;
-    staticLabel.Layout.Column = 1;
-
-    valueLabel = uilabel(app.DrawerOptimizationGrid);
     valueLabel.Text = '--';
     valueLabel.FontColor = [0.95 0.95 0.95];
     valueLabel.Layout.Row = rowIndex;
