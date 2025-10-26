@@ -63,7 +63,8 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptFilterLabel.Layout.Column = 1;
 
     app.OptFilterDropDown = uidropdown(optimizationGrid);
-    app.OptFilterDropDown.Items = {'all', 'outpatient', 'inpatient'};
+    app.OptFilterDropDown.Items = {'all cases', 'outpatient', 'inpatient'};
+    app.OptFilterDropDown.ItemsData = {'all', 'outpatient', 'inpatient'};
     app.OptFilterDropDown.Value = char(app.Opts.caseFilter);
     app.OptFilterDropDown.Layout.Row = 5;
     app.OptFilterDropDown.Layout.Column = 2;
