@@ -140,6 +140,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ResetResourceButton         matlab.ui.control.Button
         ResourcesTable              matlab.ui.control.Table
         DeleteResourceButton        matlab.ui.control.Button
+        DefaultResourcesPanel       matlab.ui.container.Panel
+        DefaultResourceCheckboxes   containers.Map
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
@@ -358,6 +360,91 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 data{k, 2} = types(k).Capacity;
             end
             app.ResourcesTable.Data = data;
+
+            % Also refresh default resources panel
+            app.refreshDefaultResourcesPanel();
+        end
+
+        function refreshDefaultResourcesPanel(app)
+            %REFRESHDEFAULTRESOURCESPANEL Update checkboxes for default resources
+
+            if isempty(app.CaseManager) || isempty(app.DefaultResourcesPanel) || ~isvalid(app.DefaultResourcesPanel)
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+
+            % Clear existing checkboxes
+            delete(app.DefaultResourcesPanel.Children);
+            app.DefaultResourceCheckboxes = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+            types = store.list();  % Already sorted alphabetically
+            if isempty(types)
+                % Show message when no resources exist
+                emptyLabel = uilabel(app.DefaultResourcesPanel);
+                emptyLabel.Text = 'No resources defined';
+                emptyLabel.FontColor = [0.5 0.5 0.5];
+                emptyLabel.HorizontalAlignment = 'center';
+                emptyLabel.Position = [10 10 200 20];
+                return;
+            end
+
+            % Create grid layout for checkboxes
+            numResources = numel(types);
+            checkboxGrid = uigridlayout(app.DefaultResourcesPanel);
+            checkboxGrid.RowHeight = repmat({'fit'}, 1, max(1, numResources));
+            checkboxGrid.ColumnWidth = {'1x'};
+            checkboxGrid.Padding = [4 4 4 4];
+            checkboxGrid.RowSpacing = 2;
+
+            % Create checkbox for each resource
+            for k = 1:numResources
+                resourceType = types(k);
+                cb = uicheckbox(checkboxGrid);
+                cb.Text = char(resourceType.Name);
+                cb.Value = resourceType.IsDefault;
+                cb.Layout.Row = k;
+                cb.Layout.Column = 1;
+                cb.ValueChangedFcn = @(~, ~) app.onDefaultResourceCheckboxChanged(resourceType.Id);
+
+                app.DefaultResourceCheckboxes(char(resourceType.Id)) = cb;
+            end
+        end
+
+        function onDefaultResourceCheckboxChanged(app, resourceId)
+            %ONDEFAULTRESOURCECHECKBOXCHANGED Handle default resource checkbox changes
+
+            if isempty(app.DefaultResourceCheckboxes) || ~app.DefaultResourceCheckboxes.isKey(char(resourceId))
+                return;
+            end
+
+            checkbox = app.DefaultResourceCheckboxes(char(resourceId));
+            newValue = checkbox.Value;
+
+            % Update the resource in the store
+            store = app.CaseManager.getResourceStore();
+            if ~isempty(store) && isvalid(store)
+                try
+                    store.update(resourceId, 'IsDefault', newValue);
+
+                    % Update PendingAddResourceIds to reflect new defaults
+                    app.PendingAddResourceIds = app.getDefaultResourceIds();
+
+                    % Update the Add tab checklist if it exists
+                    if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
+                        app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
+                    end
+
+                    app.markDirty();
+                catch ME
+                    uialert(app.UIFigure, sprintf('Error updating default status: %s', ME.message), 'Error');
+                    % Revert checkbox
+                    checkbox.Value = ~newValue;
+                end
+            end
         end
 
         function clearResourceForm(app)
@@ -1199,6 +1286,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function resourceIds = getDefaultResourceIds(app)
+            %GETDEFAULTRESOURCEIDS Get IDs of default resources to apply to new cases
+            %   Returns array of resource IDs marked with IsDefault = true
+
+            store = app.CaseManager.getResourceStore();
+            if isempty(store)
+                resourceIds = string.empty(0, 1);
+                return;
+            end
+
+            % Get all resources marked as default
+            types = store.list();
+            if isempty(types)
+                resourceIds = string.empty(0, 1);
+                return;
+            end
+
+            defaultMask = arrayfun(@(t) t.IsDefault, types);
+            defaultTypes = types(defaultMask);
+
+            if isempty(defaultTypes)
+                resourceIds = string.empty(0, 1);
+            else
+                resourceIds = string({defaultTypes.Id})';
+            end
+        end
+
         function buildAvailableLabCheckboxes(app)
             if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)
                 return;
@@ -1283,6 +1397,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Create default resources (Anesthesia) if store is empty
             app.ensureDefaultResources();
+            app.refreshResourcesTable();  % Populate table with default resources
+
+            % Set default resource selection for Add tab (Anesthesia)
+            app.PendingAddResourceIds = app.getDefaultResourceIds();
 
             app.initializeResourceLegend();
 
@@ -2919,8 +3037,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     if numel(colorValue) ~= 3 || any(~isfinite(colorValue))
                         colorValue = [0.45 0.45 0.45];
                     end
+                    isDefault = logical(conduction.gui.ProspectiveSchedulerApp.safeField(entry, 'IsDefault', false));
 
-                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue); %#ok<AGROW>
+                    resourceTypes(end+1) = conduction.gui.models.ResourceType(id, name, capacity, colorValue, isDefault); %#ok<AGROW>
                 catch
                     % Skip malformed entries
                 end

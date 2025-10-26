@@ -98,4 +98,21 @@ function buildResourcesTab(app, resourcesGrid)
     app.DeleteResourceButton.Layout.Column = 2;
     app.DeleteResourceButton.Enable = 'off';
     app.DeleteResourceButton.ButtonPushedFcn = @(~, ~) app.onDeleteResourcePressed();
+
+    % Default Resources panel
+    defaultPanel = uipanel(resourcesGrid);
+    defaultPanel.Layout.Row = 4;
+    defaultPanel.Layout.Column = 1;
+    defaultPanel.Title = 'Default for New Cases';
+
+    defaultGrid = uigridlayout(defaultPanel);
+    defaultGrid.RowHeight = {'1x'};
+    defaultGrid.ColumnWidth = {'1x'};
+    defaultGrid.Padding = [4 4 4 4];
+    defaultGrid.RowSpacing = 0;
+
+    app.DefaultResourcesPanel = uipanel(defaultGrid);
+    app.DefaultResourcesPanel.Layout.Row = 1;
+    app.DefaultResourcesPanel.Layout.Column = 1;
+    app.DefaultResourcesPanel.BorderType = 'none';
 end

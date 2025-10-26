@@ -46,8 +46,8 @@ classdef ResourceStore < handle
                 return;
             end
 
-            % Create Anesthesia resource with capacity = numLabs
-            obj.create('Anesthesia', numLabs);
+            % Create Anesthesia resource with capacity = numLabs, set as default
+            obj.create('Anesthesia', numLabs, true);
         end
 
         function types = list(obj)
@@ -101,9 +101,17 @@ classdef ResourceStore < handle
             exists = obj.IdIndex.isKey(char(resourceId));
         end
 
-        function type = create(obj, name, capacity)
+        function type = create(obj, name, capacity, isDefault)
             %CREATE Create a new resource type with auto-assigned color
             %   Color is automatically assigned from the palette and cannot be customized
+            %   isDefault (optional) - whether this resource is selected by default for new cases
+
+            arguments
+                obj
+                name
+                capacity
+                isDefault (1,1) logical = false
+            end
 
             name = string(name);
             validateattributes(capacity, {'numeric'}, {'scalar','nonnegative'});
@@ -112,18 +120,19 @@ classdef ResourceStore < handle
             color = obj.nextPaletteColor();
 
             newId = obj.generateId();
-            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color);
+            type = conduction.gui.models.ResourceType(newId, trimmedName, capacity, color, isDefault);
             obj.appendType(type);
             obj.notifyChanged('create', newId, 0, capacity);
         end
 
         function update(obj, resourceId, varargin)
-            %UPDATE Update a resource type's name and/or capacity
-            %   Only Name and Capacity can be updated. Color is assigned at creation and cannot be changed.
+            %UPDATE Update a resource type's name, capacity, and/or default status
+            %   Only Name, Capacity, and IsDefault can be updated. Color is assigned at creation and cannot be changed.
 
             parser = inputParser;
             addParameter(parser, 'Name', [], @(v) (isstring(v) || ischar(v)));
             addParameter(parser, 'Capacity', [], @(v) isempty(v) || (isscalar(v) && v >= 0));
+            addParameter(parser, 'IsDefault', [], @(v) isempty(v) || (islogical(v) && isscalar(v)));
             parse(parser, varargin{:});
             params = parser.Results;
 
@@ -148,6 +157,10 @@ classdef ResourceStore < handle
             if ~isempty(params.Capacity)
                 newCapacity = params.Capacity;
                 type.Capacity = newCapacity;
+            end
+
+            if ~isempty(params.IsDefault)
+                type.IsDefault = params.IsDefault;
             end
 
             obj.notifyChanged('update', resourceId, oldCapacity, newCapacity);
@@ -198,17 +211,18 @@ classdef ResourceStore < handle
             %SNAPSHOT Return resource types as struct array for serialization/optimization
             types = obj.list();
             if isempty(types)
-                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
+                snapshot = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'IsDefault', {});
                 return;
             end
 
             snapshot = repmat(struct('Id', "", 'Name', "", 'Capacity', 0, ...
-                'Color', zeros(1, 3)), 1, numel(types));
+                'Color', zeros(1, 3), 'IsDefault', false), 1, numel(types));
             for k = 1:numel(types)
                 snapshot(k).Id = types(k).Id;
                 snapshot(k).Name = types(k).Name;
                 snapshot(k).Capacity = double(types(k).Capacity);
                 snapshot(k).Color = double(types(k).Color);
+                snapshot(k).IsDefault = types(k).IsDefault;
             end
         end
 

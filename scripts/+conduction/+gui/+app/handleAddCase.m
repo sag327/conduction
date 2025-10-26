@@ -41,9 +41,12 @@ function handleAddCase(app)
         app.SpecificLabDropDown.Value = 'Any Lab';
         app.FirstCaseCheckBox.Value = false;
         app.AdmissionStatusDropDown.Value = 'outpatient';
-        app.PendingAddResourceIds = string.empty(0, 1);
+
+        % Set default resources (Anesthesia)
+        defaultResourceIds = app.getDefaultResourceIds();
+        app.PendingAddResourceIds = defaultResourceIds;
         if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
-            app.AddResourcesChecklist.setSelection(string.empty(0, 1));
+            app.AddResourcesChecklist.setSelection(defaultResourceIds);
         end
 
         % Collapse constraint panel if it was left open.
