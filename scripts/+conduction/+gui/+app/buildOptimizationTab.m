@@ -141,10 +141,26 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
     app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
-    app.OptOutpatientInpatientModeLabel = uilabel(optimizationGrid);
+    % Create container for label + info button
+    labelContainer = uigridlayout(optimizationGrid);
+    labelContainer.Layout.Row = 12;
+    labelContainer.Layout.Column = 1;
+    labelContainer.RowHeight = {'1x'};
+    labelContainer.ColumnWidth = {'1x', 20};
+    labelContainer.Padding = [0 0 0 0];
+    labelContainer.ColumnSpacing = 4;
+
+    app.OptOutpatientInpatientModeLabel = uilabel(labelContainer);
     app.OptOutpatientInpatientModeLabel.Text = 'Outpt/Inpt handling:';
-    app.OptOutpatientInpatientModeLabel.Layout.Row = 12;
+    app.OptOutpatientInpatientModeLabel.Layout.Row = 1;
     app.OptOutpatientInpatientModeLabel.Layout.Column = 1;
+
+    app.OptOutpatientInpatientModeInfoButton = uibutton(labelContainer, 'push');
+    app.OptOutpatientInpatientModeInfoButton.Text = '?';
+    app.OptOutpatientInpatientModeInfoButton.Layout.Row = 1;
+    app.OptOutpatientInpatientModeInfoButton.Layout.Column = 2;
+    app.OptOutpatientInpatientModeInfoButton.ButtonPushedFcn = @(~, ~) app.showOutpatientInpatientModeHelp();
+    app.OptOutpatientInpatientModeInfoButton.Tooltip = 'Explain outpatient/inpatient handling modes';
 
     app.OptOutpatientInpatientModeDropDown = uidropdown(optimizationGrid);
     app.OptOutpatientInpatientModeDropDown.Items = {'Two-Phase (Strict)', 'Two-Phase (Auto-Fallback)', 'Single-Phase (Flexible)'};
