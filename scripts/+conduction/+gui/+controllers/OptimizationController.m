@@ -699,21 +699,22 @@ classdef OptimizationController < handle
 
                 % Extract timing fields
                 % startTime includes setup, procStartTime is procedure start
+                % Round all times to whole minutes to avoid sub-minute precision issues
                 if isfield(locked, 'startTime') && ~isempty(locked.startTime)
-                    constraint.startTime = double(locked.startTime);
+                    constraint.startTime = round(double(locked.startTime));
                 else
                     continue;  % Skip if no start time
                 end
 
                 if isfield(locked, 'procStartTime') && ~isempty(locked.procStartTime)
-                    constraint.procStartTime = double(locked.procStartTime);
+                    constraint.procStartTime = round(double(locked.procStartTime));
                 else
                     constraint.procStartTime = constraint.startTime;
                 end
 
                 % Extract end times
                 if isfield(locked, 'procEndTime') && ~isempty(locked.procEndTime)
-                    constraint.procEndTime = double(locked.procEndTime);
+                    constraint.procEndTime = round(double(locked.procEndTime));
                 else
                     continue;  % Skip if no procedure end time
                 end
@@ -721,11 +722,13 @@ classdef OptimizationController < handle
                 % Calculate total end time (including post and turnover)
                 constraint.endTime = constraint.procEndTime;
                 if isfield(locked, 'postTime') && ~isempty(locked.postTime)
-                    constraint.endTime = constraint.endTime + double(locked.postTime);
+                    constraint.endTime = constraint.endTime + round(double(locked.postTime));
                 end
                 if isfield(locked, 'turnoverTime') && ~isempty(locked.turnoverTime)
-                    constraint.endTime = constraint.endTime + double(locked.turnoverTime);
+                    constraint.endTime = constraint.endTime + round(double(locked.turnoverTime));
                 end
+                % Round final endTime to ensure whole minutes
+                constraint.endTime = round(constraint.endTime);
 
                 % Extract assigned lab (critical for preserving lab assignment)
                 if isfield(locked, 'assignedLab') && ~isempty(locked.assignedLab)

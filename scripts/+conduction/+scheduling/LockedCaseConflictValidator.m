@@ -171,8 +171,10 @@ classdef LockedCaseConflictValidator
 
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        if case1.procStartTime < case2.procEndTime && ...
-                           case2.procStartTime < case1.procEndTime
+                        % Add tolerance for sub-minute rounding (30 seconds = 0.5 minutes)
+                        TIME_TOLERANCE = 0.5;
+                        if (case1.procStartTime + TIME_TOLERANCE) < case2.procEndTime && ...
+                           (case2.procStartTime + TIME_TOLERANCE) < case1.procEndTime
 
                             % Format time strings
                             start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.procStartTime);
@@ -277,8 +279,10 @@ classdef LockedCaseConflictValidator
 
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        if case1.startTime < case2.endTime && ...
-                           case2.startTime < case1.endTime
+                        % Add tolerance for sub-minute rounding (30 seconds = 0.5 minutes)
+                        TIME_TOLERANCE = 0.5;
+                        if (case1.startTime + TIME_TOLERANCE) < case2.endTime && ...
+                           (case2.startTime + TIME_TOLERANCE) < case1.endTime
 
                             % Format time strings
                             start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.startTime);
