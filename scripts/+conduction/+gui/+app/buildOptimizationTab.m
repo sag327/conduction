@@ -70,7 +70,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptFilterDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptDefaultStatusLabel = uilabel(optimizationGrid);
-    app.OptDefaultStatusLabel.Text = 'Default status:';
+    app.OptDefaultStatusLabel.Text = sprintf('Default status\n(if unassigned)');
     app.OptDefaultStatusLabel.Layout.Row = 6;
     app.OptDefaultStatusLabel.Layout.Column = 1;
 
