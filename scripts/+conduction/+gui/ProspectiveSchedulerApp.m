@@ -190,11 +190,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             desiredIds = string(desiredIds(:));
 
             assignableIds = string.empty(0, 1);
-            if ~isempty(app.CaseManager)
-                store = app.CaseManager.getResourceStore();
-                if ~isempty(store) && isvalid(store)
-                    assignableIds = store.assignableIds();
-                end
+            [store, isValid] = app.getValidatedResourceStore();
+            if isValid
+                assignableIds = store.assignableIds();
             end
 
             if isempty(assignableIds)
@@ -239,8 +237,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             rowIdx = evt.Selection(1);
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -263,8 +261,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -273,10 +271,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            answer = uiconfirm(app.UIFigure, ...
-                sprintf('Delete resource "%s"?', type.Name), ...
-                'Confirm Delete', 'Options', {'Delete', 'Cancel'}, ...
-                'DefaultOption', 2, 'CancelOption', 2);
+            answer = app.showConfirm(sprintf('Delete resource "%s"?', type.Name), ...
+                'Confirm Delete', {'Delete', 'Cancel'}, 2);
 
             if strcmp(answer, 'Delete')
                 store.remove(app.SelectedResourceId);
@@ -292,12 +288,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             capacity = app.ResourceCapacitySpinner.Value;
 
             if strlength(name) == 0
-                uialert(app.UIFigure, 'Resource name cannot be empty.', 'Validation Error');
+                app.showAlert('Resource name cannot be empty.', 'Validation Error', 'warning');
                 return;
             end
 
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -314,15 +310,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.refreshResourcesTable();
                 app.markDirty();
             catch ME
-                uialert(app.UIFigure, ME.message, 'Error');
+                app.showAlert(ME.message, 'Error', 'error');
             end
         end
 
         function onResetResourcePressed(app)
             if strlength(app.SelectedResourceId) > 0
                 % Reload from store
-                store = app.CaseManager.getResourceStore();
-                if ~isempty(store) && isvalid(store)
+                [store, isValid] = app.getValidatedResourceStore();
+                if isValid
                     type = store.get(app.SelectedResourceId);
                     if ~isempty(type)
                         app.ResourceNameField.Value = char(type.Name);
@@ -335,12 +331,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function refreshResourcesTable(app)
-            if isempty(app.CaseManager)
-                return;
-            end
-
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -368,8 +360,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -421,8 +413,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             newValue = checkbox.Value;
 
             % Update the resource in the store
-            store = app.CaseManager.getResourceStore();
-            if ~isempty(store) && isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if isValid
                 try
                     store.update(resourceId, 'IsDefault', newValue);
 
@@ -436,7 +428,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                     app.markDirty();
                 catch ME
-                    uialert(app.UIFigure, sprintf('Error updating default status: %s', ME.message), 'Error');
+                    app.showAlert(sprintf('Error updating default status: %s', ME.message), 'Error', 'error');
                     % Revert checkbox
                     checkbox.Value = ~newValue;
                 end
@@ -478,7 +470,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'All modes enforce resource capacity limits.' ...
             ]);
 
-            uialert(app.UIFigure, helpText, 'Outpatient/Inpatient Handling Modes', 'Icon', 'info');
+            app.showAlert(helpText, 'Outpatient/Inpatient Handling Modes', 'info');
         end
     end
 
@@ -542,7 +534,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ensureResourceStoreListener();
 
             % Create checklists now that CaseManager exists
-            store = app.CaseManager.getResourceStore();
+            [store, ~] = app.getValidatedResourceStore();
             if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel) && ...
                     (isempty(app.AddResourcesChecklist) || ~isvalid(app.AddResourcesChecklist))
                 app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
@@ -756,8 +748,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function ensureResourceStoreListener(app)
-            store = app.CaseManager.getResourceStore();
-            if isempty(store) || ~isvalid(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 return;
             end
 
@@ -781,7 +773,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
 
                 % Get the new/current ResourceStore and change details
-                store = app.CaseManager.getResourceStore();
+                [store, ~] = app.getValidatedResourceStore();
                 changeData = store.getLastChangeData();
 
                 % Recreate AddResourcesChecklist with new store
@@ -1297,7 +1289,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             %   Creates Anesthesia resource with capacity = number of labs
             %   Only creates if ResourceStore is empty (first initialization)
 
-            store = app.CaseManager.getResourceStore();
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
+                return;
+            end
 
             % Initialize defaults based on current lab count
             if isempty(store.list())
@@ -1310,8 +1305,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             %GETDEFAULTRESOURCEIDS Get IDs of default resources to apply to new cases
             %   Returns array of resource IDs marked with IsDefault = true
 
-            store = app.CaseManager.getResourceStore();
-            if isempty(store)
+            [store, isValid] = app.getValidatedResourceStore();
+            if ~isValid
                 resourceIds = string.empty(0, 1);
                 return;
             end
@@ -1778,8 +1773,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 options = {'Clear All', 'Cancel'};
             end
 
-            answer = uiconfirm(app.UIFigure, message, 'Confirm Clear', ...
-                'Options', options, 'DefaultOption', 'Cancel', 'CancelOption', 'Cancel');
+            answer = app.showConfirm(message, 'Confirm Clear', options, numel(options));
 
             switch answer
                 case 'Keep Locked'
@@ -1798,64 +1792,40 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.beginBatchUpdate();
-            end
-            if ~isempty(app.OptimizationController)
-                app.OptimizationController.beginBatchUpdate();
-            end
+            app.executeBatchUpdate(@() clearUnlockedCasesImpl(app, caseCount));
+        end
 
-            try
-                % Collect schedule IDs before deletion
-                scheduleCaseIds = string.empty(0, 1);
-                if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                    scheduleCases = app.OptimizedSchedule.cases();
-                    if ~isempty(scheduleCases)
-                        scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
-                    end
+        function clearUnlockedCasesImpl(app, caseCount)
+            % Collect schedule IDs before deletion
+            scheduleCaseIds = string.empty(0, 1);
+            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
+                scheduleCases = app.OptimizedSchedule.cases();
+                if ~isempty(scheduleCases)
+                    scheduleCaseIds = string(arrayfun(@(c) c.caseID, scheduleCases, 'UniformOutput', false));
                 end
-
-                % Gather locked IDs from both case objects and app-level lock list
-                lockedCaseIds = string.empty(0, 1);
-                for i = 1:caseCount
-                    caseObj = app.CaseManager.getCase(i);
-                    if caseObj.IsLocked
-                        lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
-                    end
-                end
-                if ~isempty(app.LockedCaseIds)
-                    lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
-                end
-
-                % Remove unlocked cases from manager using a single filtered update
-                app.CaseManager.clearCasesExcept(lockedCaseIds);
-
-                caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
-                scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
-
-                app.CaseStore.clearSelection();
-                app.ensureDrawerSelectionValid();
-                app.finalizeCaseMutation(scheduleWasUpdated);
-
-            catch ME
-                % Ensure batch updates are ended even if error occurs
-                if ~isempty(app.OptimizationController)
-                    app.OptimizationController.endBatchUpdate(app);
-                end
-                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                    app.CaseStore.endBatchUpdate();
-                end
-                rethrow(ME);
             end
 
-            % End batch updates - refresh once after all operations
-            if ~isempty(app.OptimizationController)
-                app.OptimizationController.endBatchUpdate(app);
+            % Gather locked IDs from both case objects and app-level lock list
+            lockedCaseIds = string.empty(0, 1);
+            for i = 1:caseCount
+                caseObj = app.CaseManager.getCase(i);
+                if caseObj.IsLocked
+                    lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
+                end
             end
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.endBatchUpdate();
+            if ~isempty(app.LockedCaseIds)
+                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
             end
+
+            % Remove unlocked cases from manager using a single filtered update
+            app.CaseManager.clearCasesExcept(lockedCaseIds);
+
+            caseIdsToRemove = setdiff(scheduleCaseIds, lockedCaseIds);
+            scheduleWasUpdated = app.removeCaseIdsFromSchedules(caseIdsToRemove);
+
+            app.CaseStore.clearSelection();
+            app.ensureDrawerSelectionValid();
+            app.finalizeCaseMutation(scheduleWasUpdated);
         end
 
         function clearAllCasesIncludingLocked(app)
@@ -1864,60 +1834,94 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Suppress auto-refresh and optimization dirty marking during batch case removal for performance
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.beginBatchUpdate();
-            end
-            if ~isempty(app.OptimizationController)
-                app.OptimizationController.beginBatchUpdate();
-            end
+            app.executeBatchUpdate(@() clearAllCasesImpl(app, caseCount));
+        end
 
-            try
-                for i = caseCount:-1:1
-                    app.CaseManager.removeCase(i);
-                end
-
-                app.OptimizedSchedule = conduction.DailySchedule.empty;
-                app.SimulatedSchedule = conduction.DailySchedule.empty;
-                app.OptimizationOutcome = struct();
-                app.IsOptimizationDirty = true;
-                app.OptimizationLastRun = NaT;
-
-                app.LockedCaseIds = string.empty;
-                app.TimeControlLockedCaseIds = string.empty;
-                app.TimeControlBaselineLockedIds = string.empty;
-
-                app.SelectedCaseId = "";
-                if ~isempty(app.CaseStore)
-                    app.CaseStore.clearSelection();
-                end
-                app.DrawerCurrentCaseId = "";
-                app.DrawerController.closeDrawer(app);
-
-                app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
-                if app.IsTimeControlActive
-                    app.ScheduleRenderer.updateActualTimeIndicator(app);
-                end
-
-                app.finalizeCaseMutation(false);
-
-            catch ME
-                % Ensure batch updates are ended even if error occurs
-                if ~isempty(app.OptimizationController)
-                    app.OptimizationController.endBatchUpdate(app);
-                end
-                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                    app.CaseStore.endBatchUpdate();
-                end
-                rethrow(ME);
+        function clearAllCasesImpl(app, caseCount)
+            for i = caseCount:-1:1
+                app.CaseManager.removeCase(i);
             end
 
-            % End batch updates - refresh once after all operations
-            if ~isempty(app.OptimizationController)
-                app.OptimizationController.endBatchUpdate(app);
+            app.OptimizedSchedule = conduction.DailySchedule.empty;
+            app.SimulatedSchedule = conduction.DailySchedule.empty;
+            app.OptimizationOutcome = struct();
+            app.IsOptimizationDirty = true;
+            app.OptimizationLastRun = NaT;
+
+            app.LockedCaseIds = string.empty;
+            app.TimeControlLockedCaseIds = string.empty;
+            app.TimeControlBaselineLockedIds = string.empty;
+
+            app.SelectedCaseId = "";
+            if ~isempty(app.CaseStore)
+                app.CaseStore.clearSelection();
             end
-            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                app.CaseStore.endBatchUpdate();
+            app.DrawerCurrentCaseId = "";
+            app.DrawerController.closeDrawer(app);
+
+            app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+            if app.IsTimeControlActive
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            end
+
+            app.finalizeCaseMutation(false);
+        end
+
+        function restoreCasesImpl(app, restoredCases, sessionData)
+            for i = 1:length(restoredCases)
+                app.CaseManager.addCase( ...
+                    restoredCases(i).OperatorName, ...
+                    restoredCases(i).ProcedureName, ...
+                    restoredCases(i).EstimatedDurationMinutes, ...
+                    restoredCases(i).SpecificLab, ...
+                    restoredCases(i).IsFirstCaseOfDay, ...
+                    restoredCases(i).AdmissionStatus);
+
+                % Restore additional state that addCase doesn't handle
+                caseObj = app.CaseManager.getCase(i);
+                caseObj.IsLocked = restoredCases(i).IsLocked;
+
+                % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
+                % restoredCases(i) is a ProspectiveCase object, not a struct, so use property access
+                if strlength(restoredCases(i).CaseId) > 0
+                    caseObj.CaseId = restoredCases(i).CaseId;
+                end
+                if ~isnan(restoredCases(i).CaseNumber)
+                    caseObj.CaseNumber = restoredCases(i).CaseNumber;
+                end
+
+                % Reset case status to "pending" - session loads fresh
+                caseObj.CaseStatus = "pending";
+
+                % Restore resource assignments
+                try
+                    caseObj.clearResources();
+                    resourceIds = restoredCases(i).listRequiredResources();
+                    if isempty(resourceIds)
+                        resourceIds = restoredCases(i).RequiredResourceIds;
+                    end
+                    resourceIds = string(resourceIds(:));
+                    resourceIds = resourceIds(strlength(resourceIds) > 0);
+                    for rid = resourceIds(:)'
+                        caseObj.assignResource(rid);
+                    end
+                catch
+                    % best effort
+                end
+
+                % Clear actual times - no execution data on load
+                caseObj.ActualStartTime = NaN;
+                caseObj.ActualProcStartTime = NaN;
+                caseObj.ActualProcEndTime = NaN;
+                caseObj.ActualEndTime = NaN;
+            end
+
+            % DUAL-ID: Restore case numbering counter and validate
+            if isfield(sessionData, 'nextCaseNumber')
+                app.CaseManager.setNextCaseNumber(sessionData.nextCaseNumber);
+            else
+                % Legacy session without counter - validate and sync
+                app.CaseManager.validateAndSyncCaseNumbers();
             end
         end
 
@@ -2153,13 +2157,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.updateWindowTitle();
 
                 % Success message
-                uialert(app.UIFigure, sprintf('Session saved to:\n%s', filepath), ...
-                    'Session Saved', 'Icon', 'success');
+                app.showAlert(sprintf('Session saved to:\n%s', filepath), 'Session Saved', 'success');
 
             catch ME
                 % Error dialog
-                uialert(app.UIFigure, sprintf('Failed to save session:\n%s', ME.message), ...
-                    'Save Error', 'Icon', 'error');
+                app.showAlert(sprintf('Failed to save session:\n%s', ME.message), 'Save Error', 'error');
             end
         end
 
@@ -2169,12 +2171,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % SAVE/LOAD: Check for unsaved changes (Stage 7)
             if app.IsDirty
-                answer = uiconfirm(app.UIFigure, ...
-                    'You have unsaved changes. Continue loading?', ...
-                    'Unsaved Changes', ...
-                    'Options', {'Load Anyway', 'Cancel'}, ...
-                    'DefaultOption', 'Cancel', ...
-                    'Icon', 'warning');
+                answer = app.showConfirm('You have unsaved changes. Continue loading?', ...
+                    'Unsaved Changes', {'Load Anyway', 'Cancel'}, 2);
 
                 if strcmp(answer, 'Cancel')
                     return;
@@ -2212,8 +2210,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             catch ME
                 % Error dialog
-                uialert(app.UIFigure, sprintf('Failed to load session:\n%s', ME.message), ...
-                    'Load Error', 'Icon', 'error');
+                app.showAlert(sprintf('Failed to load session:\n%s', ME.message), 'Load Error', 'error');
             end
         end
 
@@ -2476,11 +2473,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
             resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
 
-            if ~isempty(app.CaseManager)
-                store = app.CaseManager.getResourceStore();
-                if ~isempty(store) && isvalid(store)
-                    resourceTypes = store.snapshot();
-                end
+            [store, isValid] = app.getValidatedResourceStore();
+            if isValid
+                resourceTypes = store.snapshot();
                 resourceSummary = app.CaseManager.caseResourceSummary();
             end
 
@@ -2598,83 +2593,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Restore cases
             if isfield(sessionData, 'cases') && ~isempty(sessionData.cases)
                 restoredCases = conduction.session.deserializeProspectiveCase(sessionData.cases);
-
-                % Suppress CaseStore auto-refresh during batch case loading for performance
-                batchUpdateActive = false;
-                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                    app.CaseStore.beginBatchUpdate();
-                    batchUpdateActive = true;
-                end
-
-                try
-                for i = 1:length(restoredCases)
-                    app.CaseManager.addCase( ...
-                        restoredCases(i).OperatorName, ...
-                        restoredCases(i).ProcedureName, ...
-                        restoredCases(i).EstimatedDurationMinutes, ...
-                        restoredCases(i).SpecificLab, ...
-                        restoredCases(i).IsFirstCaseOfDay, ...
-                        restoredCases(i).AdmissionStatus);
-
-                    % Restore additional state that addCase doesn't handle
-                    caseObj = app.CaseManager.getCase(i);
-                    caseObj.IsLocked = restoredCases(i).IsLocked;
-
-                    % DUAL-ID: Restore persistent IDs (both CaseId and CaseNumber)
-                    % restoredCases(i) is a ProspectiveCase object, not a struct, so use property access
-                    if strlength(restoredCases(i).CaseId) > 0
-                        caseObj.CaseId = restoredCases(i).CaseId;
-                    end
-                    if ~isnan(restoredCases(i).CaseNumber)
-                        caseObj.CaseNumber = restoredCases(i).CaseNumber;
-                    end
-
-                    % Reset case status to "pending" - session loads fresh
-                    caseObj.CaseStatus = "pending";
-
-                    % Restore resource assignments
-                    try
-                        caseObj.clearResources();
-                        resourceIds = restoredCases(i).listRequiredResources();
-                        if isempty(resourceIds)
-                            resourceIds = restoredCases(i).RequiredResourceIds;
-                        end
-                        resourceIds = string(resourceIds(:));
-                        resourceIds = resourceIds(strlength(resourceIds) > 0);
-                        for rid = resourceIds(:)'
-                            caseObj.assignResource(rid);
-                        end
-                    catch
-                        % best effort
-                    end
-
-                    % Clear actual times - no execution data on load
-                    caseObj.ActualStartTime = NaN;
-                    caseObj.ActualProcStartTime = NaN;
-                    caseObj.ActualProcEndTime = NaN;
-                    caseObj.ActualEndTime = NaN;
-                end
-
-                % DUAL-ID: Restore case numbering counter and validate
-                if isfield(sessionData, 'nextCaseNumber')
-                    app.CaseManager.setNextCaseNumber(sessionData.nextCaseNumber);
-                else
-                    % Legacy session without counter - validate and sync
-                    app.CaseManager.validateAndSyncCaseNumbers();
-                end
-
-                catch ME
-                    % Ensure batch update is ended even if error occurs
-                    if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                        app.CaseStore.endBatchUpdate();
-                    end
-                    rethrow(ME);
-                end
-
-                % End batch update - refresh CaseStore once after all cases loaded
-                if batchUpdateActive && ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                    app.CaseStore.endBatchUpdate();
-                end
+                app.executeBatchUpdate(@() restoreCasesImpl(app, restoredCases, sessionData), true);
             end
 
             % Note: Completed cases are not directly restorable through public API
@@ -3077,6 +2996,123 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+    end
+
+    methods (Access = private)
+        function showAlert(app, message, title, icon)
+            %SHOWALERT Display alert dialog
+            %   Simplified wrapper for uialert
+
+            arguments
+                app
+                message
+                title = 'Alert'
+                icon = 'info'
+            end
+
+            uialert(app.UIFigure, message, title, 'Icon', icon);
+        end
+
+        function answer = showConfirm(app, message, title, options, defaultIdx)
+            %SHOWCONFIRM Display confirmation dialog
+            %   Simplified wrapper for uiconfirm
+
+            arguments
+                app
+                message
+                title = 'Confirm'
+                options = {'OK', 'Cancel'}
+                defaultIdx = 2
+            end
+
+            answer = uiconfirm(app.UIFigure, message, title, ...
+                'Options', options, ...
+                'DefaultOption', options{defaultIdx}, ...
+                'CancelOption', options{defaultIdx});
+        end
+
+        function answer = showQuestion(app, message, title)
+            %SHOWQUESTION Display yes/no question dialog
+            %   Convenience wrapper for common yes/no questions
+
+            arguments
+                app
+                message
+                title = 'Question'
+            end
+
+            answer = uiconfirm(app.UIFigure, message, title, ...
+                'Options', {'Yes', 'No'}, ...
+                'DefaultOption', 'No', ...
+                'CancelOption', 'No');
+        end
+
+        function [store, isValid] = getValidatedResourceStore(app)
+            %GETVALIDATEDRESOURCESTORE Get resource store with validation
+            %   Returns both store and validity flag
+            %
+            %   Returns:
+            %       store - ResourceStore instance or []
+            %       isValid - true if store exists and is valid
+
+            store = [];
+            isValid = false;
+
+            if isempty(app.CaseManager)
+                return;
+            end
+
+            store = app.CaseManager.getResourceStore();
+            isValid = ~isempty(store) && isvalid(store);
+        end
+
+        function executeBatchUpdate(app, operation, skipOptimizationController)
+            %EXECUTEBATCHUPDATE Execute operation with batch updates suppressed
+            %   Coordinates CaseStore and OptimizationController batch updates
+            %   to prevent redundant refreshes during multi-case operations.
+            %
+            %   Args:
+            %       operation - Function handle that performs the batch operation
+            %       skipOptimizationController - (optional) If true, only batch update CaseStore
+            %
+            %   Example:
+            %       app.executeBatchUpdate(@() app.CaseManager.clearCases());
+            %       app.executeBatchUpdate(@() loadCases(), true);
+
+            if nargin < 3
+                skipOptimizationController = false;
+            end
+
+            % Begin batch updates
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.beginBatchUpdate();
+            end
+            if ~skipOptimizationController && ~isempty(app.OptimizationController)
+                app.OptimizationController.beginBatchUpdate();
+            end
+
+            try
+                % Execute the operation
+                operation();
+            catch ME
+                % Ensure batch updates are ended even if error occurs
+                if ~skipOptimizationController && ~isempty(app.OptimizationController)
+                    app.OptimizationController.endBatchUpdate(app);
+                end
+                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                    app.CaseStore.endBatchUpdate();
+                end
+                rethrow(ME);
+            end
+
+            % End batch updates - refresh once after all operations
+            if ~skipOptimizationController && ~isempty(app.OptimizationController)
+                app.OptimizationController.endBatchUpdate(app);
+            end
+            if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
+                app.CaseStore.endBatchUpdate();
+            end
+        end
     end
 
     methods (Static, Access = private)

@@ -610,30 +610,9 @@ classdef OptimizationController < handle
             end
         end
 
-        function updateDrawerOptimizationSection(obj, app)
-            % Check if drawer optimization labels exist
-            if isempty(app.DrawerMetricValueLabel) || ~isvalid(app.DrawerMetricValueLabel)
-                return;
-            end
-
-            % Get optimization parameters
-            if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
-                app.DrawerController.setLabelText(app.DrawerMetricValueLabel, 'operatorIdle');
-                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, '6 (Active: all)');
-                app.DrawerController.setLabelText(app.DrawerTimingsValueLabel, 'Turn: 30 | Setup/Post: 15/15');
-            else
-                metricText = char(string(app.Opts.metric));
-                labsCount = round(app.Opts.labs);
-                turnoverText = round(app.Opts.turnover);
-                setupText = round(app.Opts.setup);
-                postText = round(app.Opts.post);
-                activeText = obj.formatAvailableLabs(app);
-
-                app.DrawerController.setLabelText(app.DrawerMetricValueLabel, metricText);
-                app.DrawerController.setLabelText(app.DrawerLabsValueLabel, sprintf('%d (Active: %s)', labsCount, activeText));
-                app.DrawerController.setLabelText(app.DrawerTimingsValueLabel, sprintf('Turn: %d | Setup/Post: %d/%d', ...
-                    turnoverText, setupText, postText));
-            end
+        function updateDrawerOptimizationSection(~, ~)
+            % DEPRECATED: Optimization details section removed from drawer
+            % This method is kept as a stub for backward compatibility
         end
 
         function text = formatAvailableLabs(~, app)
