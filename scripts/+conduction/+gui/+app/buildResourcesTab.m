@@ -51,11 +51,13 @@ function buildResourcesTab(app, resourcesGrid)
     app.SaveResourceButton = uibutton(buttonGrid, 'push');
     app.SaveResourceButton.Text = 'Save';
     app.SaveResourceButton.Layout.Column = 1;
+    app.SaveResourceButton.Enable = 'off';  % Initially disabled (no changes)
     app.SaveResourceButton.ButtonPushedFcn = @(~, ~) app.onSaveResourcePressed();
 
     app.ResetResourceButton = uibutton(buttonGrid, 'push');
     app.ResetResourceButton.Text = 'Reset';
     app.ResetResourceButton.Layout.Column = 2;
+    app.ResetResourceButton.Enable = 'off';  % Initially disabled (no changes)
     app.ResetResourceButton.ButtonPushedFcn = @(~, ~) app.onResetResourcePressed();
 
     % Table panel
@@ -115,4 +117,9 @@ function buildResourcesTab(app, resourcesGrid)
     app.DefaultResourcesPanel.Layout.Row = 1;
     app.DefaultResourcesPanel.Layout.Column = 1;
     app.DefaultResourcesPanel.BorderType = 'none';
+
+    % Create FormStateManager to track form changes and manage Save/Reset button states
+    fields = {app.ResourceNameField, app.ResourceCapacitySpinner};
+    app.ResourceFormStateManager = conduction.gui.utils.FormStateManager(fields, ...
+        app.SaveResourceButton, app.ResetResourceButton);
 end

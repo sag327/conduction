@@ -254,6 +254,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Load into form
             app.ResourceNameField.Value = char(selectedType.Name);
             app.ResourceCapacitySpinner.Value = selectedType.Capacity;
+
+            % Set pristine values in FormStateManager (buttons will be disabled until changes made)
+            if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
+                app.ResourceFormStateManager.setPristineValues({char(selectedType.Name), selectedType.Capacity});
+            end
         end
 
         function onDeleteResourcePressed(app)
@@ -323,6 +328,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     if ~isempty(type)
                         app.ResourceNameField.Value = char(type.Name);
                         app.ResourceCapacitySpinner.Value = type.Capacity;
+
+                        % Reset pristine values to current (reloaded) values
+                        if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
+                            app.ResourceFormStateManager.setPristineValues({char(type.Name), type.Capacity});
+                        end
                         return;
                     end
                 end
@@ -339,6 +349,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             types = store.list();  % Already sorted alphabetically
             if isempty(types)
                 app.ResourcesTable.Data = {};
+                % Still refresh default resources panel even if table is empty
+                app.refreshDefaultResourcesPanel();
                 return;
             end
 
@@ -438,6 +450,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function clearResourceForm(app)
             app.ResourceNameField.Value = '';
             app.ResourceCapacitySpinner.Value = 1;
+
+            % Reset FormStateManager with empty pristine values (buttons will be disabled)
+            if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
+                app.ResourceFormStateManager.setPristineValues({'', 1});
+            end
         end
 
         function switchToResourcesTab(app)
@@ -921,6 +938,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TestingModeController conduction.gui.controllers.TestingModeController
         CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
         CaseDragController conduction.gui.controllers.CaseDragController
+        ResourceFormStateManager conduction.gui.utils.FormStateManager  % Form state manager for Resources tab
 
         TargetDate datetime
         IsCustomOperatorSelected logical = false
