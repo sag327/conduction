@@ -29,6 +29,27 @@ classdef ResourceStore < handle
             end
         end
 
+        function initializeDefaultResources(obj, numLabs)
+            %INITIALIZEDEFAULTRESOURCES Create default resources if store is empty
+            %   Only creates defaults if no resources exist yet
+            %
+            %   Args:
+            %       numLabs - Number of labs (used for anesthesia capacity)
+
+            arguments
+                obj
+                numLabs (1,1) double {mustBePositive, mustBeInteger} = 6
+            end
+
+            % Only initialize if store is completely empty
+            if ~isempty(obj.Types)
+                return;
+            end
+
+            % Create Anesthesia resource with capacity = numLabs
+            obj.create('Anesthesia', numLabs);
+        end
+
         function types = list(obj)
             types = obj.Types;
             % Sort alphabetically by name for consistent display everywhere

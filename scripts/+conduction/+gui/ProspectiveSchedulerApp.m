@@ -1185,6 +1185,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'outpatientInpatientMode', "TwoPhaseAutoFallback");
         end
 
+        function ensureDefaultResources(app)
+            %ENSUREDEFAULTRESOURCES Create default resources if needed
+            %   Creates Anesthesia resource with capacity = number of labs
+            %   Only creates if ResourceStore is empty (first initialization)
+
+            store = app.CaseManager.getResourceStore();
+
+            % Initialize defaults based on current lab count
+            if isempty(store.list())
+                numLabs = app.Opts.labs;
+                store.initializeDefaultResources(numLabs);
+            end
+        end
+
         function buildAvailableLabCheckboxes(app)
             if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)
                 return;
@@ -1266,6 +1280,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             else
                 app.CaseManager = conduction.gui.controllers.CaseManager(targetDate, historicalCollection);
             end
+
+            % Create default resources (Anesthesia) if store is empty
+            app.ensureDefaultResources();
 
             app.initializeResourceLegend();
 
