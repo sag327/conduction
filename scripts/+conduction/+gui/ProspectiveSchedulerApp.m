@@ -443,111 +443,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Cases Tab Popout Management
         % ------------------------------------------------------------------
         function applyCasesTabUndockedState(app, isUndocked)
-            if isUndocked
-                app.IsCasesUndocked = true;
-
-                if ~isempty(app.CasesEmbeddedContainer) && isvalid(app.CasesEmbeddedContainer)
-                    app.CasesEmbeddedContainer.Visible = 'off';
-                end
-
-                if ~isempty(app.CasesUndockButton) && isvalid(app.CasesUndockButton)
-                    app.CasesUndockButton.Text = 'Window Open';
-                    app.CasesUndockButton.Enable = 'off';
-                end
-
-                app.TabList.Title = 'Cases (Undocked)';
-                app.createCasesTabOverlay();
-
-                if ~isempty(app.TabGroup) && isvalid(app.TabGroup) && app.TabGroup.SelectedTab == app.TabList
-                    fallback = app.LastActiveMainTab;
-                    if isempty(fallback) || ~isvalid(fallback) || fallback == app.TabList
-                        fallback = app.TabAdd;
-                    end
-                    app.IsHandlingTabSelection = true;
-                    app.TabGroup.SelectedTab = fallback;
-                    app.LastActiveMainTab = fallback;
-                    app.IsHandlingTabSelection = false;
-                end
-            else
-                app.IsCasesUndocked = false;
-
-                if ~isempty(app.CasesEmbeddedContainer) && isvalid(app.CasesEmbeddedContainer)
-                    app.CasesEmbeddedContainer.Visible = 'on';
-                end
-
-                if ~isempty(app.CasesUndockButton) && isvalid(app.CasesUndockButton)
-                    app.CasesUndockButton.Text = 'Open Window';
-                    app.CasesUndockButton.Enable = 'on';
-                end
-
-                if ~isempty(app.CasesTabOverlay) && isvalid(app.CasesTabOverlay)
-                    delete(app.CasesTabOverlay);
-                end
-                app.CasesTabOverlay = matlab.ui.container.Panel.empty;
-                app.TabList.Title = 'Cases';
-
-                if isempty(app.CasesView) || ~isvalid(app.CasesView)
-                    app.createEmbeddedCaseView();
-                end
-            end
+            app.CasesWindowController.applyCasesTabUndockedState(app, isUndocked);
         end
 
         function createCasesTabOverlay(app)
-            if ~isempty(app.CasesTabOverlay) && isvalid(app.CasesTabOverlay)
-                delete(app.CasesTabOverlay);
-            end
-
-            overlay = uipanel(app.TabList);
-            overlay.Units = 'normalized';
-            overlay.Position = [0 0 1 1];
-            overlay.BackgroundColor = app.UIFigure.Color;
-            overlay.BorderType = 'none';
-            overlay.Tag = 'CasesUndockedOverlay';
-            overlay.HitTest = 'on';
-
-            grid = uigridlayout(overlay);
-            grid.RowHeight = {'1x', 'fit', 'fit', '1x'};
-            grid.ColumnWidth = {'1x'};
-            grid.Padding = [20 20 20 20];
-            grid.RowSpacing = 12;
-            grid.ColumnSpacing = 0;
-
-            message = uilabel(grid);
-            message.Layout.Row = 2;
-            message.Layout.Column = 1;
-            message.Text = 'Cases table is open in a separate window (Esc to redock)';
-            message.FontWeight = 'bold';
-            message.HorizontalAlignment = 'center';
-
-            focusButton = uibutton(grid, 'push');
-            focusButton.Layout.Row = 3;
-            focusButton.Layout.Column = 1;
-            focusButton.Text = 'Focus Window';
-            focusButton.Tooltip = 'Bring the cases window to the front';
-            focusButton.ButtonPushedFcn = @(src, evt) app.focusCasesPopout(); %#ok<NASGU,INUSD>
-
-            app.CasesTabOverlay = overlay;
-            uistack(app.CasesTabOverlay, 'top');
+            app.CasesWindowController.createCasesTabOverlay(app);
         end
 
         function focusCasesPopout(app)
-            if ~isempty(app.CasesPopout) && isvalid(app.CasesPopout)
-                app.CasesPopout.focus();
-            else
-                app.handleCasesUndockRequest();
-            end
+            app.CasesWindowController.focusCasesPopout(app);
         end
 
         function redockCases(app)
-            if ~app.IsCasesUndocked
-                return;
-            end
-
-            if ~isempty(app.CasesPopout) && isvalid(app.CasesPopout)
-                app.CasesPopout.close();
-            else
-                app.applyCasesTabUndockedState(false);
-            end
+            app.CasesWindowController.redockCases(app);
         end
 
         % ------------------------------------------------------------------
@@ -582,6 +490,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStore conduction.gui.stores.CaseStore
         CasesView conduction.gui.components.CaseTableView
         CasesPopout conduction.gui.windows.CasesPopout
+        CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         AddResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         DrawerResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         AddResourcesChecklist conduction.gui.components.ResourceChecklist = conduction.gui.components.ResourceChecklist.empty
@@ -598,6 +507,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationController conduction.gui.controllers.OptimizationController
         AnalyticsRenderer conduction.gui.controllers.AnalyticsRenderer
         DurationSelector conduction.gui.controllers.DurationSelector
+        CasesWindowController conduction.gui.controllers.CasesWindowController
         ResourceController conduction.gui.controllers.ResourceController
         SessionController conduction.gui.controllers.SessionController
         TestingModeController conduction.gui.controllers.TestingModeController
@@ -647,6 +557,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DebugShowCaseIds logical = false  % DEBUG: show case IDs on schedule for diagnostics
         IsCasesUndocked logical = false
         LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
+        IsHandlingTabSelection logical = false
     end
 
     properties (Access = private)
@@ -654,8 +565,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsUpdatingResourceStore logical = false  % Guard against re-entrant calls
         SuppressOptimizationDirty logical = false  % Skip markOptimizationDirty in onCaseManagerChanged when already handled
         CaseStoreListeners event.listener = event.listener.empty
-        CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
-        IsHandlingTabSelection logical = false
     end
 
 
@@ -1099,6 +1008,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController = conduction.gui.controllers.OptimizationController();
             app.AnalyticsRenderer = conduction.gui.controllers.AnalyticsRenderer();
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
+            app.CasesWindowController = conduction.gui.controllers.CasesWindowController();
             app.ResourceController = conduction.gui.controllers.ResourceController();
             app.SessionController = conduction.gui.controllers.SessionController();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
@@ -1947,28 +1857,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function handleCasesUndockRequest(app)
-            if isempty(app.CaseStore)
-                return;
-            end
-
-            if isempty(app.CasesPopout) || ~isvalid(app.CasesPopout)
-                app.CasesPopout = conduction.gui.windows.CasesPopout(app.CaseStore, ...
-                    @(popout) app.onCasesPopoutRedock(popout));
-            end
-
-            if ~app.IsCasesUndocked
-                app.applyCasesTabUndockedState(true);
-            elseif isempty(app.CasesTabOverlay) || ~isvalid(app.CasesTabOverlay)
-                app.createCasesTabOverlay();
-            end
-
-            app.CasesPopout.show();
+            app.CasesWindowController.handleCasesUndockRequest(app);
         end
 
         function onCasesPopoutRedock(app, popout)
-            %#ok<INUSD>
-            app.applyCasesTabUndockedState(false);
-            app.CasesPopout = conduction.gui.windows.CasesPopout.empty;
+            app.CasesWindowController.onCasesPopoutRedock(app, popout);
         end
 
     end
