@@ -599,6 +599,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AnalyticsRenderer conduction.gui.controllers.AnalyticsRenderer
         DurationSelector conduction.gui.controllers.DurationSelector
         ResourceController conduction.gui.controllers.ResourceController
+        SessionController conduction.gui.controllers.SessionController
         TestingModeController conduction.gui.controllers.TestingModeController
         CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
         CaseDragController conduction.gui.controllers.CaseDragController
@@ -672,6 +673,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function tf = isAvailableLabSyncing(app)
             tf = app.IsSyncingAvailableLabSelection;
+        end
+
+        function beginResourceStoreUpdate(app)
+            app.IsUpdatingResourceStore = true;
+        end
+
+        function endResourceStoreUpdate(app)
+            app.IsUpdatingResourceStore = false;
+        end
+
+        function tf = isResourceStoreUpdateInProgress(app)
+            tf = app.IsUpdatingResourceStore;
         end
     end
 
@@ -1087,6 +1100,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AnalyticsRenderer = conduction.gui.controllers.AnalyticsRenderer();
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
             app.ResourceController = conduction.gui.controllers.ResourceController();
+            app.SessionController = conduction.gui.controllers.SessionController();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
             app.CaseStatusController = conduction.gui.controllers.CaseStatusController();  % REALTIME-SCHEDULING
             app.CaseDragController = conduction.gui.controllers.CaseDragController();
@@ -1201,7 +1215,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 delete(app.CurrentTimeTimer);
                 app.CurrentTimeTimer = timer.empty;
             end
-            app.stopAutoSaveTimer();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
+            app.stopAutoSaveTimerInternal();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
 
             if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
@@ -1838,95 +1852,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function SaveSessionButtonPushed(app, event)
             % SAVE/LOAD: Save current session to file (Stage 5)
             %#ok<INUSD>
-
-            % Generate default filename
-            defaultPath = conduction.session.generateSessionFilename(app.TargetDate);
-            [~, defaultFile, ~] = fileparts(defaultPath);
-
-            % Show file dialog
-            [filename, pathname] = uiputfile('*.mat', 'Save Session', [defaultFile '.mat']);
-
-            if isequal(filename, 0)
-                % User cancelled
-                return;
-            end
-
-            filepath = fullfile(pathname, filename);
-
-            try
-                % Export app state
-                sessionData = app.exportAppState();
-
-                % Save to file
-                conduction.session.saveSessionToFile(sessionData, filepath);
-
-                % SAVE/LOAD: Clear dirty flag after successful save (Stage 7)
-                app.IsDirty = false;
-                app.updateWindowTitle();
-
-                % Success message
-                app.showAlert(sprintf('Session saved to:\n%s', filepath), 'Session Saved', 'success');
-
-            catch ME
-                % Error dialog
-                app.showAlert(sprintf('Failed to save session:\n%s', ME.message), 'Save Error', 'error');
-            end
+            app.SessionController.saveSession(app);
         end
 
         function LoadSessionButtonPushed(app, event)
             % SAVE/LOAD: Load session from file (Stage 6, updated Stage 7)
             %#ok<INUSD>
-
-            % SAVE/LOAD: Check for unsaved changes (Stage 7)
-            if app.IsDirty
-                answer = app.showConfirm('You have unsaved changes. Continue loading?', ...
-                    'Unsaved Changes', {'Load Anyway', 'Cancel'}, 2);
-
-                if strcmp(answer, 'Cancel')
-                    return;
-                end
-            end
-
-            % Show file dialog (start in ./sessions directory if it exists)
-            defaultPath = './sessions/';
-            if ~isfolder(defaultPath)
-                defaultPath = pwd;
-            end
-
-            [filename, pathname] = uigetfile('*.mat', 'Load Session', defaultPath);
-
-            if isequal(filename, 0)
-                % User cancelled
-                return;
-            end
-
-            filepath = fullfile(pathname, filename);
-
-            try
-                % Load from file
-                sessionData = conduction.session.loadSessionFromFile(filepath);
-
-                % Import app state
-                app.importAppState(sessionData);
-
-                % SAVE/LOAD: Clear dirty flag after successful load (Stage 7)
-                app.IsDirty = false;
-                app.updateWindowTitle();
-
-                % Success: log to console (avoid modal popups that can disrupt state)
-                fprintf('Session loaded from: %s\n', filepath);
-
-            catch ME
-                % Error dialog
-                app.showAlert(sprintf('Failed to load session:\n%s', ME.message), 'Load Error', 'error');
-            end
+            app.SessionController.loadSession(app);
         end
 
         function AutoSaveCheckboxValueChanged(app, event)
             % SAVE/LOAD: Auto-save checkbox toggled (Stage 8)
             %#ok<INUSD>
-            value = app.AutoSaveCheckbox.Value;
-            app.enableAutoSave(value, app.AutoSaveInterval);
+            app.SessionController.enableAutoSave(app, app.AutoSaveCheckbox.Value, app.AutoSaveInterval);
         end
 
         function OptimizationRunButtonPushed(app, event)
@@ -2220,6 +2158,34 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % ----------------------- Session Serialization -------------------
         function importAppState(app, sessionData)
+            app.SessionController.importAppState(app, sessionData);
+        end
+
+        function sessionData = exportAppState(app)
+            sessionData = app.SessionController.exportAppState(app);
+        end
+
+        function enableAutoSave(app, enabled, interval)
+            app.SessionController.enableAutoSave(app, enabled, interval);
+        end
+
+        function startAutoSaveTimer(app)
+            app.SessionController.startAutoSaveTimer(app);
+        end
+
+        function stopAutoSaveTimer(app)
+            app.SessionController.stopAutoSaveTimer(app);
+        end
+
+        function autoSaveCallback(app)
+            app.autoSaveCallbackInternal();
+        end
+
+        function rotateAutoSaves(app, autoSaveDir)
+            app.SessionController.rotateAutoSaves(app, autoSaveDir);
+        end
+
+        function importAppStateInternal(app, sessionData)
             % SAVE/LOAD: Restore app state from SessionData struct
             % This is part of Stage 3 of the save/load implementation
 
@@ -2405,7 +2371,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             
         end
 
-        function sessionData = exportAppState(app)
+        function sessionData = exportAppStateInternal(app)
             % SAVE/LOAD: Export all saveable app state to SessionData struct
             % This is part of Stage 2 of the save/load implementation
 
@@ -2505,6 +2471,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateWindowTitle();
         end
 
+        function markClean(app)
+            app.IsDirty = false;
+            app.updateWindowTitle();
+        end
+
         function updateWindowTitle(app)
             % SAVE/LOAD: Update window title with dirty flag indicator (Stage 7)
             if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
@@ -2522,7 +2493,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         % ----------------------- Auto-save Infrastructure ----------------
-        function enableAutoSave(app, enabled, interval)
+        function enableAutoSaveInternal(app, enabled, interval)
             % SAVE/LOAD: Enable or disable auto-save (Stage 8)
             if nargin < 3
                 interval = 5;  % default 5 minutes
@@ -2532,30 +2503,30 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.AutoSaveInterval = interval;
 
             if enabled
-                app.startAutoSaveTimer();
+                app.startAutoSaveTimerInternal();
             else
-                app.stopAutoSaveTimer();
+                app.stopAutoSaveTimerInternal();
             end
         end
 
-        function startAutoSaveTimer(app)
+        function startAutoSaveTimerInternal(app)
             % SAVE/LOAD: Start the auto-save timer (Stage 8)
             % Stop existing timer
-            app.stopAutoSaveTimer();
+            app.stopAutoSaveTimerInternal();
 
             % Create new timer
             app.AutoSaveTimer = timer(...
                 'ExecutionMode', 'fixedSpacing', ...
                 'Period', app.AutoSaveInterval * 60, ...  % Convert to seconds
                 'StartDelay', app.AutoSaveInterval * 60, ...
-                'TimerFcn', @(~,~) app.autoSaveCallback(), ...
+                'TimerFcn', @(~,~) app.autoSaveCallbackInternal(), ...
                 'Name', 'ConductionAutoSaveTimer');
 
             start(app.AutoSaveTimer);
             fprintf('Auto-save enabled: saving every %.1f minutes\n', app.AutoSaveInterval);
         end
 
-        function stopAutoSaveTimer(app)
+        function stopAutoSaveTimerInternal(app)
             % SAVE/LOAD: Stop the auto-save timer (Stage 8)
             if ~isempty(app.AutoSaveTimer) && isvalid(app.AutoSaveTimer)
                 stop(app.AutoSaveTimer);
@@ -2564,7 +2535,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
-        function autoSaveCallback(app)
+        function autoSaveCallbackInternal(app)
             % SAVE/LOAD: Auto-save timer callback (Stage 8)
             % Only save if dirty
             if ~app.IsDirty
@@ -2583,11 +2554,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 filepath = fullfile(autoSaveDir, filename);
 
                 % Save session
-                sessionData = app.exportAppState();
+                sessionData = app.exportAppStateInternal();
                 conduction.session.saveSessionToFile(sessionData, filepath);
 
                 % Rotate old auto-saves
-                app.rotateAutoSaves(autoSaveDir);
+                app.rotateAutoSavesInternal(autoSaveDir);
 
                 fprintf('Auto-saved to: %s\n', filepath);
 
@@ -2596,7 +2567,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
-        function rotateAutoSaves(app, autoSaveDir)
+        function rotateAutoSavesInternal(app, autoSaveDir)
             % SAVE/LOAD: Rotate auto-save files to limit disk usage (Stage 8)
             % Get all auto-save files
             files = dir(fullfile(autoSaveDir, 'autosave_*.mat'));

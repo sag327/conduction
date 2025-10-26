@@ -327,11 +327,11 @@ classdef ResourceController < handle
 
         function onResourceStoreChanged(obj, app)
             % Prevent re-entrant calls during resource store updates
-            if app.IsUpdatingResourceStore
+            if app.isResourceStoreUpdateInProgress()
                 return;
             end
 
-            app.IsUpdatingResourceStore = true;
+            app.beginResourceStoreUpdate();
             try
                 if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
                     app.CaseStore.refresh();
@@ -411,10 +411,10 @@ classdef ResourceController < handle
 
                 if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
             catch ME
-                app.IsUpdatingResourceStore = false;
+                app.endResourceStoreUpdate();
                 rethrow(ME);
             end
-            app.IsUpdatingResourceStore = false;
+            app.endResourceStoreUpdate();
         end
 
         function onAddResourcesSelectionChanged(~, app, resourceIds)

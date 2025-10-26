@@ -181,5 +181,6 @@ Resolve any failures before starting.
 - Keep commit checkpoints per phase for quick rollbacks.
 
 ## Follow-on Ideas (Post-Refactor)
+- Optional follow-up: migrate the remaining session import/export internals from the app into `SessionController` to slim `ProspectiveSchedulerApp.m` further; treat as a separate high-risk effort if pursued.
 - Add targeted unit tests for new controllers once stable.
 - Evaluate whether save/load tests can exercise controllers directly for faster iteration.

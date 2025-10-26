@@ -154,17 +154,21 @@ classdef DrawerController < handle
 
             % Clear existing plot
             cla(app.DrawerHistogramAxes);
+            % Reset axis limits so the next render is not constrained by any
+            % previous "no data" message (which sets [0 1]).
+            app.DrawerHistogramAxes.XLimMode = 'auto';
+            app.DrawerHistogramAxes.YLimMode = 'auto';
 
             % Check if we have historical data
             if isempty(app.CaseManager)
-                obj.showHistogramMessage(app, 'No historical data available');
+                obj.showHistogramMessage(app, 'No prior case data');
                 return;
             end
 
             % Get the pre-computed aggregator (fast - no re-aggregation needed)
             aggregator = app.CaseManager.getProcedureMetricsAggregator();
             if isempty(aggregator)
-                obj.showHistogramMessage(app, 'No historical data available');
+                obj.showHistogramMessage(app, 'No prior case data');
                 return;
             end
 
@@ -175,7 +179,7 @@ classdef DrawerController < handle
                     operatorName, procedureName, 'procedureMinutes', ...
                     'Parent', app.DrawerHistogramAxes);
             catch ME
-                obj.showHistogramMessage(app, sprintf('Error: %s', ME.message));
+                obj.showHistogramMessage(app, 'No prior case data');
             end
         end
 
