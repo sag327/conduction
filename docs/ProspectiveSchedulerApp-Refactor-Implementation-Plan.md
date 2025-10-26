@@ -6,6 +6,7 @@ A staged approach to shrinking `ProspectiveSchedulerApp.m` while keeping behavio
 - Reduce file size and complexity by extracting cohesive responsibilities into controllers/utilities.
 - Maintain current public methods, callbacks, and test interfaces (wrappers forward into new modules).
 - Avoid behaviour changes; each phase should be a pure migration with verification.
+- After completing each phase, report the key changes made, guiding design principles, and the impact on code size/modularity (e.g., LOC moved, new modules).
 - Provide concrete automated and manual tests per phase to confirm parity.
 
 ## Global Pre-flight
@@ -33,6 +34,7 @@ Resolve any failures before starting.
 ### Tests
 - Automated regression: none required.
 - Manual spot check: launch GUI once to ensure it still opens (`conduction.launchSchedulerGUI`).
+- Reporting: Capture the structural changes made, note the readability/design principles applied, and record that no LOC movement occurred yet.
 
 ## Phase 1 – Extract ResourceController
 **Objective:** Move resource tab callbacks, store wiring, and legend refresh logic into `+controllers/ResourceController`.
@@ -62,6 +64,7 @@ Resolve any failures before starting.
   - Launch GUI, add a new resource (name + capacity), verify row appears in table and legend updates.
   - Toggle default checkbox, confirm Add tab checklist updates immediately.
   - Delete resource, confirm confirmation dialog still appears and legend clears.
+- Reporting: Summarize extracted functionality, highlight controller delegation design, and record how many LOC moved out of `ProspectiveSchedulerApp.m`.
 
 ### Optional Debug Aid
 - Temporarily enable `app.debugLog` calls within controller entry points to trace invocations. Remove before committing.
@@ -87,6 +90,7 @@ Resolve any failures before starting.
   - Launch GUI, add a case, click **Save Session**, ensure file saved and dirty flag clears in window title.
   - Modify data (add a resource), click **Load Session**, confirm unsaved-changes prompt appears.
   - Enable Auto-save, wait >5 minutes or adjust interval temporarily to verify autosave files rotate in `./sessions/autosave`.
+- Reporting: Capture the extracted session responsibilities, restate the guiding separation-of-concerns principles, and note LOC/module changes.
 
 ### Optional Debug Aid
 - Add temporary `fprintf` in controller when autosave starts/stops; remove after validation.
@@ -111,6 +115,7 @@ Resolve any failures before starting.
   - Launch GUI, click **Open Window** in Cases tab; verify overlay appears and popout shows cases table.
   - Press **Esc** or **Redock** button; confirm cases table returns inline and overlay clears.
   - Use **Focus Window** button when popout is open.
+- Reporting: Describe the controller split for popout handling, mention adherence to single-responsibility, and document LOC migration.
 
 ### Optional Debug Aid
 - Temporary logging in controller for `applyCasesTabUndockedState` transitions.
@@ -135,6 +140,7 @@ Resolve any failures before starting.
   - Launch GUI, toggle Time Control ON, ensure NOW line appears.
   - Toggle **Current Time** checkbox; observe label and NOW line update every second.
   - Disable Time Control, verify timer stops (no further updates).
+- Reporting: Summarize timer responsibility relocation, reiterate design considerations (e.g., controller ownership of realtime behavior), and quantify LOC impact.
 
 ### Optional Debug Aid
 - Temporary `debugLog('TimeControlTimer','tick')` inside timer callback to verify firing; remove after confirmation.
@@ -159,6 +165,7 @@ Resolve any failures before starting.
 - Manual spot checks:
   - Trigger validation error (attempt to save resource with empty name) to ensure alert still appears.
   - Delete a resource to confirm confirmation dialog works.
+- Reporting: Capture the utility extraction, note consistency improvements, and record any final LOC reductions or file count changes.
 
 ## Final Regression & Cleanup
 1. Run entire save/load suite one last time:

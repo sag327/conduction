@@ -156,21 +156,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = public, Hidden = true)
+        % ------------------------------------------------------------------
+        % Resource Assignment Helpers
+        % ------------------------------------------------------------------
         function isAssigned = isResourceAssigned(app, resourceId)
             %ISRESOURCEASSIGNED Check if any case uses this resource
-            isAssigned = false;
-            if isempty(app.CaseManager)
-                return;
-            end
-
-            resourceId = string(resourceId);
-            for k = 1:app.CaseManager.CaseCount
-                caseObj = app.CaseManager.getCase(k);
-                if any(caseObj.listRequiredResources() == resourceId)
-                    isAssigned = true;
-                    return;
-                end
-            end
+            isAssigned = app.ResourceController.isResourceAssigned(app, resourceId);
         end
 
         function hasChanges = applyResourcesToCase(app, caseObj, desiredIds)
@@ -180,292 +171,78 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 desiredIds string
             end
 
-            hasChanges = false;
-
-            if isempty(caseObj) || ~isa(caseObj, 'conduction.gui.models.ProspectiveCase')
-                return;
-            end
-
-            currentIds = caseObj.listRequiredResources();
-            desiredIds = string(desiredIds(:));
-
-            assignableIds = string.empty(0, 1);
-            [store, isValid] = app.getValidatedResourceStore();
-            if isValid
-                assignableIds = store.assignableIds();
-            end
-
-            if isempty(assignableIds)
-                desiredIds = string.empty(0, 1);
-            else
-                filtered = intersect(desiredIds, assignableIds, 'stable');
-                desiredIds = string(filtered(:));
-            end
-
-            toRemove = setdiff(currentIds, desiredIds);
-            if ~isempty(assignableIds)
-                disallowedCurrent = setdiff(currentIds, assignableIds, 'stable');
-                toRemove = unique([toRemove(:); disallowedCurrent(:)], 'stable');
-            else
-                toRemove = currentIds;
-            end
-
-            toAdd = setdiff(desiredIds, currentIds);
-
-            hasChanges = ~isempty(toAdd) || ~isempty(toRemove);
-
-            for k = 1:numel(toRemove)
-                caseObj.removeResource(toRemove(k));
-            end
-
-            for k = 1:numel(toAdd)
-                caseObj.assignResource(toAdd(k));
-            end
-
-            if hasChanges
-                app.refreshResourceLegend();
-                app.ScheduleRenderer.refreshResourceHighlights(app);
-            end
+            hasChanges = app.ResourceController.applyResourcesToCase(app, caseObj, desiredIds);
         end
 
-        % Resources Tab Callbacks
+        % ----------------------- Resource Tab UI -------------------------
         function onResourceTableSelectionChanged(app, evt)
-            if isempty(evt.Selection)
-                app.SelectedResourceId = "";
-                app.DeleteResourceButton.Enable = 'off';
-                return;
-            end
-
-            rowIdx = evt.Selection(1);
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            types = store.list();
-            if rowIdx < 1 || rowIdx > numel(types)
-                return;
-            end
-
-            selectedType = types(rowIdx);
-            app.SelectedResourceId = selectedType.Id;
-            app.DeleteResourceButton.Enable = 'on';
-
-            % Load into form
-            app.ResourceNameField.Value = char(selectedType.Name);
-            app.ResourceCapacitySpinner.Value = selectedType.Capacity;
-
-            % Set pristine values in FormStateManager (buttons will be disabled until changes made)
-            if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
-                app.ResourceFormStateManager.setPristineValues({char(selectedType.Name), selectedType.Capacity});
-            end
+            app.ResourceController.onResourceTableSelectionChanged(app, evt);
         end
 
+        % ----------------------- Resource Tab Actions --------------------
         function onDeleteResourcePressed(app)
-            if strlength(app.SelectedResourceId) == 0
-                return;
-            end
-
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            type = store.get(app.SelectedResourceId);
-            if isempty(type)
-                return;
-            end
-
-            answer = app.showConfirm(sprintf('Delete resource "%s"?', type.Name), ...
-                'Confirm Delete', {'Delete', 'Cancel'}, 2);
-
-            if strcmp(answer, 'Delete')
-                store.remove(app.SelectedResourceId);
-                app.SelectedResourceId = "";
-                app.clearResourceForm();
-                app.refreshResourcesTable();
-                app.markDirty();
-            end
+            app.ResourceController.onDeleteResourcePressed(app);
         end
 
+        % ----------------------- Resource Data Save ----------------------
         function onSaveResourcePressed(app)
-            name = strtrim(string(app.ResourceNameField.Value));
-            capacity = app.ResourceCapacitySpinner.Value;
-
-            if strlength(name) == 0
-                app.showAlert('Resource name cannot be empty.', 'Validation Error', 'warning');
-                return;
-            end
-
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            try
-                if strlength(app.SelectedResourceId) == 0
-                    % Create new resource
-                    store.create(name, capacity);
-                else
-                    % Update existing resource
-                    store.update(app.SelectedResourceId, 'Name', name, 'Capacity', capacity);
-                end
-                app.clearResourceForm();
-                app.SelectedResourceId = "";
-                app.refreshResourcesTable();
-                app.markDirty();
-            catch ME
-                app.showAlert(ME.message, 'Error', 'error');
-            end
+            app.ResourceController.onSaveResourcePressed(app);
         end
 
         function onResetResourcePressed(app)
-            if strlength(app.SelectedResourceId) > 0
-                % Reload from store
-                [store, isValid] = app.getValidatedResourceStore();
-                if isValid
-                    type = store.get(app.SelectedResourceId);
-                    if ~isempty(type)
-                        app.ResourceNameField.Value = char(type.Name);
-                        app.ResourceCapacitySpinner.Value = type.Capacity;
-
-                        % Reset pristine values to current (reloaded) values
-                        if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
-                            app.ResourceFormStateManager.setPristineValues({char(type.Name), type.Capacity});
-                        end
-                        return;
-                    end
-                end
-            end
-            app.clearResourceForm();
+            app.ResourceController.onResetResourcePressed(app);
         end
 
+        % ----------------------- Resource Table Sync ---------------------
         function refreshResourcesTable(app)
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            types = store.list();  % Already sorted alphabetically
-            if isempty(types)
-                app.ResourcesTable.Data = {};
-                % Still refresh default resources panel even if table is empty
-                app.refreshDefaultResourcesPanel();
-                return;
-            end
-
-            data = cell(numel(types), 2);
-            for k = 1:numel(types)
-                data{k, 1} = char(types(k).Name);
-                data{k, 2} = types(k).Capacity;
-            end
-            app.ResourcesTable.Data = data;
-
-            % Also refresh default resources panel
-            app.refreshDefaultResourcesPanel();
+            app.ResourceController.refreshResourcesTable(app);
         end
 
+        % ----------------------- Resource Defaults UI --------------------
         function refreshDefaultResourcesPanel(app)
-            %REFRESHDEFAULTRESOURCESPANEL Update checkboxes for default resources
-
-            if isempty(app.CaseManager) || isempty(app.DefaultResourcesPanel) || ~isvalid(app.DefaultResourcesPanel)
-                return;
-            end
-
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            % Clear existing checkboxes
-            delete(app.DefaultResourcesPanel.Children);
-            app.DefaultResourceCheckboxes = containers.Map('KeyType', 'char', 'ValueType', 'any');
-
-            types = store.list();  % Already sorted alphabetically
-            if isempty(types)
-                % Show message when no resources exist
-                emptyLabel = uilabel(app.DefaultResourcesPanel);
-                emptyLabel.Text = 'No resources defined';
-                emptyLabel.FontColor = [0.5 0.5 0.5];
-                emptyLabel.HorizontalAlignment = 'center';
-                emptyLabel.Position = [10 10 200 20];
-                return;
-            end
-
-            % Create grid layout for checkboxes
-            numResources = numel(types);
-            checkboxGrid = uigridlayout(app.DefaultResourcesPanel);
-            checkboxGrid.RowHeight = repmat({'fit'}, 1, max(1, numResources));
-            checkboxGrid.ColumnWidth = {'1x'};
-            checkboxGrid.Padding = [4 4 4 4];
-            checkboxGrid.RowSpacing = 2;
-
-            % Create checkbox for each resource
-            for k = 1:numResources
-                resourceType = types(k);
-                cb = uicheckbox(checkboxGrid);
-                cb.Text = char(resourceType.Name);
-                cb.Value = resourceType.IsDefault;
-                cb.Layout.Row = k;
-                cb.Layout.Column = 1;
-                cb.ValueChangedFcn = @(~, ~) app.onDefaultResourceCheckboxChanged(resourceType.Id);
-
-                app.DefaultResourceCheckboxes(char(resourceType.Id)) = cb;
-            end
+            app.ResourceController.refreshDefaultResourcesPanel(app);
         end
 
+        % ----------------------- Default Resource Toggle -----------------
         function onDefaultResourceCheckboxChanged(app, resourceId)
-            %ONDEFAULTRESOURCECHECKBOXCHANGED Handle default resource checkbox changes
-
-            if isempty(app.DefaultResourceCheckboxes) || ~app.DefaultResourceCheckboxes.isKey(char(resourceId))
-                return;
-            end
-
-            checkbox = app.DefaultResourceCheckboxes(char(resourceId));
-            newValue = checkbox.Value;
-
-            % Update the resource in the store
-            [store, isValid] = app.getValidatedResourceStore();
-            if isValid
-                try
-                    store.update(resourceId, 'IsDefault', newValue);
-
-                    % Update PendingAddResourceIds to reflect new defaults
-                    app.PendingAddResourceIds = app.getDefaultResourceIds();
-
-                    % Update the Add tab checklist if it exists
-                    if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
-                        app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
-                    end
-
-                    app.markDirty();
-                catch ME
-                    app.showAlert(sprintf('Error updating default status: %s', ME.message), 'Error', 'error');
-                    % Revert checkbox
-                    checkbox.Value = ~newValue;
-                end
-            end
+            app.ResourceController.onDefaultResourceCheckboxChanged(app, resourceId);
         end
 
+        % ----------------------- Resource Form Helpers -------------------
         function clearResourceForm(app)
-            app.ResourceNameField.Value = '';
-            app.ResourceCapacitySpinner.Value = 1;
-
-            % Reset FormStateManager with empty pristine values (buttons will be disabled)
-            if ~isempty(app.ResourceFormStateManager) && isvalid(app.ResourceFormStateManager)
-                app.ResourceFormStateManager.setPristineValues({'', 1});
-            end
+            app.ResourceController.clearResourceForm(app);
         end
 
+        % ----------------------- Resource Navigation ---------------------
         function switchToResourcesTab(app)
-            %SWITCHTORESOURCESTAB Switch to the Resources tab
-            if ~isempty(app.TabGroup) && isvalid(app.TabGroup) && ...
-               ~isempty(app.TabResources) && isvalid(app.TabResources)
-                app.TabGroup.SelectedTab = app.TabResources;
-                app.refreshResourcesTable();
-            end
+            app.ResourceController.switchToResourcesTab(app);
         end
 
+        % -------------------- Optimization Dirty Suppression ------------
+        function beginSuppressOptimizationDirty(app)
+            app.SuppressOptimizationDirty = true;
+        end
+
+        function endSuppressOptimizationDirty(app)
+            app.SuppressOptimizationDirty = false;
+        end
+
+        function tf = isOptimizationDirtySuppressed(app)
+            tf = app.SuppressOptimizationDirty;
+        end
+
+        % --------------------- Dialog Helper Proxies --------------------
+        function answer = confirmAction(app, message, title, options, defaultIdx)
+            if nargin < 4 || isempty(options)
+                options = {'OK', 'Cancel'};
+            end
+            if nargin < 5 || isempty(defaultIdx)
+                defaultIdx = numel(options);
+            end
+            answer = app.showConfirm(message, title, options, defaultIdx);
+        end
+
+        % ------------------------ Optimization UI -----------------------
         function showOutpatientInpatientModeHelp(app)
             %SHOWOUTPATIENTINPATIENTMODEHELP Display explanation of optimization modes
 
@@ -492,6 +269,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        % ------------------------------------------------------------------
+        % Diagnostics & Global Shortcuts
+        % ------------------------------------------------------------------
         function debugLog(app, where, message)
             try
                 ts = char(datetime('now','Format','HH:mm:ss.SSS'));
@@ -533,6 +313,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ------------------------------------------------------------------
+        % Case Table & Checklist Setup
+        % ------------------------------------------------------------------
         function initializeCaseTableComponents(app)
             if isempty(app.CaseManager)
                 return;
@@ -656,6 +439,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ------------------------------------------------------------------
+        % Cases Tab Popout Management
+        % ------------------------------------------------------------------
         function applyCasesTabUndockedState(app, isUndocked)
             if isUndocked
                 app.IsCasesUndocked = true;
@@ -764,149 +550,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ------------------------------------------------------------------
+        % Resource Store Event Wiring
+        % ------------------------------------------------------------------
         function ensureResourceStoreListener(app)
-            [store, isValid] = app.getValidatedResourceStore();
-            if ~isValid
-                return;
-            end
-
-            if ~isempty(app.ResourceStoreListener) && isvalid(app.ResourceStoreListener)
-                delete(app.ResourceStoreListener);
-            end
-
-            app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) app.onResourceStoreChanged());
+            app.ResourceController.ensureResourceStoreListener(app);
         end
 
         function onResourceStoreChanged(app)
-            % Prevent re-entrant calls during resource store updates
-            if app.IsUpdatingResourceStore
-                return;
-            end
-
-            app.IsUpdatingResourceStore = true;
-            try
-                if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
-                    app.CaseStore.refresh();
-                end
-
-                % Get the new/current ResourceStore and change details
-                [store, ~] = app.getValidatedResourceStore();
-                changeData = store.getLastChangeData();
-
-                % Recreate AddResourcesChecklist with new store
-                if ~isempty(app.AddResourcesPanel) && isvalid(app.AddResourcesPanel)
-                    if ~isempty(app.AddResourcesChecklist) && isvalid(app.AddResourcesChecklist)
-                        delete(app.AddResourcesChecklist);
-                    end
-                    app.AddResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
-                        app.AddResourcesPanel, store, ...
-                        'Title', "Resources", ...
-                        'SelectionChangedFcn', @(selection) app.onAddResourcesSelectionChanged(selection), ...
-                        'CreateCallback', @(comp) app.switchToResourcesTab(), ...
-                        'ShowCreateButton', false);
-                    if ~isempty(app.PendingAddResourceIds)
-                        app.AddResourcesChecklist.setSelection(app.PendingAddResourceIds);
-                    end
-                end
-
-                % Recreate DrawerResourcesChecklist with new store
-                if ~isempty(app.DrawerResourcesPanel) && isvalid(app.DrawerResourcesPanel)
-                    % Preserve current selection before recreating
-                    current = string.empty(0,1);
-                    if ~isempty(app.DrawerCurrentCaseId)
-                        [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
-                        if ~isempty(caseObj)
-                            current = caseObj.listRequiredResources();
-                        end
-                    end
-
-                    if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
-                        delete(app.DrawerResourcesChecklist);
-                    end
-                    app.DrawerResourcesChecklist = conduction.gui.components.ResourceChecklist( ...
-                        app.DrawerResourcesPanel, store, ...
-                        'Title', "Resources", ...
-                        'SelectionChangedFcn', @(selection) app.onDrawerResourcesSelectionChanged(selection), ...
-                        'CreateCallback', @(comp) app.switchToResourcesTab(), ...
-                        'ShowCreateButton', false, ...
-                        'HorizontalLayout', true);
-                    app.DrawerResourcesChecklist.setSelection(current);
-                end
-
-                app.refreshResourceLegend();
-                app.refreshResourcesTable();
-
-                % Conditionally mark optimization dirty based on change type
-                shouldMarkDirty = false;
-                switch changeData.ChangeType
-                    case 'create'
-                        % New resource, not assigned yet - don't mark dirty
-                        shouldMarkDirty = false;
-                    case 'delete'
-                        % Only mark dirty if resource was assigned to cases
-                        shouldMarkDirty = app.isResourceAssigned(changeData.ResourceId);
-                    case 'update'
-                        % Only mark dirty if capacity changed AND resource is assigned
-                        if changeData.OldCapacity ~= changeData.NewCapacity
-                            shouldMarkDirty = app.isResourceAssigned(changeData.ResourceId);
-                        end
-                end
-
-                if shouldMarkDirty
-                    app.OptimizationController.markOptimizationDirty(app);
-                end
-
-                if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
-            catch ME
-                app.IsUpdatingResourceStore = false;
-                rethrow(ME);
-            end
-            app.IsUpdatingResourceStore = false;
+            app.ResourceController.onResourceStoreChanged(app);
         end
 
         function onAddResourcesSelectionChanged(app, resourceIds)
-            app.PendingAddResourceIds = string(resourceIds(:));
+            app.ResourceController.onAddResourcesSelectionChanged(app, resourceIds);
         end
 
+        % ------------------------------------------------------------------
+        % Drawer Resource Selection Handling
+        % ------------------------------------------------------------------
         function onDrawerResourcesSelectionChanged(app, resourceIds)
-            % Don't apply changes during session restore
-            if app.IsRestoringSession
-                return;
-            end
-
-            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
-                return;
-            end
-
-            [caseObj, ~] = app.CaseManager.findCaseById(app.DrawerCurrentCaseId);
-            if isempty(caseObj)
-                return;
-            end
-
-            newSelection = string(resourceIds(:));
-            hasChanges = app.applyResourcesToCase(caseObj, newSelection);
-
-            % Only notify listeners and mark dirty if resources actually changed
-            if hasChanges
-                % Suppress markOptimizationDirty in onCaseManagerChanged since we'll handle it
-                app.SuppressOptimizationDirty = true;
-                try
-                    % Notify CaseManager listeners (for table updates, etc.)
-                    app.CaseManager.notifyChange();
-
-                    % Mark optimization dirty but skip re-render since we already updated visuals
-                    app.OptimizationController.markOptimizationDirty(app, true, true);
-                catch ME
-                    % Always clear suppression flag on error
-                    app.SuppressOptimizationDirty = false;
-                    rethrow(ME);
-                end
-
-                % Clear suppression flag after successful completion
-                app.SuppressOptimizationDirty = false;
-
-                % CaseStore auto-refreshes via CaseManager listener
-            end
+            app.ResourceController.onDrawerResourcesSelectionChanged(app, resourceIds);
         end
 
         % (moved applyResourcesToCase to a public methods block below)
@@ -935,10 +598,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationController conduction.gui.controllers.OptimizationController
         AnalyticsRenderer conduction.gui.controllers.AnalyticsRenderer
         DurationSelector conduction.gui.controllers.DurationSelector
+        ResourceController conduction.gui.controllers.ResourceController
         TestingModeController conduction.gui.controllers.TestingModeController
         CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
         CaseDragController conduction.gui.controllers.CaseDragController
         ResourceFormStateManager conduction.gui.utils.FormStateManager  % Form state manager for Resources tab
+        ResourceStoreListener event.listener = event.listener.empty
 
         TargetDate datetime
         IsCustomOperatorSelected logical = false
@@ -990,11 +655,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CaseStoreListeners event.listener = event.listener.empty
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         IsHandlingTabSelection logical = false
-        ResourceStoreListener event.listener = event.listener.empty
     end
 
 
     methods (Access = public, Hidden)
+        % ------------------------------------------------------------------
+        % Available Lab Selection Sync
+        % ------------------------------------------------------------------
         function beginAvailableLabSync(app)
             app.IsSyncingAvailableLabSelection = true;
         end
@@ -1011,6 +678,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % Component initialization
     methods (Access = public)
 
+        % ------------------------------------------------------------------
+        % UI Setup & Layout Construction
+        % ------------------------------------------------------------------
         function setupUI(app)
 
             % Create UIFigure and hide until all components are created
@@ -1288,6 +958,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % App creation and deletion
     methods (Access = public)
 
+        % ------------------------------------------------------------------
+        % Initialization & Default Configuration
+        % ------------------------------------------------------------------
         function initializeOptimizationDefaults(app)
             % Initialize default optimization options if not already set
             app.Opts = struct( ...
@@ -1346,6 +1019,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ------------------------------------------------------------------
+        % Available Lab UI Helpers
+        % ------------------------------------------------------------------
         function buildAvailableLabCheckboxes(app)
             if isempty(app.OptAvailableLabsPanel) || ~isvalid(app.OptAvailableLabsPanel)
                 return;
@@ -1395,6 +1071,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.syncAvailableLabsSelectAll();
         end
 
+        % ------------------------------------------------------------------
+        % Constructor
+        % ------------------------------------------------------------------
         function app = ProspectiveSchedulerApp(targetDate, historicalCollection)
             arguments
                 targetDate (1,1) datetime = datetime('tomorrow')
@@ -1407,6 +1086,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController = conduction.gui.controllers.OptimizationController();
             app.AnalyticsRenderer = conduction.gui.controllers.AnalyticsRenderer();
             app.DurationSelector = conduction.gui.controllers.DurationSelector();
+            app.ResourceController = conduction.gui.controllers.ResourceController();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
             app.CaseStatusController = conduction.gui.controllers.CaseStatusController();  % REALTIME-SCHEDULING
             app.CaseDragController = conduction.gui.controllers.CaseDragController();
@@ -1512,6 +1192,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ------------------------------------------------------------------
+        % Destructor & Cleanup
+        % ------------------------------------------------------------------
         function delete(app)
             app.stopCurrentTimeTimer();
             if ~isempty(app.CurrentTimeTimer) && isvalid(app.CurrentTimeTimer)
@@ -1607,6 +1290,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % Callbacks that handle component events
     methods (Access = public)
 
+        % ------------------------------------------------------------------
+        % Event Handlers & UI Callbacks
+        % ------------------------------------------------------------------
         function onCaseStoreSelectionChanged(app)
             % Respond to selection updates in the shared CaseStore.
             % Skip during session restore to avoid premature UI updates
@@ -1635,6 +1321,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateCaseSelectionVisuals();
         end
 
+        % --------------------- Date & Dropdown Events --------------------
         function DatePickerValueChanged(app, event)
             % Update target date when date picker changes
             newDate = app.DatePicker.Value;
@@ -1708,6 +1395,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.DurationSelector.refreshDurationOptions(app);
         end
 
+        % --------------------- Case Management Actions -------------------
         function AddConstraintButtonPushed(app, event)
             %#ok<INUSD>
             conduction.gui.app.toggleConstraintPanel(app);
@@ -2128,6 +1816,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ----------------------- Testing Mode Events ---------------------
         function TestToggleValueChanged(app, ~)
             conduction.gui.app.testingMode.handleToggle(app);
         end
@@ -2145,6 +1834,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TestingModeController.exitTestingMode(app);
         end
 
+        % ----------------------- Session Save/Load UI --------------------
         function SaveSessionButtonPushed(app, event)
             % SAVE/LOAD: Save current session to file (Stage 5)
             %#ok<INUSD>
@@ -2348,6 +2038,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     % Helper methods
     methods (Access = public)
 
+        % ------------------------------------------------------------------
+        % Shared UI Utilities & State Updates
+        % ------------------------------------------------------------------
         function updateDropdowns(app)
             % Update operator dropdown
             operatorOptions = app.CaseManager.getOperatorOptions();
@@ -2384,6 +2077,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
 
+        % -------------------- Manual Input Helpers -----------------------
         function setManualInputsEnabled(app, isEnabled)
             state = 'off';
             if isEnabled
@@ -2409,6 +2103,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
 
+        % ------------------ Admission Status Helpers --------------------
         function status = getSelectedAdmissionStatus(app)
             status = "outpatient";
             if isempty(app.AdmissionStatusDropDown) || ~isvalid(app.AdmissionStatusDropDown)
@@ -2419,6 +2114,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
 
 
+        % -------------------- Schedule Initialization --------------------
         function initializeEmptySchedule(app)
             % Initialize empty schedule visualization for the target date
 
@@ -2430,6 +2126,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ismethod(app, 'debugLog'); app.debugLog('initializeEmptySchedule', 'empty schedule drawn'); end
         end
 
+        % -------------------- Optimization State Prep --------------------
         function initializeOptimizationState(app)
             if isempty(app.Opts) || ~isfield(app.Opts, 'labs')
                 app.Opts = struct( ...
@@ -2477,69 +2174,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function initializeResourceLegend(app)
-            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
-                return;
-            end
-            app.refreshResourceLegend();
+            app.ResourceController.initializeResourceLegend(app);
         end
 
         function refreshResourceLegend(app)
-            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
-                return;
-            end
-
-            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
-            resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
-
-            [store, isValid] = app.getValidatedResourceStore();
-            if isValid
-                resourceTypes = store.snapshot();
-                resourceSummary = app.CaseManager.caseResourceSummary();
-            end
-
-            app.updateResourceLegendContents(resourceTypes, resourceSummary);
+            app.ResourceController.refreshResourceLegend(app);
         end
 
         function updateResourceLegendContents(app, resourceTypes, resourceSummary)
-            if isempty(app.ResourceLegend) || ~isvalid(app.ResourceLegend)
-                return;
-            end
-
-            if nargin < 2 || isempty(resourceTypes)
-                resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
-            end
-            if nargin < 3 || isempty(resourceSummary)
-                resourceSummary = struct('ResourceId', {}, 'CaseIds', {});
-            end
-
-            app.LastResourceMetadata = struct('resourceTypes', resourceTypes, 'resourceSummary', resourceSummary);
-
-            allowedIds = string({resourceTypes.Id});
-            if isempty(allowedIds)
-                trimmedHighlight = string.empty(0, 1);
-            else
-                trimmedHighlight = intersect(app.ResourceHighlightIds, allowedIds, 'stable');
-            end
-
-            if numel(trimmedHighlight) > 1
-                trimmedHighlight = trimmedHighlight(1);
-            end
-            highlightChanged = ~isequal(trimmedHighlight, app.ResourceHighlightIds);
-            app.ResourceHighlightIds = trimmedHighlight;
-
-            app.ResourceLegend.setData(resourceTypes, resourceSummary);
-            app.ResourceLegend.setHighlights(trimmedHighlight, true);
-
-            app.ScheduleRenderer.refreshResourceHighlights(app);
-            if ismethod(app, 'debugLog'); app.debugLog('updateResourceLegendContents', sprintf('highlights=%s', strjoin(app.ResourceHighlightIds,','))); end
+            app.ResourceController.updateResourceLegendContents(app, resourceTypes, resourceSummary);
         end
 
         function onResourceLegendHighlightChanged(app, highlightIds)
-            highlightIds = unique(string(highlightIds(:)), 'stable');
-            if ~isequal(highlightIds, app.ResourceHighlightIds)
-                app.ResourceHighlightIds = highlightIds;
-            end
-            app.ScheduleRenderer.refreshResourceHighlights(app);
+            app.ResourceController.onResourceLegendHighlightChanged(app, highlightIds);
         end
 
 
@@ -2571,6 +2218,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ----------------------- Session Serialization -------------------
         function importAppState(app, sessionData)
             % SAVE/LOAD: Restore app state from SessionData struct
             % This is part of Stage 3 of the save/load implementation
@@ -2873,6 +2521,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % ----------------------- Auto-save Infrastructure ----------------
         function enableAutoSave(app, enabled, interval)
             % SAVE/LOAD: Enable or disable auto-save (Stage 8)
             if nargin < 3
@@ -2970,6 +2619,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        % -------------------- Resource Store Restoration -----------------
         function restoreResourceStoreFromSnapshot(app, snapshot)
             if nargin < 2 || isempty(snapshot)
                 store = conduction.gui.stores.ResourceStore();
@@ -3017,6 +2667,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        % ------------------------------------------------------------------
+        % Dialog Helpers & Safe Access Utilities
+        % ------------------------------------------------------------------
         function showAlert(app, message, title, icon)
             %SHOWALERT Display alert dialog
             %   Simplified wrapper for uialert
@@ -3066,22 +2719,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function [store, isValid] = getValidatedResourceStore(app)
-            %GETVALIDATEDRESOURCESTORE Get resource store with validation
-            %   Returns both store and validity flag
-            %
-            %   Returns:
-            %       store - ResourceStore instance or []
-            %       isValid - true if store exists and is valid
-
-            store = [];
-            isValid = false;
-
-            if isempty(app.CaseManager)
-                return;
-            end
-
-            store = app.CaseManager.getResourceStore();
-            isValid = ~isempty(store) && isvalid(store);
+            [store, isValid] = app.ResourceController.getValidatedResourceStore(app);
         end
 
         function executeBatchUpdate(app, operation, skipOptimizationController)
@@ -3134,6 +2772,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Static, Access = private)
+        % ------------------------------------------------------------------
+        % Static Utility Helpers
+        % ------------------------------------------------------------------
         function value = safeField(entry, fieldName, defaultValue)
             if isstruct(entry) && isfield(entry, fieldName)
                 value = entry.(fieldName);
