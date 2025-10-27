@@ -535,15 +535,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
         SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
-        TimeControlBaselineLockedIds string = string.empty  % REALTIME-SCHEDULING: Locks in place before time control enabled
-        TimeControlLockedCaseIds string = string.empty  % REALTIME-SCHEDULING: Locks applied by time control mode
+        TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
+        TimeControlLockedCaseIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks applied by time control mode
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
-        CurrentTimeTimer timer = timer.empty  % REALTIME-SCHEDULING: Timer to refresh actual time indicator
         DrawerTimer timer = timer.empty
         DrawerWidth double = conduction.gui.app.Constants.DrawerHandleWidth  % Starts collapsed at the drawer handle width
         DrawerCurrentCaseId string = ""
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
-        LockedCaseIds string = string.empty  % CASE-LOCKING: Array of locked case IDs
+        LockedCaseIds string = string.empty(1, 0)  % CASE-LOCKING: Array of locked case IDs
         SelectedCaseId string = ""  % Currently selected case ID for highlighting
         SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
@@ -1120,10 +1119,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Destructor & Cleanup
         % ------------------------------------------------------------------
         function delete(app)
-            app.stopCurrentTimeTimer();
-            if ~isempty(app.CurrentTimeTimer) && isvalid(app.CurrentTimeTimer)
-                delete(app.CurrentTimeTimer);
-                app.CurrentTimeTimer = timer.empty;
+            if ~isempty(app.CaseStatusController)
+                app.CaseStatusController.stopCurrentTimeTimer();
+                app.CaseStatusController.cleanupCurrentTimeTimer();
             end
             app.stopAutoSaveTimerInternal();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
@@ -1478,8 +1476,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.IsOptimizationDirty = true;
             app.OptimizationLastRun = NaT;
 
-            app.LockedCaseIds = string.empty;
-            app.TimeControlLockedCaseIds = string.empty;
+            app.LockedCaseIds = string.empty(1, 0);
+            app.TimeControlLockedCaseIds = string.empty(1, 0);
             app.TimeControlBaselineLockedIds = string.empty;
 
             app.SelectedCaseId = "";
@@ -1696,48 +1694,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function startCurrentTimeTimer(app)
-            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
-                app.CurrentTimeTimer = timer( ...
-                    'ExecutionMode', 'fixedSpacing', ...
-                    'Period', 30, ...
-                    'StartDelay', 0, ...
-                    'TimerFcn', @(~, ~) app.onCurrentTimeTimerTick(), ...
-                    'Name', 'ConductionActualTimeTimer');
-            end
-
-            if strcmp(app.CurrentTimeTimer.Running, 'off')
-                start(app.CurrentTimeTimer);
-            end
-
-            % Update immediately when toggled on
-            app.onCurrentTimeTimerTick();
+            app.CaseStatusController.startCurrentTimeTimer(app);
         end
 
         function stopCurrentTimeTimer(app)
-            if isempty(app.CurrentTimeTimer) || ~isvalid(app.CurrentTimeTimer)
-                return;
-            end
-
-            if strcmp(app.CurrentTimeTimer.Running, 'on')
-                stop(app.CurrentTimeTimer);
-            end
+            app.CaseStatusController.stopCurrentTimeTimer();
         end
 
         function onCurrentTimeTimerTick(app)
-            if ~app.IsCurrentTimeVisible
-                return;
-            end
-
-            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
-                return;
-            end
-
-            try
-                app.ScheduleRenderer.updateActualTimeIndicator(app);
-            catch ME
-                warning('ProspectiveSchedulerApp:CurrentTimeTimerFailed', ...
-                    'Failed to update current time indicator: %s', ME.message);
-            end
+            app.CaseStatusController.onCurrentTimeTimerTick(app);
         end
 
         % ----------------------- Testing Mode Events ---------------------
@@ -2097,7 +2062,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CaseManager.clearAllCases();
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.SimulatedSchedule = conduction.DailySchedule.empty;
-            app.LockedCaseIds = string.empty;
+            app.LockedCaseIds = string.empty(1, 0);
             app.IsRestoringSession = true;
             if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'begin'); end
             app.IsRestoringSession = true;
@@ -2157,6 +2122,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Merge all locks into LockedCaseIds
             % Time control always loads OFF, but preserve user locks
             allLocks = string.empty(0, 1);  % Initialize as column vector of strings
+            restoredCurrentTime = NaN;
 
             if isfield(sessionData, 'lockedCaseIds') && ~isempty(sessionData.lockedCaseIds)
                 lockedIds = sessionData.lockedCaseIds;
@@ -2169,6 +2135,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             if isfield(sessionData, 'timeControlState')
                 tcs = sessionData.timeControlState;
+                if isfield(tcs, 'currentTimeMinutes') && ~isempty(tcs.currentTimeMinutes)
+                    restoredCurrentTime = tcs.currentTimeMinutes;
+                end
+
                 if isfield(tcs, 'baselineLockedIds') && ~isempty(tcs.baselineLockedIds)
                     baselineIds = tcs.baselineLockedIds;
                     if isrow(baselineIds)
@@ -2185,11 +2155,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            % Remove duplicates and assign to LockedCaseIds
+            % Remove duplicates (preserve order) and assign to LockedCaseIds
             if ~isempty(allLocks)
-                app.LockedCaseIds = unique(allLocks);
+                mergedLocks = unique(allLocks, 'stable');
+                app.LockedCaseIds = mergedLocks(:).';
             else
-                app.LockedCaseIds = string.empty;
+                app.LockedCaseIds = string.empty(1, 0);
             end
 
             if isfield(sessionData, 'isOptimizationDirty')
@@ -2201,8 +2172,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.TimeControlSwitch) && isvalid(app.TimeControlSwitch)
                 app.TimeControlSwitch.Value = 'Off';
             end
-            app.TimeControlBaselineLockedIds = string.empty;
-            app.TimeControlLockedCaseIds = string.empty;
+            app.TimeControlBaselineLockedIds = string.empty(1, 0);
+            app.TimeControlLockedCaseIds = string.empty(1, 0);
 
             % Restore operator colors
             if isfield(sessionData, 'operatorColors')
@@ -2243,8 +2214,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.ScheduleRenderer.refreshResourceHighlights(app);
 
-            % Clear timeline position (time control is OFF)
-            app.CaseManager.setCurrentTime(NaN);
+            % Apply restored current time (used for baseline scheduling reference)
+            app.CaseManager.setCurrentTime(restoredCurrentTime);
 
             % End session restore mode - all UI updates complete
             app.IsRestoringSession = false;

@@ -981,11 +981,11 @@ classdef ScheduleRenderer < handle
 
                         % Lock completed cases to preserve time and lab assignment
                         if ~ismember(caseIdStr, app.LockedCaseIds)
-                            app.LockedCaseIds(end+1, 1) = caseIdStr;
+                            app.LockedCaseIds(end+1) = caseIdStr;
                         end
                         if ~ismember(caseIdStr, app.TimeControlBaselineLockedIds) && ...
                                 ~ismember(caseIdStr, newTimeControlLocks)
-                            newTimeControlLocks(end+1, 1) = caseIdStr;
+                            newTimeControlLocks(end+1) = caseIdStr;
                         end
                     elseif procStartTime <= currentTimeMinutes && currentTimeMinutes < procEndTime
                         % Case would be in progress at this time
@@ -994,11 +994,11 @@ classdef ScheduleRenderer < handle
 
                         % Lock in-progress cases to preserve time and lab assignment
                         if ~ismember(caseIdStr, app.LockedCaseIds)
-                            app.LockedCaseIds(end+1, 1) = caseIdStr;
+                            app.LockedCaseIds(end+1) = caseIdStr;
                         end
                         if ~ismember(caseIdStr, app.TimeControlBaselineLockedIds) && ...
                                 ~ismember(caseIdStr, newTimeControlLocks)
-                            newTimeControlLocks(end+1, 1) = caseIdStr;
+                            newTimeControlLocks(end+1) = caseIdStr;
                         end
                     else
                         % Case would be pending at this time
@@ -1408,7 +1408,7 @@ classdef ScheduleRenderer < handle
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
             if ~ismember(caseId, app.LockedCaseIds)
-                app.LockedCaseIds(end+1, 1) = caseId;
+                app.LockedCaseIds(end+1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
 
@@ -1639,7 +1639,7 @@ classdef ScheduleRenderer < handle
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
             if ~ismember(caseId, app.LockedCaseIds)
-                app.LockedCaseIds(end+1, 1) = caseId;
+                app.LockedCaseIds(end+1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
         end

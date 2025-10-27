@@ -2,6 +2,72 @@ classdef CaseStatusController < handle
     %CASESTATUSCONTROLLER Manages case status transitions and actual time entry
     %   Provides dialogs and logic for marking cases in-progress and completed
 
+    properties (Access = private)
+        CurrentTimeTimer timer = timer.empty
+    end
+
+    methods (Access = public)
+        function startCurrentTimeTimer(obj, app)
+            if isempty(obj.CurrentTimeTimer) || ~isvalid(obj.CurrentTimeTimer)
+                obj.CurrentTimeTimer = timer( ...
+                    'ExecutionMode', 'fixedSpacing', ...
+                    'Period', 30, ...
+                    'StartDelay', 0, ...
+                    'TimerFcn', @(~, ~) obj.onCurrentTimeTimerTick(app), ...
+                    'Name', 'ConductionActualTimeTimer');
+            else
+                obj.CurrentTimeTimer.TimerFcn = @(~, ~) obj.onCurrentTimeTimerTick(app);
+            end
+
+            if strcmp(obj.CurrentTimeTimer.Running, 'off')
+                start(obj.CurrentTimeTimer);
+            end
+
+            obj.onCurrentTimeTimerTick(app);
+        end
+
+        function stopCurrentTimeTimer(obj)
+            if isempty(obj.CurrentTimeTimer) || ~isvalid(obj.CurrentTimeTimer)
+                return;
+            end
+
+            if strcmp(obj.CurrentTimeTimer.Running, 'on')
+                stop(obj.CurrentTimeTimer);
+            end
+        end
+
+        function cleanupCurrentTimeTimer(obj)
+            obj.stopCurrentTimeTimer();
+
+            if isempty(obj.CurrentTimeTimer)
+                return;
+            end
+
+            if isvalid(obj.CurrentTimeTimer)
+                delete(obj.CurrentTimeTimer);
+            end
+
+            obj.CurrentTimeTimer = timer.empty;
+        end
+
+        function onCurrentTimeTimerTick(obj, app)
+            if isempty(app) || ~isvalid(app) || ~app.IsCurrentTimeVisible
+                return;
+            end
+
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            try
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
+            catch ME
+                warning('ProspectiveSchedulerApp:CurrentTimeTimerFailed', ...
+                    'Failed to update current time indicator: %s', ME.message);
+            end
+        end
+    end
+
     methods (Static)
         function showStartCaseDialog(app, caseId)
             %SHOWSTARTCASEDIALOG Simple confirmation dialog for starting a case

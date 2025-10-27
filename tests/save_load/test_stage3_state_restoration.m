@@ -213,11 +213,12 @@ function test_stage3_state_restoration()
         app2 = conduction.gui.ProspectiveSchedulerApp();
         app2.importAppState(sessionData);
 
-        assert(app2.IsTimeControlActive == true, 'Time control active flag mismatch');
-        assert(isequal(app2.TimeControlBaselineLockedIds, ["3", "4"]), ...
-            'Baseline locked IDs mismatch');
-        assert(isequal(app2.TimeControlLockedCaseIds, ["6", "7"]), ...
-            'Time control locked IDs mismatch');
+        assert(app2.IsTimeControlActive == false, ...
+            'Time control active flag mismatch (should load disabled)');
+        assert(isempty(app2.TimeControlBaselineLockedIds), ...
+            'Baseline locked IDs mismatch (should load cleared)');
+        assert(isempty(app2.TimeControlLockedCaseIds), ...
+            'Time control locked IDs mismatch (should load cleared)');
         assert(app2.CaseManager.getCurrentTime() == 480, 'Current time mismatch');
 
         fprintf('PASSED ✓\n');

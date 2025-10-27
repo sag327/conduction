@@ -14,7 +14,7 @@ function toggleTimeControl(app)
 
         % Snapshot locks that existed prior to time control mode
         app.TimeControlBaselineLockedIds = app.LockedCaseIds;
-        app.TimeControlLockedCaseIds = string.empty;
+        app.TimeControlLockedCaseIds = string.empty(1, 0);
 
         % Start timeline at the configured schedule start time (minutes from midnight)
         startTimeMinutes = conduction.gui.app.Constants.defaultTimelineStartMinutes();
@@ -65,7 +65,7 @@ function toggleTimeControl(app)
     app.ScheduleRenderer.disableNowLineDrag(app);
     app.CaseManager.setCurrentTime(NaN);
     app.SimulatedSchedule = conduction.DailySchedule.empty;
-    app.TimeControlLockedCaseIds = string.empty;
+    app.TimeControlLockedCaseIds = string.empty(1, 0);
     app.TimeControlBaselineLockedIds = string.empty;
 
     if ~isempty(app.OptimizedSchedule)
