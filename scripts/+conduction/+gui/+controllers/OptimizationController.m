@@ -778,6 +778,13 @@ classdef OptimizationController < handle
 
             lockedConstraints = existingLockedConstraints;
 
+            % Track case IDs already represented in locked constraints to avoid duplicates
+            existingCaseIds = string.empty(0, 1);
+            if ~isempty(lockedConstraints) && isfield(lockedConstraints, 'caseID')
+                existingCaseIds = string({lockedConstraints.caseID});
+                existingCaseIds = existingCaseIds(strlength(existingCaseIds) > 0);
+            end
+
             if isempty(casesStruct)
                 return;
             end
@@ -819,6 +826,17 @@ classdef OptimizationController < handle
             for i = 1:numel(firstCaseIndices)
                 caseIdx = firstCaseIndices(i);
                 caseData = casesStruct(caseIdx);
+
+                % Extract case identifier once for reuse
+                caseId = '';
+                if isfield(caseData, 'caseID') && ~isempty(caseData.caseID)
+                    caseId = char(string(caseData.caseID));
+                end
+
+                % Skip if this case is already represented in the locked constraints list
+                if ~isempty(caseId) && any(existingCaseIds == string(caseId))
+                    continue;
+                end
 
                 % Determine lab assignment
                 assignedLab = [];
@@ -880,7 +898,7 @@ classdef OptimizationController < handle
 
                 % Create locked constraint
                 constraint = struct();
-                constraint.caseID = char(string(caseData.caseID));
+                constraint.caseID = caseId;
                 constraint.operator = char(string(obj.getFieldOr(caseData, 'operator', 'Unknown')));
 
                 % Add case number if available
@@ -907,6 +925,11 @@ classdef OptimizationController < handle
                     lockedConstraints = constraint;
                 else
                     lockedConstraints(end+1) = constraint; %#ok<AGROW>
+                end
+
+                % Record this caseID to prevent duplicate constraints later in the loop
+                if ~isempty(caseId)
+                    existingCaseIds(end+1, 1) = string(caseId); %#ok<AGROW>
                 end
 
                 % Move to next lab for round-robin

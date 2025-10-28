@@ -85,6 +85,27 @@ classdef testFirstCaseConflictDetection < matlab.unittest.TestCase
             % Should NOT have first case specific message
             testCase.verifyFalse(contains(conflictReport.message, 'First Case constraints'), 'Should not mention first case constraints');
         end
+
+        function testDuplicateLockedFirstCaseIgnored(testCase)
+            % Test: Same case locked twice should not be treated as conflict
+            existingLock = testCase.createLockAt(2, 480, 'case_018');
+            duplicateLock = existingLock;
+            duplicateLock.operator = 'ARSHAD, AYSHA';
+            duplicateLock.caseNumber = 18;
+
+            lockedConstraints = existingLock;
+            lockedConstraints(2) = duplicateLock;
+
+            [hasConflicts, conflictReport] = conduction.scheduling.LockedCaseConflictValidator.validate(lockedConstraints);
+
+            testCase.verifyFalse(hasConflicts, 'Duplicate lock for same case should not conflict');
+            testCase.verifyEmpty(conflictReport.operatorConflicts);
+            testCase.verifyEmpty(conflictReport.labConflicts);
+
+            analysis = conduction.scheduling.LockedCaseConflictValidator.analyzeFirstCaseConflicts(lockedConstraints);
+            testCase.verifyEqual(analysis.totalFirstCases, 1, 'Should count unique first-case locks only once');
+            testCase.verifyEmpty(analysis.labsWithConflicts);
+        end
     end
 
     methods (Static)

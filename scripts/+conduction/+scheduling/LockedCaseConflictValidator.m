@@ -174,6 +174,11 @@ classdef LockedCaseConflictValidator
                         case1 = cases{j};
                         case2 = cases{k};
 
+                        % Skip if both entries refer to the same case
+                        if conduction.scheduling.LockedCaseConflictValidator.isSameCase(case1, case2)
+                            continue;
+                        end
+
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
                         % Add tolerance for minute rounding when locks are derived from prior schedules
@@ -260,11 +265,20 @@ classdef LockedCaseConflictValidator
                 caseInfo.startTime = startTime;
                 caseInfo.endTime = endTime;
 
-                % Add to lab map
+                % Add to lab map, avoiding duplicate entries for the same case
                 if isKey(labMap, labIdx)
                     cases = labMap(labIdx);
-                    cases{end+1} = caseInfo;
-                    labMap(labIdx) = cases;
+                    isDuplicate = false;
+                    for existingIdx = 1:numel(cases)
+                        if conduction.scheduling.LockedCaseConflictValidator.isSameCase(cases{existingIdx}, caseInfo)
+                            isDuplicate = true;
+                            break;
+                        end
+                    end
+                    if ~isDuplicate
+                        cases{end+1} = caseInfo; %#ok<AGROW>
+                        labMap(labIdx) = cases;
+                    end
                 else
                     labMap(labIdx) = {caseInfo};
                 end
@@ -281,6 +295,11 @@ classdef LockedCaseConflictValidator
                     for k = (j+1):numel(cases)
                         case1 = cases{j};
                         case2 = cases{k};
+
+                        % Skip if both entries refer to the same case
+                        if conduction.scheduling.LockedCaseConflictValidator.isSameCase(case1, case2)
+                            continue;
+                        end
 
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
@@ -365,8 +384,6 @@ classdef LockedCaseConflictValidator
                 return;
             end
 
-            analysis.totalFirstCases = numel(startTimeConstraints);
-
             % Group by lab to find conflicts
             labMap = containers.Map('KeyType', 'double', 'ValueType', 'any');
 
@@ -386,22 +403,31 @@ classdef LockedCaseConflictValidator
                     caseId = char(string(constraint.caseID));
                 end
 
-                % Track case IDs
-                analysis.firstCaseIds{end+1} = caseId;
+                % Track case IDs (store as string for deduplication later)
+                analysis.firstCaseIds{end+1} = string(caseId); %#ok<AGROW>
 
-                % Group by lab
+                % Group by lab, keeping unique case IDs per lab
                 if isKey(labMap, labIdx)
                     cases = labMap(labIdx);
-                    cases{end+1} = caseId;
-                    labMap(labIdx) = cases;
+                    if ~any(strcmp(cases, caseId))
+                        cases{end+1} = caseId; %#ok<AGROW>
+                        labMap(labIdx) = cases;
+                    end
                 else
                     labMap(labIdx) = {caseId};
                 end
             end
 
-            % Find labs with multiple cases at start time (conflicts)
+            uniqueFirstCaseIds = unique(string(analysis.firstCaseIds));
+            uniqueFirstCaseIds = uniqueFirstCaseIds(strlength(uniqueFirstCaseIds) > 0);
+            analysis.totalFirstCases = numel(uniqueFirstCaseIds);
+
             labs = cell2mat(keys(labMap));
-            analysis.totalLabs = max(labs);  % Approximate total labs
+            if isempty(labs)
+                analysis.totalLabs = 0;
+            else
+                analysis.totalLabs = numel(unique(labs));
+            end
 
             for i = 1:numel(labs)
                 labIdx = labs(i);
@@ -416,6 +442,29 @@ classdef LockedCaseConflictValidator
             if ~isempty(analysis.labsWithConflicts)
                 analysis.hasFirstCaseConflicts = true;
             end
+        end
+
+        function tf = isSameCase(caseStruct1, caseStruct2)
+            %ISSAMECASE Return true when both structs reference the same case identifier
+            tf = false;
+            if nargin < 2
+                return;
+            end
+
+            id1 = "";
+            id2 = "";
+            if isstruct(caseStruct1) && isfield(caseStruct1, 'caseID') && ~isempty(caseStruct1.caseID)
+                id1 = string(caseStruct1.caseID);
+            end
+            if isstruct(caseStruct2) && isfield(caseStruct2, 'caseID') && ~isempty(caseStruct2.caseID)
+                id2 = string(caseStruct2.caseID);
+            end
+
+            if strlength(id1) == 0 || strlength(id2) == 0
+                return;
+            end
+
+            tf = id1 == id2;
         end
 
         function message = formatConflictMessage(operatorConflicts, labConflicts, lockedConstraints)
