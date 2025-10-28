@@ -314,7 +314,37 @@ classdef HistoricalScheduler
             prepared = conduction.scheduling.SchedulingPreprocessor.prepareDataset(cases, options);
             model = conduction.scheduling.OptimizationModelBuilder.build(prepared, options);
             [solution, solverInfo] = conduction.scheduling.OptimizationSolver.solve(model, options);
+            conduction.scheduling.HistoricalScheduler.verifyFeasibleSolution(solution, solverInfo, model, prepared);
             [dailySchedule, outcome] = conduction.scheduling.ScheduleAssembler.assemble(prepared, model, solution, solverInfo, options);
+        end
+
+        function verifyFeasibleSolution(solution, solverInfo, model, prepared)
+            if ~isempty(solution) && numel(solution) == model.numVars
+                return;
+            end
+
+            exitflag = NaN;
+            if isstruct(solverInfo) && isfield(solverInfo, 'exitflag')
+                exitflag = solverInfo.exitflag;
+            end
+
+            lockedCaseCount = 0;
+            if isstruct(prepared) && isfield(prepared, 'lockedStartTimes')
+                lockedCaseCount = sum(~isnan(prepared.lockedStartTimes));
+            end
+
+            lockedContext = '';
+            if lockedCaseCount > 0
+                lockedContext = sprintf(' Locked cases: %d. Verify locked start times align with lab start times, available labs, operator availability, and midnight limits.', lockedCaseCount);
+            end
+
+            if isempty(solution)
+                error('HistoricalScheduler:InfeasibleModel', ...
+                    'No feasible schedule was found (exitflag %d).%s', exitflag, lockedContext);
+            end
+
+            error('HistoricalScheduler:SolutionSizeMismatch', ...
+                'Solver returned %d decision variables but model expects %d.%s', numel(solution), model.numVars, lockedContext);
         end
 
         function tf = isOutpatient(caseStruct)

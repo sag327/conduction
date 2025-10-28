@@ -16,6 +16,14 @@ classdef ScheduleAssembler
             numTimeSlots = model.numTimeSlots;
             timeSlots = model.timeSlots;
             getVarIndex = model.getVarIndex;
+            if isempty(solution)
+                error('ScheduleAssembler:EmptySolution', ...
+                    'Solver returned an empty solution vector. Unable to assemble schedule.');
+            end
+            if numel(solution) ~= model.numVars
+                error('ScheduleAssembler:SolutionSizeMismatch', ...
+                    'Solution length (%d) does not match model.numVars (%d).', numel(solution), model.numVars);
+            end
 
             turnoverTime = model.turnoverTime;
             labStartMinutes = model.labStartMinutes;

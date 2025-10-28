@@ -4,6 +4,11 @@ classdef LockedCaseConflictValidator
     %   - Operator conflicts: same operator assigned to multiple locked cases at overlapping times
     %   - Lab conflicts: same lab has multiple locked cases at overlapping times
 
+    properties (Constant, Access = private)
+        % Allowable rounding error when comparing locked windows (minutes)
+        ROUNDING_TOLERANCE_MIN = 1.0;
+    end
+
     methods (Static)
         function [hasConflicts, conflictReport] = validate(lockedConstraints)
             %VALIDATE Check for operator and lab conflicts in locked cases
@@ -171,8 +176,8 @@ classdef LockedCaseConflictValidator
 
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        % Add tolerance for sub-minute rounding (30 seconds = 0.5 minutes)
-                        TIME_TOLERANCE = 0.5;
+                        % Add tolerance for minute rounding when locks are derived from prior schedules
+                        TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
                         if (case1.procStartTime + TIME_TOLERANCE) < case2.procEndTime && ...
                            (case2.procStartTime + TIME_TOLERANCE) < case1.procEndTime
 
@@ -279,8 +284,8 @@ classdef LockedCaseConflictValidator
 
                         % Check if time windows overlap
                         % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        % Add tolerance for sub-minute rounding (30 seconds = 0.5 minutes)
-                        TIME_TOLERANCE = 0.5;
+                        % Add tolerance for minute rounding when locks are derived from prior schedules
+                        TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
                         if (case1.startTime + TIME_TOLERANCE) < case2.endTime && ...
                            (case2.startTime + TIME_TOLERANCE) < case1.endTime
 
@@ -342,7 +347,7 @@ classdef LockedCaseConflictValidator
 
             % Detect lab start time (08:00 = 480 minutes)
             LAB_START_TIME = 480;
-            TIME_TOLERANCE = 1;  % 1 minute tolerance
+            TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
 
             % Find all constraints at lab start time
             startTimeConstraints = [];

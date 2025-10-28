@@ -393,6 +393,8 @@ classdef OptimizationModelBuilder
 
                 % This case must be scheduled at exactly this time AND this specific lab
                 eqRowIdx = eqRowIdx + 1;
+                hasAssignment = false;
+                failureReason = '';
                 if ~isnan(lockedLab)
                     % Lock to specific lab
                     if labPreferences(caseIdx, lockedLab) == 1
@@ -400,7 +402,12 @@ classdef OptimizationModelBuilder
                         validSlots = validTimeSlots{lockedLab};
                         if ismember(lockedTimeIdx, validSlots)
                             Aeq(eqRowIdx, getVarIndex(caseIdx, lockedLab, lockedTimeIdx)) = 1;
+                            hasAssignment = true;
+                        else
+                            failureReason = sprintf('Time %.1f is not valid for lab %d based on lab start and discretization.', lockedStart, lockedLab);
                         end
+                    else
+                        failureReason = sprintf('Locked lab %d is not available to case %d via lab preferences or availability settings.', lockedLab, caseIdx);
                     end
                 else
                     % No specific lab locked - allow any lab (legacy behavior)
@@ -412,8 +419,27 @@ classdef OptimizationModelBuilder
                         validSlots = validTimeSlots{labIdx};
                         if ismember(lockedTimeIdx, validSlots)
                             Aeq(eqRowIdx, getVarIndex(caseIdx, labIdx, lockedTimeIdx)) = 1;
+                            hasAssignment = true;
+                        else
+                            failureReason = sprintf('Time %.1f is not valid for any preferred lab at the current time-step and availability configuration.', lockedStart);
                         end
                     end
+                end
+                if ~hasAssignment
+                    caseId = '';
+                    if isfield(cases, 'caseID') && numel(cases) >= caseIdx
+                        caseId = char(string(cases(caseIdx).caseID));
+                    end
+                    labLabel = 'any';
+                    if ~isnan(lockedLab)
+                        labLabel = num2str(lockedLab);
+                    end
+                    if isempty(failureReason)
+                        failureReason = 'No valid assignment found for locked constraint. Check lab availability, operator carryover limits, and midnight enforcement.';
+                    end
+                    error('OptimizationModelBuilder:InvalidLockedConstraint', ...
+                        'Locked case %s cannot be fixed at start %.1f (lab %s). %s', ...
+                        caseId, lockedStart, labLabel, failureReason);
                 end
                 beq(eqRowIdx) = 1;  % Exactly one assignment (specific lab if locked, else any lab)
             end
