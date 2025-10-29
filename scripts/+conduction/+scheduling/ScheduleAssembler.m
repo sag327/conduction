@@ -198,6 +198,11 @@ classdef ScheduleAssembler
             outcome.resultsMetadata = resultsStruct;
             outcome.options = options.toStruct();
 
+            % Include adjusted case times for user notification
+            if isfield(model, 'adjustedCases')
+                outcome.adjustedCases = model.adjustedCases;
+            end
+
             [resourceAssignments, resourceViolations] = conduction.scheduling.ScheduleAssembler.computeResourceDiagnostics( ...
                 scheduledResourceIntervals, resourceIds, resourceTypes, resourceCapacities);
             outcome.ResourceAssignments = resourceAssignments;

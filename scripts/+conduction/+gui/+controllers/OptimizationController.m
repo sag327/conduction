@@ -157,13 +157,22 @@ classdef OptimizationController < handle
                 if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
                     app.OptimizationController.displayResourceViolations(app, outcome.ResourceViolations);
                 end
+
+                % Check if any locked case times were adjusted
+                if isfield(outcome, 'adjustedCases') && ~isempty(outcome.adjustedCases)
+                    app.OptimizationController.displayAdjustedTimesWarning(app, outcome.adjustedCases, scheduleOptions.TimeStep);
+                end
             catch ME
-                app.OptimizedSchedule = conduction.DailySchedule.empty;
+                % Don't clear schedule on validation errors - let user see and fix
+                if ~contains(ME.identifier, 'InvalidLockedConstraint')
+                    app.OptimizedSchedule = conduction.DailySchedule.empty;
+                    app.SimulatedSchedule = conduction.DailySchedule.empty;
+                    app.OptimizationController.showOptimizationPendingPlaceholder(app);
+                end
+
                 app.OptimizationOutcome = struct();
                 app.IsOptimizationDirty = true;
                 app.OptimizationLastRun = NaT;
-                app.SimulatedSchedule = conduction.DailySchedule.empty;
-                app.OptimizationController.showOptimizationPendingPlaceholder(app);
 
                 detailedMsg = ME.message;
 
@@ -1009,6 +1018,28 @@ classdef OptimizationController < handle
             end
 
             uialert(app.UIFigure, msg, 'Optimization Notice', 'Icon', 'warning');
+        end
+
+        function displayAdjustedTimesWarning(obj, app, adjustedCases, timeStep)
+            % Display warning when locked case times were auto-rounded
+            if isempty(adjustedCases)
+                return;
+            end
+
+            numAdjusted = numel(adjustedCases);
+            if numAdjusted == 1
+                adj = adjustedCases(1);
+                originalTimeStr = sprintf('%02d:%02d', floor(adj.originalTime/60), mod(adj.originalTime, 60));
+                adjustedTimeStr = sprintf('%02d:%02d', floor(adj.adjustedTime/60), mod(adj.adjustedTime, 60));
+
+                msg = sprintf(['One manually positioned case was adjusted from %s to %s to align ' ...
+                    'with the %d-minute scheduling grid.'], originalTimeStr, adjustedTimeStr, timeStep);
+            else
+                msg = sprintf(['%d manually positioned cases were adjusted to align with the ' ...
+                    '%d-minute scheduling grid.'], numAdjusted, timeStep);
+            end
+
+            uialert(app.UIFigure, msg, 'Case Times Adjusted', 'Icon', 'info');
         end
 
         function displayResourceViolations(~, app, violations)

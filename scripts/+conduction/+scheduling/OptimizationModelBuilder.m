@@ -12,6 +12,9 @@ classdef OptimizationModelBuilder
 
             verbose = options.Verbose;
 
+            % Initialize tracking for adjusted case times
+            prepared.adjustedCases = struct('caseIdx', {}, 'originalTime', {}, 'adjustedTime', {});
+
             cases = prepared.cases;
             numCases = prepared.numCases;
             numLabs = prepared.numLabs;
@@ -342,7 +345,10 @@ classdef OptimizationModelBuilder
                 lockedLab = lockedLabs(caseIdx);
 
                 % Find the time slot that matches the locked start time
+                % If exact match not found, round to nearest valid slot for the lab
                 [~, lockedTimeIdx] = min(abs(timeSlots - lockedStart));
+                originalLockedTime = lockedStart;
+                timeAdjusted = false;
 
                 % This case must be scheduled at exactly this time AND this specific lab
                 eqRowIdx = eqRowIdx + 1;
@@ -353,11 +359,21 @@ classdef OptimizationModelBuilder
                     if labPreferences(caseIdx, lockedLab) == 1
                         % Check if this time slot is valid for this lab
                         validSlots = validTimeSlots{lockedLab};
+                        if ~ismember(lockedTimeIdx, validSlots)
+                            % Auto-round to nearest valid slot
+                            if ~isempty(validSlots)
+                                validTimes = timeSlots(validSlots);
+                                [~, closestIdx] = min(abs(validTimes - lockedStart));
+                                lockedTimeIdx = validSlots(closestIdx);
+                                lockedStart = timeSlots(lockedTimeIdx);
+                                timeAdjusted = true;
+                            else
+                                failureReason = sprintf('Lab %d has no valid time slots. Check lab start time.', lockedLab);
+                            end
+                        end
                         if ismember(lockedTimeIdx, validSlots)
                             Aeq(eqRowIdx, getVarIndex(caseIdx, lockedLab, lockedTimeIdx)) = 1;
                             hasAssignment = true;
-                        else
-                            failureReason = sprintf('Time %.1f is not valid for lab %d based on lab start and discretization.', lockedStart, lockedLab);
                         end
                     else
                         failureReason = sprintf('Locked lab %d is not available to case %d via lab preferences or availability settings.', lockedLab, caseIdx);
@@ -370,31 +386,65 @@ classdef OptimizationModelBuilder
                         end
                         % Check if this time slot is valid for this lab
                         validSlots = validTimeSlots{labIdx};
+                        if ~ismember(lockedTimeIdx, validSlots) && ~isempty(validSlots)
+                            % Auto-round to nearest valid slot
+                            validTimes = timeSlots(validSlots);
+                            [~, closestIdx] = min(abs(validTimes - lockedStart));
+                            lockedTimeIdx = validSlots(closestIdx);
+                            lockedStart = timeSlots(lockedTimeIdx);
+                            timeAdjusted = true;
+                        end
                         if ismember(lockedTimeIdx, validSlots)
                             Aeq(eqRowIdx, getVarIndex(caseIdx, labIdx, lockedTimeIdx)) = 1;
                             hasAssignment = true;
-                        else
-                            failureReason = sprintf('Time %.1f is not valid for any preferred lab at the current time-step and availability configuration.', lockedStart);
                         end
+                    end
+                    if ~hasAssignment
+                        failureReason = sprintf('Time %.1f is not valid for any preferred lab at the current time-step and availability configuration.', originalLockedTime);
                     end
                 end
                 if ~hasAssignment
-                    caseId = '';
-                    if isfield(cases, 'caseID') && numel(cases) >= caseIdx
-                        caseId = char(string(cases(caseIdx).caseID));
+                    % Get user-facing case number
+                    caseDisplay = '';
+                    if isfield(cases, 'caseNumber') && numel(cases) >= caseIdx && ~isnan(cases(caseIdx).caseNumber)
+                        caseDisplay = sprintf('Case #%d', cases(caseIdx).caseNumber);
+                    elseif isfield(cases, 'caseID') && numel(cases) >= caseIdx
+                        caseDisplay = sprintf('Case %s', char(string(cases(caseIdx).caseID)));
+                    else
+                        caseDisplay = sprintf('Case index %d', caseIdx);
                     end
-                    labLabel = 'any';
+
+                    % Format times as HH:MM
+                    lockedTimeStr = sprintf('%02d:%02d', floor(originalLockedTime/60), mod(originalLockedTime, 60));
+
+                    % Build detailed error message
                     if ~isnan(lockedLab)
-                        labLabel = num2str(lockedLab);
+                        labStartStr = sprintf('%02d:%02d', floor(labStartMinutes(lockedLab)/60), mod(labStartMinutes(lockedLab), 60));
+                        if isempty(failureReason)
+                            failureReason = sprintf(['Time %s is not valid for Lab %d (starts at %s with %d-minute intervals). ' ...
+                                'Try re-positioning the case to align with the scheduling grid.'], ...
+                                lockedTimeStr, lockedLab, labStartStr, timeStep);
+                        end
+                        labLabel = sprintf('Lab %d', lockedLab);
+                    else
+                        labLabel = 'any lab';
+                        if isempty(failureReason)
+                            failureReason = 'No valid assignment found for locked constraint. Check lab availability, operator carryover limits, and midnight enforcement.';
+                        end
                     end
-                    if isempty(failureReason)
-                        failureReason = 'No valid assignment found for locked constraint. Check lab availability, operator carryover limits, and midnight enforcement.';
-                    end
+
                     error('OptimizationModelBuilder:InvalidLockedConstraint', ...
-                        'Locked case %s cannot be fixed at start %.1f (lab %s). %s', ...
-                        caseId, lockedStart, labLabel, failureReason);
+                        '%s cannot be scheduled at %s (%s). %s', ...
+                        caseDisplay, lockedTimeStr, labLabel, failureReason);
                 end
                 beq(eqRowIdx) = 1;  % Exactly one assignment (specific lab if locked, else any lab)
+
+                % Track if time was adjusted for warning later
+                if timeAdjusted
+                    prepared.adjustedCases(end+1).caseIdx = caseIdx;
+                    prepared.adjustedCases(end).originalTime = originalLockedTime;
+                    prepared.adjustedCases(end).adjustedTime = lockedStart;
+                end
             end
 
             % Trim matrices to used rows
@@ -513,6 +563,7 @@ classdef OptimizationModelBuilder
             model.resourceCapacities = resourceCapacities;
             model.caseResourceMatrix = caseResourceMatrix;
             model.resourceIds = resourceIds;
+            model.adjustedCases = prepared.adjustedCases;
         end
     end
 
