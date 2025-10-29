@@ -152,12 +152,6 @@ classdef CaseDragController < handle
             [growX, growY] = obj.pointsToDataOffsets(axesHandle, lockLinePts);
             posDraw = [pos(1)-growX, pos(2)-growY, pos(3)+2*growX, pos(4)+2*growY];
 
-            ticOverall = [];
-            if obj.debugTimingEnabled()
-                ticOverall = tic;
-                fprintf('[SoftHighlight] start\n');
-            end
-
             if isempty(obj.SoftHighlightRect) || ~isgraphics(obj.SoftHighlightRect)
                 obj.SoftHighlightRect = rectangle(axesHandle, ...
                     'Position', posDraw, ...
@@ -168,9 +162,6 @@ classdef CaseDragController < handle
                     'PickableParts', 'none', ...
                     'Clipping', 'on', ...
                     'Tag', 'CaseSoftHighlight');
-                if obj.debugTimingEnabled()
-                    fprintf('[SoftHighlight] rectangle created in %.4f ms\n', toc(ticOverall)*1e3);
-                end
             else
                 if obj.SoftHighlightRect.Parent ~= axesHandle
                     set(obj.SoftHighlightRect, 'Parent', axesHandle);
@@ -186,20 +177,10 @@ classdef CaseDragController < handle
                 % ignore stacking issues
             end
 
-            if obj.debugTimingEnabled()
-                ticFlush = tic;
+            try
                 drawnow limitrate nocallbacks;
-                fprintf('[SoftHighlight] drawnow took %.4f ms\n', toc(ticFlush)*1e3);
-            else
-                try
-                    drawnow limitrate nocallbacks;
-                catch
-                    % drawnow may be unsupported in select contexts; ignore
-                end
-            end
-
-            if obj.debugTimingEnabled()
-                fprintf('[SoftHighlight] total %.4f ms\n', toc(ticOverall)*1e3);
+            catch
+                % drawnow may be unsupported in select contexts; ignore
             end
         end
 
@@ -890,18 +871,6 @@ classdef CaseDragController < handle
                 handleId = uint64(randi(intmax('uint32'))); %#ok<RANDI>
             end
             key = sprintf('h%016x', handleId);
-        end
-
-        function tf = debugTimingEnabled(obj)
-            tf = obj.DebugTiming;
-            persistent envFlag
-            if tf
-                return;
-            end
-            if isempty(envFlag)
-                envFlag = ~isempty(getenv('SOFTHIGHLIGHT_DEBUG'));
-            end
-            tf = envFlag;
         end
 
     end

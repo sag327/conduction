@@ -139,7 +139,7 @@ classdef ResourceController < handle
             capacity = app.ResourceCapacitySpinner.Value;
 
             if strlength(name) == 0
-                app.showAlert('Resource name cannot be empty.', 'Validation Error', 'warning');
+                conduction.gui.utils.Dialogs.alert(app, 'Resource name cannot be empty.', 'Validation Error', 'warning');
                 return;
             end
 
@@ -161,7 +161,7 @@ classdef ResourceController < handle
                 obj.refreshResourcesTable(app);
                 app.markDirty();
             catch ME
-                app.showAlert(ME.message, 'Error', 'error');
+                conduction.gui.utils.Dialogs.alert(app, ME.message, 'Error', 'error');
             end
         end
 
@@ -286,7 +286,7 @@ classdef ResourceController < handle
 
                     app.markDirty();
                 catch ME
-                    app.showAlert(sprintf('Error updating default status: %s', ME.message), 'Error', 'error');
+                    conduction.gui.utils.Dialogs.alert(app, sprintf('Error updating default status: %s', ME.message), 'Error', 'error');
                     % Revert checkbox
                     checkbox.Value = ~newValue;
                 end
@@ -409,7 +409,6 @@ classdef ResourceController < handle
                     app.OptimizationController.markOptimizationDirty(app);
                 end
 
-                if ismethod(app, 'debugLog'); app.debugLog('onResourceStoreChanged', 'Resource store changed and legend refreshed'); end
             catch ME
                 app.endResourceStoreUpdate();
                 rethrow(ME);
@@ -516,7 +515,6 @@ classdef ResourceController < handle
             app.ResourceLegend.setHighlights(trimmedHighlight, true);
 
             app.ScheduleRenderer.refreshResourceHighlights(app);
-            if ismethod(app, 'debugLog'); app.debugLog('updateResourceLegendContents', sprintf('highlights=%s', strjoin(app.ResourceHighlightIds,','))); end
         end
 
         function onResourceLegendHighlightChanged(obj, app, highlightIds)

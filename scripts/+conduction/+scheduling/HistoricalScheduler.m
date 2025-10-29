@@ -40,16 +40,6 @@ classdef HistoricalScheduler
             end
 
             % Phase 1 - Optimize outpatients only
-            fprintf('\n[DEBUG] ========== PHASE 1 (Outpatients) ==========\n');
-            fprintf('[DEBUG] Outpatient cases: %d\n', numel(outpatientCases));
-            for i = 1:numel(outpatientCases)
-                if isfield(outpatientCases(i), 'requiredResourceIds')
-                    fprintf('[DEBUG]   Case %s: resources = %s\n', ...
-                        char(outpatientCases(i).caseID), ...
-                        strjoin(string(outpatientCases(i).requiredResourceIds), ', '));
-                end
-            end
-
             phase1Options = obj.buildPhase1Options();
             [phase1Daily, phase1Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(outpatientCases, phase1Options);
 
@@ -64,31 +54,8 @@ classdef HistoricalScheduler
             lockedConstraints = obj.convertScheduleToLockedConstraints(...
                 phase1Outcome.scheduleStruct, outpatientCases, obj.Options.LockedCaseConstraints);
 
-            fprintf('\n[DEBUG] ========== LOCKED CONSTRAINTS ==========\n');
-            fprintf('[DEBUG] Total locked constraints: %d\n', numel(lockedConstraints));
-            for i = 1:numel(lockedConstraints)
-                if isfield(lockedConstraints(i), 'requiredResourceIds')
-                    fprintf('[DEBUG]   Locked case %s: lab=%d, startTime=%.1f, resources=%s\n', ...
-                        char(lockedConstraints(i).caseID), ...
-                        lockedConstraints(i).assignedLab, ...
-                        lockedConstraints(i).startTime, ...
-                        strjoin(string(lockedConstraints(i).requiredResourceIds), ', '));
-                end
-            end
-
             % Phase 2 - Optimize inpatients with locked outpatients
-            fprintf('\n[DEBUG] ========== PHASE 2 (Inpatients) ==========\n');
-            fprintf('[DEBUG] Inpatient cases: %d\n', numel(inpatientCases));
-            for i = 1:numel(inpatientCases)
-                if isfield(inpatientCases(i), 'requiredResourceIds')
-                    fprintf('[DEBUG]   Case %s: resources = %s\n', ...
-                        char(inpatientCases(i).caseID), ...
-                        strjoin(string(inpatientCases(i).requiredResourceIds), ', '));
-                end
-            end
-
             phase2Options = obj.buildPhase2Options(phase1Outcome.scheduleStruct, lockedConstraints);
-            fprintf('[DEBUG] Phase 2 options - LockedCaseConstraints count: %d\n', numel(phase2Options.LockedCaseConstraints));
 
             [phase2Daily, phase2Outcome] = conduction.scheduling.HistoricalScheduler.runPhase(inpatientCases, phase2Options);
 

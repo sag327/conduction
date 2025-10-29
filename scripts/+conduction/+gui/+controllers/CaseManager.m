@@ -440,7 +440,6 @@ classdef CaseManager < handle
                 end
 
                 % Load the clinical dataset with explicit call context
-                fprintf('Loading clinical data from %s...\n', filePath);
                 obj.HistoricalCollection = conduction.ScheduleCollection.fromFile(string(filePath));
                 obj.ClinicalDataPath = filePath;
 
@@ -452,9 +451,6 @@ classdef CaseManager < handle
 
                 % Cache daily summary for testing mode scenarios
                 obj.DailySummary = obj.HistoricalCollection.dailyCaseSummary();
-
-                fprintf('Successfully loaded %d operators, %d procedures\n', ...
-                    obj.KnownOperators.Count, obj.KnownProcedures.Count);
 
                 success = true;
                 obj.notifyChange();
@@ -491,7 +487,6 @@ classdef CaseManager < handle
             end
 
             fullPath = fullfile(pathName, fileName);
-            fprintf('Selected clinical data file: %s\n', fullPath);
             success = obj.loadClinicalData(string(fullPath));
         end
 
@@ -843,7 +838,6 @@ classdef CaseManager < handle
 
             if any(needsNumber)
                 % Legacy migration: assign sequential numbers to cases without them
-                fprintf('Migrating %d cases without case numbers...\n', sum(needsNumber));
                 for idx = find(needsNumber)
                     obj.Cases(idx).CaseNumber = obj.NextCaseNumber;
                     obj.NextCaseNumber = obj.NextCaseNumber + 1;
@@ -856,8 +850,6 @@ classdef CaseManager < handle
             maxCaseNumber = max(caseNumbers);
             if obj.NextCaseNumber <= maxCaseNumber
                 obj.NextCaseNumber = maxCaseNumber + 1;
-                fprintf('Case number counter adjusted to %d (was behind max case number)\n', ...
-                    obj.NextCaseNumber);
             end
 
             % Check for duplicates (shouldn't happen, but validate)

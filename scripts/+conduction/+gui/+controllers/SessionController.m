@@ -46,7 +46,6 @@ classdef SessionController < handle
                 sessionData = conduction.session.loadSessionFromFile(filepath);
                 app.importAppStateInternal(sessionData);
                 app.markClean();
-                fprintf('Session loaded from: %s\n', filepath);
             catch ME
                 conduction.gui.utils.Dialogs.error(app, sprintf('Failed to load session:\n%s', ME.message), 'Load Error');
             end

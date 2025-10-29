@@ -150,9 +150,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
-        % Debugging controls
-        DebugScheduling             logical = true
-        DebugLogFile                string = "logs/debug-schedule.log"
     end
 
     methods (Access = public, Hidden = true)
@@ -239,7 +236,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if nargin < 5 || isempty(defaultIdx)
                 defaultIdx = numel(options);
             end
-            answer = app.showConfirm(message, title, options, defaultIdx);
+            answer = conduction.gui.utils.Dialogs.confirm(app, message, title, options, defaultIdx);
         end
 
         % ------------------------ Optimization UI -----------------------
@@ -264,7 +261,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'All modes enforce resource capacity limits.' ...
             ]);
 
-            app.showAlert(helpText, 'Outpatient/Inpatient Handling Modes', 'info');
+            conduction.gui.utils.Dialogs.alert(app, helpText, 'Outpatient/Inpatient Handling Modes', 'info');
         end
     end
 
@@ -272,29 +269,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % ------------------------------------------------------------------
         % Diagnostics & Global Shortcuts
         % ------------------------------------------------------------------
-        function debugLog(app, where, message)
-            try
-                ts = char(datetime('now','Format','HH:mm:ss.SSS'));
-                line = sprintf('[DEBUG][%s] %s: %s\n', ts, where, message);
-                % Always print to console during debug
-                fprintf('%s', line);
-                % Append to log file
-                logPath = string(app.DebugLogFile);
-                if strlength(logPath) > 0
-                    [logDir,~,~] = fileparts(logPath);
-                    if ~isempty(logDir) && ~isfolder(logDir)
-                        mkdir(logDir);
-                    end
-                    fid = fopen(logPath, 'a');
-                    if fid > 0
-                        fprintf(fid, '%s', line);
-                        fclose(fid);
-                    end
-                end
-            catch
-            end
-        end
-
         function onGlobalKeyPress(app, event)
             if isempty(event) || ~isprop(event, 'Key')
                 return;
@@ -553,7 +527,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AutoSaveMaxFiles double = 5  % SAVE/LOAD: Maximum number of auto-save files to keep (Stage 8)
         LastDraggedCaseId string = ""  % DRAG: last case moved by drag-and-drop to render narrowly when overlapped
         OverlappingCaseIds string = string.empty(0, 1)  % DRAG: cached list of all overlapping case IDs for lateral offset
-        DebugShowCaseIds logical = false  % DEBUG: show case IDs on schedule for diagnostics
         IsCasesUndocked logical = false
         LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
         IsHandlingTabSelection logical = false
@@ -1065,6 +1038,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Update window title (keep version only, no date)
             versionInfo = conduction.version();
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
+
+            % Ensure new sessions start in a clean state (no dirty flag)
+            app.markClean();
         end
 
         function onScheduleBlockClicked(app, caseId)
@@ -1401,7 +1377,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 options = {'Clear All', 'Cancel'};
             end
 
-            answer = app.showConfirm(message, 'Confirm Clear', options, numel(options));
+            answer = conduction.gui.utils.Dialogs.confirm(app, message, 'Confirm Clear', options, numel(options));
 
             switch answer
                 case 'Keep Locked'
@@ -1614,7 +1590,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Find the ProspectiveCase object in CaseManager
             [caseObj, caseIndex] = app.CaseManager.findCaseById(caseId);
             if isempty(caseObj)
-                warning('applyDrawerDurationChange: Case with ID "%s" not found', caseId);
                 return;
             end
 
@@ -1919,7 +1894,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'resourceSummary', struct('ResourceId', {}, 'CaseIds', {}));
             app.refreshResourceLegend();
             conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
-            if ismethod(app, 'debugLog'); app.debugLog('initializeEmptySchedule', 'empty schedule drawn'); end
         end
 
         % -------------------- Optimization State Prep --------------------
@@ -2024,7 +1998,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function enableAutoSave(app, enabled, interval)
-            app.SessionController.enableAutoSave(app, enabled, interval);
+            if nargin < 3
+                app.SessionController.enableAutoSave(app, enabled);
+            else
+                app.SessionController.enableAutoSave(app, enabled, interval);
+            end
         end
 
         function startAutoSaveTimer(app)
@@ -2063,8 +2041,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizedSchedule = conduction.DailySchedule.empty;
             app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty(1, 0);
-            app.IsRestoringSession = true;
-            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'begin'); end
             app.IsRestoringSession = true;
             try
             % Restore resource definitions before adding cases
@@ -2219,15 +2195,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % End session restore mode - all UI updates complete
             app.IsRestoringSession = false;
-            if ismethod(app, 'debugLog'); app.debugLog('importAppState', 'session restore complete'); end
 
-            % Notify user
-            if isfield(sessionData, 'savedDate')
-                fprintf('Session loaded successfully from %s\n', ...
-                    datestr(sessionData.savedDate, 'yyyy-mm-dd HH:MM:SS'));
-            else
-                fprintf('Session loaded successfully\n');
-            end
             catch ME
                 app.IsRestoringSession = false;
                 rethrow(ME);
@@ -2387,7 +2355,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'Name', 'ConductionAutoSaveTimer');
 
             start(app.AutoSaveTimer);
-            fprintf('Auto-save enabled: saving every %.1f minutes\n', app.AutoSaveInterval);
         end
 
         function stopAutoSaveTimerInternal(app)
@@ -2424,10 +2391,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Rotate old auto-saves
                 app.rotateAutoSavesInternal(autoSaveDir);
 
-                fprintf('Auto-saved to: %s\n', filepath);
-
             catch ME
-                warning('Auto-save failed: %s', ME.message);
+                % Auto-save failed silently
             end
         end
 
@@ -2449,7 +2414,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if numToDelete > 0
                 for i = 1:numToDelete
                     delete(fullfile(autoSaveDir, files(i).name));
-                    fprintf('Deleted old auto-save: %s\n', files(i).name);
                 end
             end
         end
@@ -2502,57 +2466,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
-        % ------------------------------------------------------------------
-        % Dialog Helpers & Safe Access Utilities
-        % ------------------------------------------------------------------
-        function showAlert(app, message, title, icon)
-            %SHOWALERT Display alert dialog
-            %   Simplified wrapper for uialert
-
-            arguments
-                app
-                message
-                title = 'Alert'
-                icon = 'info'
-            end
-
-            uialert(app.UIFigure, message, title, 'Icon', icon);
-        end
-
-        function answer = showConfirm(app, message, title, options, defaultIdx)
-            %SHOWCONFIRM Display confirmation dialog
-            %   Simplified wrapper for uiconfirm
-
-            arguments
-                app
-                message
-                title = 'Confirm'
-                options = {'OK', 'Cancel'}
-                defaultIdx = 2
-            end
-
-            answer = uiconfirm(app.UIFigure, message, title, ...
-                'Options', options, ...
-                'DefaultOption', options{defaultIdx}, ...
-                'CancelOption', options{defaultIdx});
-        end
-
-        function answer = showQuestion(app, message, title)
-            %SHOWQUESTION Display yes/no question dialog
-            %   Convenience wrapper for common yes/no questions
-
-            arguments
-                app
-                message
-                title = 'Question'
-            end
-
-            answer = uiconfirm(app.UIFigure, message, title, ...
-                'Options', {'Yes', 'No'}, ...
-                'DefaultOption', 'No', ...
-                'CancelOption', 'No');
-        end
-
         function [store, isValid] = getValidatedResourceStore(app)
             [store, isValid] = app.ResourceController.getValidatedResourceStore(app);
         end

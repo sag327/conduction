@@ -58,10 +58,6 @@ classdef Optimizer
             resultCells = cell(numDays, 1);
 
             if obj.Options.ShowProgress
-                if skippedCount > 0
-                    fprintf('Skipping %d day(s) due to missing procedure durations.\n', skippedCount);
-                end
-                fprintf('Optimizing %d day(s)...\n', numDays);
                 if numDays > 0
                     progressBar = conduction.internal.util.ProgressBar(numDays);
                 end

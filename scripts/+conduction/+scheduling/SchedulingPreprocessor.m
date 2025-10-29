@@ -37,20 +37,6 @@ classdef SchedulingPreprocessor
             % Process locked case constraints
             lockedConstraints = options.LockedCaseConstraints;
 
-            if ~isempty(lockedConstraints) && options.Verbose
-                fprintf('[DEBUG PREPROCESSOR] Processing %d locked constraints\n', numel(lockedConstraints));
-                for i = 1:min(3, numel(lockedConstraints))
-                    fprintf('[DEBUG PREPROCESSOR]   Constraint %d: caseID=%s', i, char(lockedConstraints(i).caseID));
-                    if isfield(lockedConstraints(i), 'requiredResourceIds')
-                        fprintf(', resources=%s', strjoin(string(lockedConstraints(i).requiredResourceIds), ', '));
-                    end
-                    if isfield(lockedConstraints(i), 'startTime')
-                        fprintf(', startTime=%.1f', lockedConstraints(i).startTime);
-                    end
-                    fprintf('\n');
-                end
-            end
-
             [lockedCaseMap, lockedStartTimes, lockedLabs] = conduction.scheduling.SchedulingPreprocessor.processLockedConstraints(lockedConstraints, cases);
 
             % Enhance operator availability with locked case busy windows
@@ -384,27 +370,6 @@ classdef SchedulingPreprocessor
             end
 
             lockedResourceUsage.timeWindows = timeWindows;
-
-            % Debug output
-            fprintf('[DEBUG LOCKED RESOURCES] Processed %d locked constraints\n', numel(constraints));
-            fprintf('[DEBUG LOCKED RESOURCES] Created %d resource time windows\n', numel(timeWindows));
-            if skippedCount > 0
-                fprintf('[DEBUG LOCKED RESOURCES] Skipped %d constraints:\n', skippedCount);
-                for idx = 1:min(5, numel(skippedReasons))
-                    fprintf('  - %s\n', skippedReasons{idx});
-                end
-                if numel(skippedReasons) > 5
-                    fprintf('  ... and %d more\n', numel(skippedReasons) - 5);
-                end
-            end
-            if ~isempty(timeWindows)
-                fprintf('[DEBUG LOCKED RESOURCES] Sample time windows:\n');
-                for idx = 1:min(3, numel(timeWindows))
-                    w = timeWindows(idx);
-                    fprintf('  - Resource %s: %.1f-%.1f (%.1f min)\n', ...
-                        w.resourceId, w.startTime, w.endTime, w.duration);
-                end
-            end
         end
     end
 end

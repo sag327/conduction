@@ -105,8 +105,7 @@ classdef ScheduleRenderer < handle
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
-                'OverlappingCaseIds', app.OverlappingCaseIds, ...
-                'DebugShowCaseIds', app.DebugShowCaseIds);
+                'OverlappingCaseIds', app.OverlappingCaseIds);
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
@@ -231,24 +230,11 @@ classdef ScheduleRenderer < handle
 
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
             if isempty(caseBlocks)
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] No CaseBlock overlays found on axes.\n');
-                end
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(false);
                     app.CaseDragController.clearRegistry();
                 end
-                if app.DebugShowCaseIds
-                    try, obj.updateCaseDragDebugLabel(app, 'CaseDrag: 0 overlays'); catch, end
-                end
                 return;
-            end
-
-            if app.DebugShowCaseIds
-                fprintf('[CaseDrag] Binding drag to %d CaseBlock overlays.\n', numel(caseBlocks));
-            end
-            if app.DebugShowCaseIds
-                try, obj.updateCaseDragDebugLabel(app, sprintf('CaseDrag: %d overlays', numel(caseBlocks))); catch, end
             end
 
             if ~isempty(app.CaseDragController)
@@ -307,9 +293,6 @@ classdef ScheduleRenderer < handle
             end
 
             if ~isstruct(ud) || ~isfield(ud, 'caseId') || strlength(caseId) == 0
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] MouseDown on case overlay, missing caseId in UserData.\n');
-                end
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
@@ -318,19 +301,12 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            if app.DebugShowCaseIds
-                fprintf('[CaseDrag] MouseDown on caseId=%s\n', caseId);
-            end
-
             if ~isempty(dragController)
                 dragController.hideSelectionOverlay(false);
                 dragController.showSoftHighlight(app.ScheduleAxes, rectHandle);
             end
 
             if app.IsOptimizationRunning || app.IsTimeControlActive
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Drag blocked (OptimizationRunning=%d, TimeControlActive=%d).\n', app.IsOptimizationRunning, app.IsTimeControlActive);
-                end
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
@@ -340,9 +316,6 @@ classdef ScheduleRenderer < handle
             end
 
             if ~obj.isCaseBlockDraggable(app, caseId)
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Case %s is not draggable (status not pending).\n', caseId);
-                end
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
@@ -493,9 +466,6 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.invokeCaseBlockClick(app, drag.rectHandle);
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Drag ended without movement; treated as click.\n');
-                end
                 % Note: restoreSelectionOverlay not needed here because invokeCaseBlockClick
                 % triggers selection change which calls updateCaseSelectionVisuals -> showSelectionOverlay
                 return;
@@ -511,9 +481,6 @@ classdef ScheduleRenderer < handle
                     drag.rectHandle.FaceAlpha = 0;
                 end
                 obj.showCaseDragWarning(app, 'Selected lab is not available.');
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Drop refused: lab %d not available.\n', targetLabId);
-                end
                 obj.restoreSelectionOverlay(app);
                 return;
             end
@@ -535,9 +502,6 @@ classdef ScheduleRenderer < handle
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                     app.DrawerController.populateDrawer(app, drag.caseId);
                 end
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Move applied for caseId=%s to lab=%d start=%g.\n', drag.caseId, targetLabIndex, newSetupStartMinutes);
-                end
                 % Note: restoreSelectionOverlay not needed here because markOptimizationDirty
                 % triggers full re-render which calls registerCaseBlocks -> showSelectionOverlay
             else
@@ -547,9 +511,6 @@ classdef ScheduleRenderer < handle
                 end
                 % Restore overlay after failed drag (no re-render happened)
                 obj.restoreSelectionOverlay(app);
-                if app.DebugShowCaseIds
-                    fprintf('[CaseDrag] Move failed to apply for caseId=%s; reverted.\n', drag.caseId);
-                end
             end
 
             if isgraphics(drag.rectHandle) && isprop(drag.rectHandle, 'FaceAlpha')
@@ -1390,7 +1351,7 @@ classdef ScheduleRenderer < handle
             afterSourceIds = obj.collectCaseIds(assignments{sourceLabIdx});
             beforeSourceIds = obj.collectCaseIds(originalAssignments{sourceLabIdx});
 
-            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, sourceLabIdx, beforeSourceIds, afterSourceIds, beforeSourceIds, afterSourceIds, app.DebugShowCaseIds);
+            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, sourceLabIdx, beforeSourceIds, afterSourceIds, beforeSourceIds, afterSourceIds, false);
             if hasAnomaly
                 warnMsg = sprintf('Resize for case %s reverted due to integrity check failure.', caseId);
                 if strlength(anomalyDetails) > 0
@@ -1619,7 +1580,7 @@ classdef ScheduleRenderer < handle
             afterTargetIds = obj.collectCaseIds(assignments{targetLabIndex});
             afterGlobalIds = obj.collectCaseIds(assignments);
 
-            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, app.DebugShowCaseIds);
+            [hasAnomaly, anomalyDetails] = obj.debugHasAnomalies(beforeGlobalIds, afterGlobalIds, caseId, sourceLabIdx, targetLabIndex, beforeSourceIds, afterSourceIds, beforeTargetIds, afterTargetIds, false);
             if hasAnomaly
                 warnMsg = sprintf('Move for case %s reverted due to integrity check failure.', caseId);
                 if strlength(anomalyDetails) > 0

@@ -13,10 +13,6 @@ classdef OptimizationSolver
             end
 
             displayMode = 'off';
-            if options.Verbose
-                fprintf('\n[Scheduling] Solving ILP (%d cases, %d labs) ...\n', ...
-                    model.numCases, model.numLabs);
-            end
 
             solverOpts = optimoptions('intlinprog', ...
                 'Display', 'off', ...
@@ -42,10 +38,6 @@ classdef OptimizationSolver
             info.objectiveValue = fval;
             info.exitflag = exitflag;
             info.output = output;
-
-            if options.Verbose
-                fprintf('[Scheduling] Solver exitflag %d, objective %.4f\n', exitflag, fval);
-            end
         end
     end
 end

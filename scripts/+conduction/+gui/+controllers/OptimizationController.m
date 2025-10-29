@@ -105,20 +105,6 @@ classdef OptimizationController < handle
             try
                 scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
 
-                % DEBUG: Log optimization context for troubleshooting
-                try
-                    debugLog.enabled = true;
-                    debugLog.timestamp = datetime('now');
-                    debugLog.currentTimeMinutes = app.CaseManager.getCurrentTime();
-                    debugLog.isTimeControlActive = app.IsTimeControlActive;
-                    debugLog.lockedCaseIds = app.LockedCaseIds;
-                    debugLog.lockedConstraintsCount = numel(lockedConstraints);
-                    debugLog.optionSnapshot = scheduleOptions.toStruct();
-                    debugLog.caseCount = numel(casesStruct);
-                catch
-                    debugLog.enabled = false;
-                end
-
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
 
                 % DUAL-ID: Re-annotate caseNumber on schedule cases using persistent CaseIds
@@ -179,24 +165,7 @@ classdef OptimizationController < handle
                 app.SimulatedSchedule = conduction.DailySchedule.empty;
                 app.OptimizationController.showOptimizationPendingPlaceholder(app);
 
-                if exist('debugLog', 'var') && debugLog.enabled
-                    debugLog.errorMessage = ME.message;
-                    debugLog.stack = getReport(ME, 'extended', 'hyperlinks', 'off');
-                    fprintf('\n[OptimizationController] Optimization failure at %s\n', string(debugLog.timestamp));
-                    fprintf('%s\n', debugLog.stack);
-                    fprintf('Locked IDs: %s\n', strjoin(string(debugLog.lockedCaseIds), ', '));
-                    fprintf('Locked constraint count: %d\n', debugLog.lockedConstraintsCount);
-                    if isfield(debugLog, 'optionSnapshot')
-                        disp(debugLog.optionSnapshot);
-                    end
-                    fprintf('Case count: %d\n', debugLog.caseCount);
-                    fprintf('Time control active: %d (currentTimeMinutes=%.2f)\n', debugLog.isTimeControlActive, debugLog.currentTimeMinutes);
-                end
-
                 detailedMsg = ME.message;
-                if exist('debugLog', 'var') && debugLog.enabled && isfield(debugLog, 'stack')
-                    detailedMsg = sprintf('%s\n\nContext:\n%s', ME.message, debugLog.stack);
-                end
 
                 uialert(app.UIFigure, sprintf('Failed to optimize schedule: %s', detailedMsg), 'Optimization');
             end
@@ -606,7 +575,7 @@ classdef OptimizationController < handle
                 obj.updateOptimizationOptionsSummary(app);
                 obj.markOptimizationDirty(app);
             catch ME
-                fprintf('Warning: Failed to update optimization options: %s\n', ME.message);
+                % Failed to update optimization options
             end
         end
 
@@ -1328,8 +1297,6 @@ classdef OptimizationController < handle
                 caseId = string(lockedCase.caseID);
                 originalLabIdx = lockedCase.assignedLab;
 
-                fprintf('Restoring locked case "%s" to original Lab %d\n', caseId, originalLabIdx);
-
                 % Remove this case from wherever the optimizer placed it
                 for labIdx = 1:numel(labAssignments)
                     if isempty(labAssignments{labIdx})
@@ -1347,7 +1314,6 @@ classdef OptimizationController < handle
                     end
 
                     if ~isempty(removeIdx)
-                        fprintf('  Removed from Lab %d\n', labIdx);
                         cases(removeIdx) = [];
                         labAssignments{labIdx} = cases;
                         break;
@@ -1360,11 +1326,9 @@ classdef OptimizationController < handle
 
                 if isempty(originalLab)
                     labAssignments{originalLabIdx} = lockedCaseClean;
-                    fprintf('  Restored to Lab %d (was empty)\n', originalLabIdx);
                 else
                     originalLab = originalLab(:);
                     labAssignments{originalLabIdx} = [originalLab; lockedCaseClean];
-                    fprintf('  Restored to Lab %d (has %d other cases)\n', originalLabIdx, numel(originalLab));
                 end
             end
 

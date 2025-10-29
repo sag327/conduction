@@ -39,7 +39,6 @@ classdef DrawerController < handle
                     obj.populateDrawer(app, app.DrawerCurrentCaseId);
                 catch ME
                     warning('DrawerController:PopulateError', 'Error populating drawer: %s', ME.message);
-                    fprintf('Full error:\n%s\n', getReport(ME));
                 end
             end
         end
