@@ -6,6 +6,9 @@ classdef SessionController < handle
             defaultPath = conduction.session.generateSessionFilename(app.TargetDate);
             [~, defaultFile, ~] = fileparts(defaultPath);
             [filename, pathname] = uiputfile('*.mat', 'Save Session', [defaultFile '.mat']);
+
+            % Restore focus to GUI window after dialog
+            figure(app.UIFigure);
             if isequal(filename, 0)
                 return;
             end
@@ -37,6 +40,9 @@ classdef SessionController < handle
             end
 
             [filename, pathname] = uigetfile('*.mat', 'Load Session', defaultPath);
+
+            % Restore focus to GUI window after dialog
+            figure(app.UIFigure);
             if isequal(filename, 0)
                 return;
             end

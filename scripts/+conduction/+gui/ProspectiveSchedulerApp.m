@@ -9,15 +9,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         MiddleLayout                matlab.ui.container.GridLayout
         BottomBarLayout             matlab.ui.container.GridLayout
 
-        LoadDataButton              matlab.ui.control.Button
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
-        SaveSessionButton           matlab.ui.control.Button  % SAVE/LOAD: Save session button
-        LoadSessionButton           matlab.ui.control.Button  % SAVE/LOAD: Load session button
-        AutoSaveCheckbox            matlab.ui.control.CheckBox  % SAVE/LOAD: Auto-save checkbox (Stage 8)
+        SessionMenuDropDown         matlab.ui.control.DropDown  % SAVE/LOAD: Session management dropdown menu (includes Test Mode)
         CurrentTimeLabel            matlab.ui.control.Label
         CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
-        TestToggle                  matlab.ui.control.Switch
         TimeControlSwitch           matlab.ui.control.Switch  % REALTIME-SCHEDULING: Toggle time control mode
 
         TabGroup                    matlab.ui.container.TabGroup
@@ -599,70 +595,43 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','fit','fit','fit','1x','fit','fit','fit','fit'};  % SAVE/LOAD: Added columns for Save/Load Session buttons
-            app.TopBarLayout.ColumnSpacing = 12;
-            app.TopBarLayout.Padding = [0 0 0 0];
-
-            app.LoadDataButton = uibutton(app.TopBarLayout, 'push');
-            app.LoadDataButton.Text = 'Load Baseline Data';
-            app.LoadDataButton.Layout.Column = 1;
-            app.LoadDataButton.ButtonPushedFcn = createCallbackFcn(app, @LoadDataButtonPushed, true);
+            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-5: time controls, Column 6: 50px dropdown
+            app.TopBarLayout.ColumnSpacing = 8;  % Reduced spacing for tighter grouping of controls
+            app.TopBarLayout.Padding = [0 0 42 0];  % Right padding to align with middle panel edge (avoid drawer overlap)
 
             app.RunBtn = uibutton(app.TopBarLayout, 'push');
-            app.RunBtn.Text = 'Optimize Schedule';
-            app.RunBtn.Layout.Column = 2;
+            app.RunBtn.Text = '  Optimize Schedule  ';  % Added padding spaces for width
+            app.RunBtn.Layout.Column = 1;
             app.RunBtn.ButtonPushedFcn = createCallbackFcn(app, @OptimizationRunButtonPushed, true);
-
-            % SAVE/LOAD: Save Session button
-            app.SaveSessionButton = uibutton(app.TopBarLayout, 'push');
-            app.SaveSessionButton.Text = 'Save Session';
-            app.SaveSessionButton.Layout.Column = 3;
-            app.SaveSessionButton.ButtonPushedFcn = createCallbackFcn(app, @SaveSessionButtonPushed, true);
-            app.SaveSessionButton.Tooltip = 'Save current session to file';
-
-            % SAVE/LOAD: Load Session button
-            app.LoadSessionButton = uibutton(app.TopBarLayout, 'push');
-            app.LoadSessionButton.Text = 'Load Session';
-            app.LoadSessionButton.Layout.Column = 4;
-            app.LoadSessionButton.ButtonPushedFcn = createCallbackFcn(app, @LoadSessionButtonPushed, true);
-            app.LoadSessionButton.Tooltip = 'Load a saved session';
-
-            % SAVE/LOAD: Auto-save checkbox (Stage 8)
-            app.AutoSaveCheckbox = uicheckbox(app.TopBarLayout);
-            app.AutoSaveCheckbox.Text = 'Auto-save';
-            app.AutoSaveCheckbox.Layout.Column = 5;
-            app.AutoSaveCheckbox.Value = false;
-            app.AutoSaveCheckbox.ValueChangedFcn = createCallbackFcn(app, @AutoSaveCheckboxValueChanged, true);
-            app.AutoSaveCheckbox.Tooltip = 'Automatically save session every 5 minutes';
+            app.RunBtn.BackgroundColor = [0.2 0.5 0.8];  % Distinctive blue accent
+            app.RunBtn.FontSize = 14;  % Increased from 13 for more prominence
+            app.RunBtn.FontColor = [1 1 1];
+            app.RunBtn.FontWeight = 'bold';
+            app.RunBtn.Tooltip = 'Run optimization to generate schedule (Primary Action)';
 
             app.CurrentTimeLabel = uilabel(app.TopBarLayout);
             app.CurrentTimeLabel.Text = 'Current Time';
-            app.CurrentTimeLabel.Layout.Column = 6;
+            app.CurrentTimeLabel.Layout.Column = 3;
             app.CurrentTimeLabel.HorizontalAlignment = 'right';
 
             app.CurrentTimeCheckbox = uicheckbox(app.TopBarLayout);
             app.CurrentTimeCheckbox.Text = '';
-            app.CurrentTimeCheckbox.Layout.Column = 7;
+            app.CurrentTimeCheckbox.Layout.Column = 4;
             app.CurrentTimeCheckbox.Value = false;
             app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
 
 
             % REALTIME-SCHEDULING: Time Control Switch
             app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
-            app.TimeControlSwitch.Layout.Column = 8;
+            app.TimeControlSwitch.Layout.Column = 5;
             app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
             app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
             app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
             app.TimeControlSwitch.Orientation = 'horizontal';
             app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
-            app.TestToggle = uiswitch(app.TopBarLayout, 'slider');
-            app.TestToggle.Layout.Column = 9;  % SAVE/LOAD: Moved to column 9 to make room for Save/Load Session buttons
-            app.TestToggle.Items = {'Test Mode',''};
-            app.TestToggle.ItemsData = {'Off','On'};
-            app.TestToggle.Value = 'Off';
-            app.TestToggle.Orientation = 'horizontal';
-            app.TestToggle.ValueChangedFcn = createCallbackFcn(app, @TestToggleValueChanged, true);
+            % SAVE/LOAD: Session management dropdown (includes Test Mode, Save/Load, Auto-save)
+            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 6);
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
@@ -1681,9 +1650,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         % ----------------------- Testing Mode Events ---------------------
-        function TestToggleValueChanged(app, ~)
-            conduction.gui.app.testingMode.handleToggle(app);
-        end
+        % (Test Mode toggle now handled in session dropdown)
 
         function TestingDateDropDownValueChanged(app, event)
             %#ok<*INUSD>
@@ -1699,23 +1666,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         % ----------------------- Session Save/Load UI --------------------
-        function SaveSessionButtonPushed(app, event)
-            % SAVE/LOAD: Save current session to file (Stage 5)
-            %#ok<INUSD>
-            app.SessionController.saveSession(app);
-        end
-
-        function LoadSessionButtonPushed(app, event)
-            % SAVE/LOAD: Load session from file (Stage 6, updated Stage 7)
-            %#ok<INUSD>
-            app.SessionController.loadSession(app);
-        end
-
-        function AutoSaveCheckboxValueChanged(app, event)
-            % SAVE/LOAD: Auto-save checkbox toggled (Stage 8)
-            %#ok<INUSD>
-            app.SessionController.enableAutoSave(app, app.AutoSaveCheckbox.Value, app.AutoSaveInterval);
-        end
+        % (Session dropdown callback handled directly in +session module)
 
         function OptimizationRunButtonPushed(app, event)
             %#ok<INUSD>

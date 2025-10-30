@@ -63,7 +63,10 @@ function [operatorColors] = visualizeDailySchedule(scheduleInput, varargin)
         if ~isempty(newOperators)
             % Get existing color count to continue color sequence
             existingCount = operatorColors.Count;
-            allColors = lines(existingCount + numel(newOperators));
+
+            % Generate distinguishable colors using HSV color space
+            % This ensures visual distinctness even with many operators
+            allColors = generateDistinguishableColors(existingCount + numel(newOperators));
             newColorCells = num2cell(allColors(existingCount+1:end, :), 2);
             for i = 1:numel(newOperators)
                 operatorColors(newOperators{i}) = newColorCells{i};
@@ -1046,4 +1049,58 @@ function val = fetchMetric(metrics, field, fallback)
     end
 
     val = fallback;
+end
+
+function colors = generateDistinguishableColors(n)
+    % Generate N visually distinguishable colors using HSV color space
+    % This provides much better color distinctness than lines() for many colors
+    %
+    % Strategy: Distribute colors evenly in HSV space with high saturation
+    % and moderate-to-high value for visibility on dark backgrounds
+
+    if n <= 0
+        colors = [];
+        return;
+    end
+
+    % Start with a curated base palette for first 12 colors (visually optimized)
+    basePalette = [
+        0.0000, 0.4470, 0.7410;  % Blue
+        0.8500, 0.3250, 0.0980;  % Orange
+        0.9290, 0.6940, 0.1250;  % Yellow
+        0.4940, 0.1840, 0.5560;  % Purple
+        0.4660, 0.6740, 0.1880;  % Green
+        0.3010, 0.7450, 0.9330;  % Cyan
+        0.6350, 0.0780, 0.1840;  % Dark Red
+        0.9500, 0.5000, 0.8000;  % Pink
+        0.5000, 0.5000, 0.0000;  % Olive
+        0.0000, 0.5000, 0.5000;  % Teal
+        0.7500, 0.0000, 0.7500;  % Magenta
+        0.0000, 0.7500, 0.7500   % Light Cyan
+    ];
+
+    if n <= size(basePalette, 1)
+        % Use base palette for small numbers
+        colors = basePalette(1:n, :);
+    else
+        % For more colors, use base palette + generated colors
+        colors = zeros(n, 3);
+        colors(1:size(basePalette, 1), :) = basePalette;
+
+        % Generate remaining colors by distributing hues evenly
+        nRemaining = n - size(basePalette, 1);
+        for i = 1:nRemaining
+            idx = size(basePalette, 1) + i;
+
+            % Distribute hues evenly, offset to avoid base palette hues
+            hue = mod((i-1) / nRemaining + 0.5/nRemaining, 1);
+
+            % Alternate saturation and value for more variety
+            sat = 0.65 + 0.30 * mod(i, 2);  % 0.65 or 0.95
+            val = 0.75 + 0.20 * mod(i+1, 2); % 0.75 or 0.95
+
+            % Convert HSV to RGB
+            colors(idx, :) = hsv2rgb([hue, sat, val]);
+        end
+    end
 end

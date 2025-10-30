@@ -7,10 +7,11 @@ function loadBaselineData(app)
         return;
     end
 
-    app.LoadDataButton.Enable = 'off';
+    % Disable session dropdown while loading
+    app.SessionMenuDropDown.Enable = 'off';
     drawnow;
 
-    success = app.CaseManager.loadClinicalDataInteractive();
+    success = app.CaseManager.loadClinicalDataInteractive(app.UIFigure);
 
     if success
         app.updateDropdowns();
@@ -19,5 +20,6 @@ function loadBaselineData(app)
 
     app.TestingModeController.refreshTestingAvailability(app);
 
-    app.LoadDataButton.Enable = 'on';
+    % Re-enable session dropdown
+    app.SessionMenuDropDown.Enable = 'on';
 end

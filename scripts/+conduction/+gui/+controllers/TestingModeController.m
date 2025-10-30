@@ -277,16 +277,22 @@ classdef TestingModeController < handle
         end
 
         function setTestToggleValue(~, app, value)
-            if isempty(app.TestToggle) || ~isvalid(app.TestToggle)
+            % Update Test Mode state in session dropdown menu
+            if isempty(app.SessionMenuDropDown) || ~isvalid(app.SessionMenuDropDown)
                 return;
             end
 
             app.IsSyncingTestingToggle = true;
+
+            % Update dropdown menu text
+            items = app.SessionMenuDropDown.Items;
+            testModeIdx = 6;  % Test Mode is the 6th item
             if value
-                app.TestToggle.Value = 'On';
+                items{testModeIdx} = 'Test Mode: On';
             else
-                app.TestToggle.Value = 'Off';
+                items{testModeIdx} = 'Test Mode: Off';
             end
+            app.SessionMenuDropDown.Items = items;
             if ~isempty(app.TestPanel) && isvalid(app.TestPanel)
                 panelState = 'off';
                 if value

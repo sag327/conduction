@@ -471,7 +471,7 @@ classdef CaseManager < handle
             end
         end
 
-        function success = loadClinicalDataInteractive(obj)
+        function success = loadClinicalDataInteractive(obj, parentFigure)
             % Show file picker dialog for loading clinical data
             [fileName, pathName] = uigetfile( ...
                 {'*.xlsx;*.xls;*.csv', 'Spreadsheet Files (*.xlsx, *.xls, *.csv)'; ...
@@ -480,6 +480,11 @@ classdef CaseManager < handle
                  '*.csv', 'CSV Files (*.csv)'; ...
                  '*.*', 'All Files (*.*)'}, ...
                 'Select Clinical Data File');
+
+            % Restore focus to GUI window after dialog
+            if ~isempty(parentFigure) && isvalid(parentFigure)
+                figure(parentFigure);
+            end
 
             if isequal(fileName, 0)
                 success = false; % User canceled

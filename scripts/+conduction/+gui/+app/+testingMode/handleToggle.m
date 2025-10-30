@@ -5,7 +5,11 @@ function handleToggle(app)
         return;
     end
 
-    isOn = strcmp(app.TestToggle.Value, 'On');
+    % Read test mode state from session dropdown menu
+    items = app.SessionMenuDropDown.Items;
+    testModeIdx = 6;  % Test Mode is the 6th item
+    testModeText = items{testModeIdx};
+    isOn = contains(testModeText, 'On');
 
     if ~isempty(app.TestPanel) && isvalid(app.TestPanel)
         app.TestPanel.Visible = ternary(isOn, 'on', 'off');
