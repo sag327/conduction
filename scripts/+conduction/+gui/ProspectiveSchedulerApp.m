@@ -507,6 +507,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
         TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
         TimeControlLockedCaseIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks applied by time control mode
+        TimeControlStatusBaseline struct = struct('caseId', {}, 'status', {}, 'isLocked', {})  % REALTIME-SCHEDULING: Original status/lock for cases touched by time control
         IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         DrawerTimer timer = timer.empty
         DrawerWidth double = conduction.gui.app.Constants.DrawerHandleWidth  % Starts collapsed at the drawer handle width
@@ -1424,6 +1425,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.LockedCaseIds = string.empty(1, 0);
             app.TimeControlLockedCaseIds = string.empty(1, 0);
             app.TimeControlBaselineLockedIds = string.empty;
+            app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
 
             app.SelectedCaseId = "";
             if ~isempty(app.CaseStore)
@@ -1620,6 +1622,65 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function TimeControlSwitchValueChanged(app, ~)
             conduction.gui.app.toggleTimeControl(app);
+        end
+
+
+
+        function recordTimeControlCaseBaseline(app, caseId, status, isLocked)
+            % TIME-CONTROL: Remember original status/lock before simulation mutates it
+            arguments
+                app
+                caseId (1,1) string
+                status (1,1) string
+                isLocked (1,1) logical
+            end
+
+            if strlength(caseId) == 0
+                return;
+            end
+
+            if ~isempty(app.TimeControlStatusBaseline)
+                existingIds = string({app.TimeControlStatusBaseline.caseId});
+                if any(existingIds == caseId)
+                    return;  % Already recorded
+                end
+            end
+
+            entry = struct('caseId', caseId, 'status', status, 'isLocked', isLocked);
+            if isempty(app.TimeControlStatusBaseline)
+                app.TimeControlStatusBaseline = entry;
+            else
+                app.TimeControlStatusBaseline(end+1) = entry; %#ok<AGROW>
+            end
+        end
+
+        function restoreTimeControlCaseStates(app)
+            % TIME-CONTROL: Restore case status/lock flags to their pre-simulation values
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
+                return;
+            end
+
+            baseline = app.TimeControlStatusBaseline;
+            if ~isempty(baseline)
+                for idx = 1:numel(baseline)
+                    entry = baseline(idx);
+                    caseId = string(entry.caseId);
+                    if strlength(caseId) == 0
+                        continue;
+                    end
+                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    if isempty(caseObj)
+                        continue;
+                    end
+                    caseObj.CaseStatus = string(entry.status);
+                    caseObj.IsLocked = logical(entry.isLocked);
+                end
+                app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
+            end
+
+            app.syncCaseLocksWithIds();
+            app.updateCasesTable();
         end
 
 
@@ -2101,6 +2162,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.TimeControlBaselineLockedIds = string.empty(1, 0);
             app.TimeControlLockedCaseIds = string.empty(1, 0);
+            app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
 
             % Restore operator colors
             if isfield(sessionData, 'operatorColors')
@@ -2417,6 +2479,30 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        function syncCaseLocksWithIds(app)
+            % CASE-LOCKING: Ensure ProspectiveCase.IsLocked reflects app.LockedCaseIds
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            lockedIds = string(app.LockedCaseIds);
+            lockedIds = lockedIds(strlength(lockedIds) > 0);
+            caseCount = app.CaseManager.CaseCount;
+
+            for idx = 1:caseCount
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                caseId = string(caseObj.CaseId);
+                if strlength(caseId) == 0
+                    caseObj.IsLocked = false;
+                else
+                    caseObj.IsLocked = any(lockedIds == caseId);
+                end
+            end
+        end
+
         function [store, isValid] = getValidatedResourceStore(app)
             [store, isValid] = app.ResourceController.getValidatedResourceStore(app);
         end
