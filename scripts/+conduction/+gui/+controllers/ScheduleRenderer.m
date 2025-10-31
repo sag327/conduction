@@ -976,6 +976,13 @@ classdef ScheduleRenderer < handle
                     if strlength(caseIdStr) > 0
                         [caseObj, ~] = app.CaseManager.findCaseById(caseIdStr);
                         if ~isempty(caseObj)
+                            originalStatus = string(caseObj.CaseStatus);
+                            originalLock = logical(caseObj.IsLocked);
+                            hasStatusChange = originalStatus ~= string(newStatus);
+                            hasLockChange = originalLock ~= shouldBeLocked;
+                            if hasStatusChange || hasLockChange
+                                app.recordTimeControlCaseBaseline(caseIdStr, originalStatus, originalLock);
+                            end
                             caseObj.CaseStatus = newStatus;
                             caseObj.IsLocked = shouldBeLocked;
                         end
