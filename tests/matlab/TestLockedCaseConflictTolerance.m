@@ -1,6 +1,10 @@
 classdef TestLockedCaseConflictTolerance < matlab.unittest.TestCase
     %TESTLOCKEDCASECONFLICTTOLERANCE Ensure minor rounding overlaps do not trigger conflicts.
 
+    properties (Constant)
+        DefaultTimeStep = 10;  % minutes
+    end
+
     methods (TestClassSetup)
         function addProjectPaths(testCase)
             import matlab.unittest.fixtures.PathFixture
@@ -16,7 +20,7 @@ classdef TestLockedCaseConflictTolerance < matlab.unittest.TestCase
             case2 = createConstraint('caseB', 'Dr. Alpha', 1, 599, 599, 680, 690);
 
             constraints = [case1, case2];
-            [hasConflicts, report] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints);
+            [hasConflicts, report] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints, testCase.DefaultTimeStep);
 
             testCase.verifyFalse(hasConflicts, "Expected 1-minute rounding overlap to be tolerated");
             testCase.verifyEmpty(report.operatorConflicts);
@@ -25,10 +29,10 @@ classdef TestLockedCaseConflictTolerance < matlab.unittest.TestCase
 
         function testLongerOverlapStillDetected(testCase)
             case1 = createConstraint('caseA', 'Dr. Alpha', 1, 480, 480, 590, 600);
-            case2 = createConstraint('caseB', 'Dr. Alpha', 1, 598, 598, 680, 690);
+            case2 = createConstraint('caseB', 'Dr. Alpha', 1, 590, 590, 680, 690);
 
             constraints = [case1, case2];
-            [hasConflicts, report] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints);
+            [hasConflicts, report] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints, testCase.DefaultTimeStep);
 
             testCase.verifyTrue(hasConflicts, 'Expected extended overlap to be detected');
             testCase.verifyNotEmpty(report.labConflicts);

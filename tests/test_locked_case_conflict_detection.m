@@ -4,10 +4,12 @@ function test_locked_case_conflict_detection()
 
     fprintf('\n=== Testing Locked Case Conflict Detection ===\n\n');
 
+    timeStep = 10;  % minutes
+
     % Test 1: No conflicts (different operators, different labs, different times)
     fprintf('Test 1: No conflicts (should pass)...\n');
     constraints1 = createNoConflictConstraints();
-    [hasConflicts1, report1] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints1);
+    [hasConflicts1, report1] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints1, timeStep);
     if ~hasConflicts1
         fprintf('✓ PASSED: No conflicts detected\n\n');
     else
@@ -18,7 +20,7 @@ function test_locked_case_conflict_detection()
     % Test 2: Operator conflict (same operator, overlapping times)
     fprintf('Test 2: Operator conflict (should detect conflict)...\n');
     constraints2 = createOperatorConflictConstraints();
-    [hasConflicts2, report2] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints2);
+    [hasConflicts2, report2] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints2, timeStep);
     if hasConflicts2
         fprintf('✓ PASSED: Operator conflict detected\n');
         fprintf('Message:\n%s\n\n', report2.message);
@@ -29,7 +31,7 @@ function test_locked_case_conflict_detection()
     % Test 3: Lab conflict (same lab, overlapping times)
     fprintf('Test 3: Lab conflict (should detect conflict)...\n');
     constraints3 = createLabConflictConstraints();
-    [hasConflicts3, report3] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints3);
+    [hasConflicts3, report3] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints3, timeStep);
     if hasConflicts3
         fprintf('✓ PASSED: Lab conflict detected\n');
         fprintf('Message:\n%s\n\n', report3.message);
@@ -40,7 +42,7 @@ function test_locked_case_conflict_detection()
     % Test 4: Both operator and lab conflicts
     fprintf('Test 4: Both operator and lab conflicts (should detect both)...\n');
     constraints4 = createMultipleConflictConstraints();
-    [hasConflicts4, report4] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints4);
+    [hasConflicts4, report4] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints4, timeStep);
     if hasConflicts4
         fprintf('✓ PASSED: Multiple conflicts detected\n');
         fprintf('Message:\n%s\n\n', report4.message);
@@ -51,7 +53,7 @@ function test_locked_case_conflict_detection()
     % Test 5: Empty constraints (should pass)
     fprintf('Test 5: Empty constraints (should pass)...\n');
     constraints5 = struct([]);
-    [hasConflicts5, report5] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints5);
+    [hasConflicts5, report5] = conduction.scheduling.LockedCaseConflictValidator.validate(constraints5, timeStep);
     if ~hasConflicts5
         fprintf('✓ PASSED: No conflicts with empty constraints\n\n');
     else
