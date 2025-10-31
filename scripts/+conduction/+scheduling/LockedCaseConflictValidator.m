@@ -5,12 +5,12 @@ classdef LockedCaseConflictValidator
     %   - Lab conflicts: same lab has multiple locked cases at overlapping times
 
     properties (Constant, Access = private)
-        % Allowable rounding error when comparing locked windows (minutes)
-        ROUNDING_TOLERANCE_MIN = 1.0;
+        % Fallback grid resolution (minutes) when optimizer time-step is unknown
+        DEFAULT_TIME_STEP_MIN = 10.0;
     end
 
     methods (Static)
-        function [hasConflicts, conflictReport] = validate(lockedConstraints)
+        function [hasConflicts, conflictReport] = validate(lockedConstraints, timeStepMinutes)
             %VALIDATE Check for operator and lab conflicts in locked cases
             %   [hasConflicts, conflictReport] = validate(lockedConstraints)
             %
@@ -31,11 +31,15 @@ classdef LockedCaseConflictValidator
                 return;
             end
 
+            if nargin < 2 || isempty(timeStepMinutes) || ~isfinite(timeStepMinutes) || timeStepMinutes <= 0
+                timeStepMinutes = conduction.scheduling.LockedCaseConflictValidator.DEFAULT_TIME_STEP_MIN;
+            end
+
             % Detect operator conflicts
-            operatorConflicts = conduction.scheduling.LockedCaseConflictValidator.detectOperatorConflicts(lockedConstraints);
+            operatorConflicts = conduction.scheduling.LockedCaseConflictValidator.detectOperatorConflicts(lockedConstraints, timeStepMinutes);
 
             % Detect lab conflicts
-            labConflicts = conduction.scheduling.LockedCaseConflictValidator.detectLabConflicts(lockedConstraints);
+            labConflicts = conduction.scheduling.LockedCaseConflictValidator.detectLabConflicts(lockedConstraints, timeStepMinutes);
 
             % Build report
             if ~isempty(operatorConflicts) || ~isempty(labConflicts)
@@ -99,8 +103,8 @@ classdef LockedCaseConflictValidator
                                  firstCaseCount, numLabs, numLabs, excessCount);
         end
 
-        function conflicts = detectOperatorConflicts(lockedConstraints)
-            %DETECTOPERATORCONFLICTS Find locked cases with same operator at overlapping times
+        function conflicts = detectOperatorConflicts(lockedConstraints, timeStepMinutes)
+            %DETECTOPERATORCONFLICTS Find locked cases with same operator at overlapping grid slots
             %   Returns cell array of conflict descriptions
 
             conflicts = {};
@@ -121,15 +125,8 @@ classdef LockedCaseConflictValidator
                 end
                 operatorName = char(string(constraint.operator));
 
-                % Extract timing information
-                if ~isfield(constraint, 'procStartTime') || ~isfield(constraint, 'procEndTime')
-                    continue;
-                end
-
-                procStart = double(constraint.procStartTime);
-                procEnd = double(constraint.procEndTime);
-
-                if isnan(procStart) || isnan(procEnd)
+                [operatorSlots, procStart, procEnd] = conduction.scheduling.LockedCaseConflictValidator.computeOperatorSlots(constraint, timeStepMinutes);
+                if isempty(operatorSlots)
                     continue;
                 end
 
@@ -151,6 +148,7 @@ classdef LockedCaseConflictValidator
                 caseInfo.caseNumber = caseNumber;
                 caseInfo.procStartTime = procStart;
                 caseInfo.procEndTime = procEnd;
+                caseInfo.operatorSlots = operatorSlots;
 
                 % Add to operator map
                 if isKey(operatorMap, operatorName)
@@ -179,12 +177,7 @@ classdef LockedCaseConflictValidator
                             continue;
                         end
 
-                        % Check if time windows overlap
-                        % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        % Add tolerance for minute rounding when locks are derived from prior schedules
-                        TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
-                        if (case1.procStartTime + TIME_TOLERANCE) < case2.procEndTime && ...
-                           (case2.procStartTime + TIME_TOLERANCE) < case1.procEndTime
+                        if conduction.scheduling.LockedCaseConflictValidator.hasGridOverlap(case1.operatorSlots, case2.operatorSlots)
 
                             % Format time strings
                             start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.procStartTime);
@@ -208,8 +201,8 @@ classdef LockedCaseConflictValidator
             end
         end
 
-        function conflicts = detectLabConflicts(lockedConstraints)
-            %DETECTLABCONFLICTS Find locked cases assigned to same lab at overlapping times
+        function conflicts = detectLabConflicts(lockedConstraints, timeStepMinutes)
+            %DETECTLABCONFLICTS Find locked cases assigned to same lab at overlapping grid slots
             %   Returns cell array of conflict descriptions
 
             conflicts = {};
@@ -234,15 +227,8 @@ classdef LockedCaseConflictValidator
                     continue;
                 end
 
-                % Extract timing information (full window including setup, post, turnover)
-                if ~isfield(constraint, 'startTime') || ~isfield(constraint, 'endTime')
-                    continue;
-                end
-
-                startTime = double(constraint.startTime);
-                endTime = double(constraint.endTime);
-
-                if isnan(startTime) || isnan(endTime)
+                [labSlots, startTime, endTime] = conduction.scheduling.LockedCaseConflictValidator.computeLabSlots(constraint, timeStepMinutes);
+                if isempty(labSlots)
                     continue;
                 end
 
@@ -264,6 +250,7 @@ classdef LockedCaseConflictValidator
                 caseInfo.caseNumber = caseNumber;
                 caseInfo.startTime = startTime;
                 caseInfo.endTime = endTime;
+                caseInfo.labSlots = labSlots;
 
                 % Add to lab map, avoiding duplicate entries for the same case
                 if isKey(labMap, labIdx)
@@ -301,12 +288,7 @@ classdef LockedCaseConflictValidator
                             continue;
                         end
 
-                        % Check if time windows overlap
-                        % Two intervals [a,b] and [c,d] overlap if: a < d AND c < b
-                        % Add tolerance for minute rounding when locks are derived from prior schedules
-                        TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
-                        if (case1.startTime + TIME_TOLERANCE) < case2.endTime && ...
-                           (case2.startTime + TIME_TOLERANCE) < case1.endTime
+                        if conduction.scheduling.LockedCaseConflictValidator.hasGridOverlap(case1.labSlots, case2.labSlots)
 
                             % Format time strings
                             start1Str = conduction.scheduling.LockedCaseConflictValidator.formatTime(case1.startTime);
@@ -328,6 +310,131 @@ classdef LockedCaseConflictValidator
                     end
                 end
             end
+        end
+
+        function [slotIndices, procStartTime, procEndTime] = computeOperatorSlots(constraint, timeStepMinutes)
+            %COMPUTEOPERATORSLOTS Quantize a locked constraint's procedure window to grid indices
+
+            slotIndices = [];
+            procStartTime = NaN;
+            procEndTime = NaN;
+
+            requiredFields = {'startTime', 'procStartTime', 'procEndTime'};
+            for idx = 1:numel(requiredFields)
+                field = requiredFields{idx};
+                if ~isfield(constraint, field) || isempty(constraint.(field))
+                    return;
+                end
+            end
+
+            startTime = double(constraint.startTime);
+            procStartTime = double(constraint.procStartTime);
+            procEndTime = double(constraint.procEndTime);
+
+            if any(isnan([startTime, procStartTime, procEndTime])) || procEndTime <= procStartTime
+                slotIndices = [];
+                return;
+            end
+
+            alignedStart = conduction.scheduling.LockedCaseConflictValidator.alignStartTimeToGrid(startTime, timeStepMinutes);
+            setupOffset = procStartTime - startTime;
+            procDuration = procEndTime - procStartTime;
+
+            alignedProcStart = alignedStart + setupOffset;
+            alignedProcEnd = alignedProcStart + procDuration;
+
+            slotIndices = conduction.scheduling.LockedCaseConflictValidator.computeGridIndices(alignedProcStart, alignedProcEnd, timeStepMinutes);
+        end
+
+        function [slotIndices, startTime, endTime] = computeLabSlots(constraint, timeStepMinutes)
+            %COMPUTELABSLOTS Quantize a locked constraint's full window to grid indices
+
+            slotIndices = [];
+            startTime = NaN;
+            endTime = NaN;
+
+            if ~isfield(constraint, 'startTime') || ~isfield(constraint, 'endTime')
+                return;
+            end
+
+            startTime = double(constraint.startTime);
+            endTime = double(constraint.endTime);
+
+            if isnan(startTime) || isnan(endTime) || endTime <= startTime
+                slotIndices = [];
+                return;
+            end
+
+            alignedStart = conduction.scheduling.LockedCaseConflictValidator.alignStartTimeToGrid(startTime, timeStepMinutes);
+            duration = endTime - startTime;
+            alignedEnd = alignedStart + duration;
+
+            slotIndices = conduction.scheduling.LockedCaseConflictValidator.computeGridIndices(alignedStart, alignedEnd, timeStepMinutes);
+        end
+
+        function alignedTime = alignStartTimeToGrid(timeValue, timeStepMinutes)
+            %ALIGNSTARTTIMETOGRID Snap a time value to nearest grid slot with lower-half tie breaking
+
+            if isnan(timeValue)
+                alignedTime = NaN;
+                return;
+            end
+
+            lowerSlot = timeStepMinutes * floor(timeValue / timeStepMinutes);
+            upperSlot = timeStepMinutes * ceil(timeValue / timeStepMinutes);
+
+            if abs(timeValue - lowerSlot) <= abs(upperSlot - timeValue)
+                alignedTime = lowerSlot;
+            else
+                alignedTime = upperSlot;
+            end
+        end
+
+        function slotIndices = computeGridIndices(startTime, endTime, timeStepMinutes)
+            %COMPUTEGRIDINDICES Return grid indices whose timestamps fall within [start, end)
+
+            slotIndices = [];
+            if isnan(startTime) || isnan(endTime) || endTime <= startTime
+                return;
+            end
+
+            firstIdx = floor(startTime / timeStepMinutes);
+            % Subtract a tiny epsilon to keep the interval half-open
+            epsilon = 1e-9 * max(1, timeStepMinutes);
+            lastIdx = ceil((endTime - epsilon) / timeStepMinutes);
+
+            if lastIdx < firstIdx
+                return;
+            end
+
+            indexRange = firstIdx:lastIdx;
+            if isempty(indexRange)
+                return;
+            end
+
+            sampleTimes = indexRange * timeStepMinutes;
+            mask = (startTime <= sampleTimes) & (sampleTimes < endTime);
+            slotIndices = indexRange(mask);
+            slotIndices = unique(slotIndices);
+        end
+
+        function overlap = hasGridOverlap(indicesA, indicesB)
+            %HASGRIDOVERLAP Return true when two index sets share any grid slot
+
+            overlap = false;
+            if isempty(indicesA) || isempty(indicesB)
+                return;
+            end
+
+            if numel(indicesA) < numel(indicesB)
+                smaller = indicesA;
+                larger = indicesB;
+            else
+                smaller = indicesB;
+                larger = indicesA;
+            end
+
+            overlap = any(ismember(smaller, larger));
         end
 
         function timeStr = formatTime(minutes)
@@ -366,7 +473,7 @@ classdef LockedCaseConflictValidator
 
             % Detect lab start time (08:00 = 480 minutes)
             LAB_START_TIME = 480;
-            TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.ROUNDING_TOLERANCE_MIN;
+            TIME_TOLERANCE = conduction.scheduling.LockedCaseConflictValidator.DEFAULT_TIME_STEP_MIN;
 
             % Find all constraints at lab start time
             startTimeConstraints = [];

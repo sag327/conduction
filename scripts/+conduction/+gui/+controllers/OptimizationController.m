@@ -82,9 +82,18 @@ classdef OptimizationController < handle
                 end
             end
 
+            % Build scheduling options upfront so we can validate locks against the optimizer grid
+            scheduleOptions = [];
+            try
+                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
+            catch ME
+                uialert(app.UIFigure, sprintf('Failed to build scheduling options: %s', ME.message), 'Optimization');
+                return;
+            end
+
             % CONFLICT-DETECTION: Validate combined locked case constraints before optimization
             % Check for impossible conflicts (same operator/lab at overlapping times)
-            [hasConflicts, conflictReport] = conduction.scheduling.LockedCaseConflictValidator.validate(lockedConstraints);
+            [hasConflicts, conflictReport] = conduction.scheduling.LockedCaseConflictValidator.validate(lockedConstraints, scheduleOptions.TimeStep);
             if hasConflicts
                 uialert(app.UIFigure, conflictReport.message, 'Locked Case Conflicts');
                 return;
@@ -103,8 +112,6 @@ classdef OptimizationController < handle
             drawnow;
 
             try
-                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
-
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
 
                 % DUAL-ID: Re-annotate caseNumber on schedule cases using persistent CaseIds
