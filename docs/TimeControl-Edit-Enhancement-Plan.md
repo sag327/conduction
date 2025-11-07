@@ -7,6 +7,14 @@ Principles
 - DRY/KISS: Reuse existing drag/resize handlers and status recomputation; minimize new code paths.
 - Separation: Locking is an optimization constraint; archiving is a lifecycle transition. Time Control “locks” are hints, not edit blockers.
 
+Modularization & File Layout
+- Avoid bloating large scripts (`ScheduleRenderer`, `ProspectiveSchedulerApp`, `CaseDragController`). Add a small, focused controller:
+  - New: `scripts/+conduction/+gui/+controllers/TimeControlEditController.m`
+    - `finalizePostEdit(app, caseId, newTimesOrLab)` – recompute statuses vs NOW, update `SimulatedSchedule`, update `TimeControlLockedCaseIds`, mark optimize-dirty, request re-render.
+    - `pauseNowTimer(app)` / `resumeNowTimer(app)` – delegate to `CaseStatusController` to avoid duplication.
+- Only minimal shims in existing classes to call into the new controller (1–3 lines per call site).
+- If generic helpers are needed, place under `scripts/+conduction/+gui/+utils/`.
+
 Out of Scope
 - No banners or new UI indicators.
 - No new archive UI; existing archive remains internal and driven by explicit completion.
@@ -19,11 +27,10 @@ Scope
 - Keep only optimization-in-progress as an edit blocker.
 
 Targets
-- `scripts/+conduction/+gui/+controllers/CaseDragController.m`
-  - `canInteractWithCase`: remove/block the early return on `IsTimeControlActive`; stop gating on `isPending()` when Time Control is ON.
-- `scripts/+conduction/+gui/+controllers/ScheduleRenderer.m`
-  - `onCaseResizeMouseDown` and drag handlers: bypass the `IsTimeControlActive` early return.
-- Add optional flag `app.AllowEditInTimeControl` (default true) to gate this feature if needed later.
+- `CaseDragController.canInteractWithCase`: remove/block early return on `IsTimeControlActive`; stop gating on `isPending()` when Time Control is ON.
+- `ScheduleRenderer` drag/resize mouse-down handlers: bypass the `IsTimeControlActive` early return.
+- Add optional flag `app.AllowEditInTimeControl` (default true) to gate this feature.
+- Keep modifications small; do not expand handler bodies—only relax the guards.
 
 Validation (MATLAB -batch)
 - Launch in batch and verify interactions are permitted logically by calling edit methods directly (UI drag not simulated here):
@@ -48,8 +55,8 @@ Scope
 - Update `app.SimulatedSchedule` and `app.TimeControlLockedCaseIds` via the existing recompute path.
 
 Targets
-- Reuse: `scripts/+conduction/+gui/+controllers/ScheduleRenderer.m: updateCaseStatusesByTime` (already updates `SimulatedSchedule` and locks).
-- Ensure handlers invoke this recompute after commit in Time Control mode.
+- New: `TimeControlEditController.finalizePostEdit(app, caseId, context)` calls existing `ScheduleRenderer.updateCaseStatusesByTime` and centralizes post-edit work (status recompute, `SimulatedSchedule`/lock updates, mark-dirty, re-render).
+- `ScheduleRenderer.applyCaseMove/applyCaseResize`: when `IsTimeControlActive`, delegate to `TimeControlEditController.finalizePostEdit(...)` after committing the change. Keep call sites to a single line.
 
 Validation (MATLAB -batch)
 ```bash
@@ -79,7 +86,7 @@ Scope
 
 Targets
 - `CaseDragController.canInteractWithCase`: do not reject due to locks when Time Control is ON.
-- Any post-edit validation hooks: skip overlap detection and lock-conflict checks (align with behavior outside Time Control).
+- Post-edit checks reside only in `TimeControlEditController` and intentionally skip overlap/lock-conflict validation.
 
 Validation (MATLAB -batch)
 ```bash
@@ -102,8 +109,9 @@ Scope
 - Ensure simulated-completed (via Time Control) cases remain editable; truly archived cases (explicit completed via Case Status) are not on the active board and thus not editable.
 
 Targets
-- Editing gates should consider only optimization-running as a blocker during Time Control (Phase 1). Do not block by status.
-- No change to archive behavior: calling `CaseManager.setCaseStatus(...,'completed')` moves the case out of active set.
+- Only `IsOptimizationRunning` blocks edits while Time Control is ON; do not block by status.
+- No change to archive behavior: `CaseManager.setCaseStatus(...,'completed')` moves the case out of active set.
+- `TimeControlEditController` should no-op safely if a caseId is not in the active set.
 
 Validation (MATLAB -batch)
 ```bash
@@ -129,7 +137,7 @@ Scope
 - Prevent race conditions with the NOW-line timer while editing. Pause timer on drag start; resume on commit/cancel.
 
 Targets
-- `CaseStatusController` timer management; ensure drag start/resize start temporarily pauses updates; resume at end.
+- `TimeControlEditController.pauseNowTimer/resumeNowTimer` delegate into `CaseStatusController` (keep logic in one place). Drag/resize handlers call these wrappers at start/end when Time Control is ON.
 
 Validation (MATLAB -batch)
 - Hard to simulate motion in batch; validate indirect effects: perform rapid sequential edits and call `updateCaseStatusesByTime` to confirm consistent status updates without exceptions.
@@ -148,3 +156,7 @@ Notes
 - Optimization is never auto-triggered by edits; existing “dirty”/needs-opt flagging remains.
 - Tests above use programmatic calls to the same methods the GUI uses after a user drag/resize; they validate that Time Control no longer blocks edits and that status/locks update via the existing recompute.
 
+Refactoring Guardrails
+- Small surface changes in large files; push new logic into the new controller/utility.
+- Single-responsibility functions with descriptive names; prefer 20–50 line helpers over monolith methods.
+- No duplicate timer or status-recompute logic—always delegate to existing `CaseStatusController` and `ScheduleRenderer.updateCaseStatusesByTime`.
