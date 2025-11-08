@@ -52,12 +52,13 @@ classdef ScheduleRenderer < handle
             obj.drawClosedLabOverlays(app, []);
 
             if app.IsTimeControlActive
-                obj.enableNowLineDrag(app);
-            end
+            obj.enableNowLineDrag(app);
+        end
 
-            obj.enableCaseDrag(app);
+        obj.enableCaseDrag(app);
+        obj.applyMultiSelectionHighlights(app);
 
-            conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+        conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
@@ -146,6 +147,7 @@ classdef ScheduleRenderer < handle
 
             % Bind drag after everything is drawn
             obj.enableCaseDrag(app);
+            obj.applyMultiSelectionHighlights(app);
         end
 
         function refreshResourceHighlights(~, app)
@@ -254,6 +256,10 @@ classdef ScheduleRenderer < handle
         function onCaseBlockMouseDown(obj, app, rectHandle)
             %ONCASEBLOCKMOUSEDOWN Entry point for case drag or click
             if ~isgraphics(rectHandle)
+                return;
+            end
+            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
+                obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
                 return;
             end
             caseEntry = struct();
@@ -533,6 +539,12 @@ classdef ScheduleRenderer < handle
 
         function onCaseResizeMouseDown(obj, app, handle)
             if ~isgraphics(handle)
+                return;
+            end
+
+            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
+                obj.showCaseDragWarning(app, 'Resize disabled while multiple cases are selected.');
+                obj.restoreSelectionOverlay(app);
                 return;
             end
 
@@ -1917,6 +1929,9 @@ classdef ScheduleRenderer < handle
                 if strcmp(selectionType, 'open')
                     % Double-click detected - toggle lock
                     callbackArg = sprintf('lock-toggle:%s', caseId);
+                elseif strcmp(selectionType, 'extend')
+                    % Shift-click toggles selection membership
+                    callbackArg = sprintf('toggle-select:%s', caseId);
                 else
                     % Single-click or other - normal behavior
                     callbackArg = caseId;
@@ -2107,15 +2122,51 @@ classdef ScheduleRenderer < handle
             uialert(app.UIFigure, message, 'Case Drag', 'Icon', 'warning');
         end
 
-        function restoreSelectionOverlay(~, app)
+        function restoreSelectionOverlay(obj, app)
             if isempty(app) || isempty(app.CaseDragController)
                 return;
             end
 
-            if strlength(app.SelectedCaseId) > 0
-                app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
-            else
+            ids = string.empty(0, 1);
+            if isprop(app, 'SelectedCaseIds')
+                ids = app.SelectedCaseIds;
+            elseif strlength(app.SelectedCaseId) > 0
+                ids = string(app.SelectedCaseId);
+            end
+
+            if isempty(ids)
                 app.CaseDragController.hideSelectionOverlay(true);
+                return;
+            end
+
+            if ismethod(app.CaseDragController, 'showSelectionOverlayForIds')
+                app.CaseDragController.showSelectionOverlayForIds(app, ids);
+            else
+                app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
+            end
+        end
+
+        function applyMultiSelectionHighlights(obj, app)
+            if isempty(app) || isempty(app.CaseDragController)
+                return;
+            end
+
+            ids = string.empty(0, 1);
+            if isprop(app, 'SelectedCaseIds')
+                ids = app.SelectedCaseIds;
+            elseif strlength(app.SelectedCaseId) > 0
+                ids = string(app.SelectedCaseId);
+            end
+
+            if isempty(ids)
+                app.CaseDragController.hideSelectionOverlay(true);
+                return;
+            end
+
+            if ismethod(app.CaseDragController, 'showSelectionOverlayForIds')
+                app.CaseDragController.showSelectionOverlayForIds(app, ids);
+            else
+                app.CaseDragController.showSelectionOverlay(app.SelectedCaseId);
             end
         end
 

@@ -370,12 +370,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function updateCaseSelectionVisuals(app)
+            selectedIds = app.SelectedCaseIds;
             selectedId = app.SelectedCaseId;
 
-            if strlength(selectedId) > 0
+            if ~isempty(selectedIds)
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
-                    overlayApplied = app.CaseDragController.showSelectionOverlay(selectedId);
+                    overlayApplied = app.CaseDragController.showSelectionOverlayForIds(app, selectedIds);
 
                     % Force UI update so selection overlay appears immediately
                     if overlayApplied
@@ -391,7 +392,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
 
                 app.DrawerCurrentCaseId = selectedId;
-                if ~isempty(app.DrawerController)
+                if ~isempty(app.DrawerController) && strlength(selectedId) > 0
                     if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                         app.DrawerController.populateDrawer(app, selectedId);
                     elseif app.DrawerAutoOpenOnSelect && ...
@@ -516,7 +517,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerCurrentCaseId string = ""
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty(1, 0)  % CASE-LOCKING: Array of locked case IDs
-        SelectedCaseId string = ""  % Currently selected case ID for highlighting
+        SelectedCaseIds string = string.empty(0, 1)  % Multi-select source of truth (column vector of case IDs)
+        SelectedCaseId string = ""  % Currently selected case ID (last member of SelectedCaseIds)
         SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
         IsDirty logical = false  % SAVE/LOAD: Track unsaved changes (Stage 7)
@@ -536,6 +538,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsUpdatingResourceStore logical = false  % Guard against re-entrant calls
         SuppressOptimizationDirty logical = false  % Skip markOptimizationDirty in onCaseManagerChanged when already handled
         CaseStoreListeners event.listener = event.listener.empty
+        IsSyncingCaseSelection logical = false  % Guard when pushing selection updates back to CaseStore
     end
 
 
@@ -1034,14 +1037,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;  % Exit early - don't do normal single-click behavior
             end
 
-            % Normal single-click behavior: select case
-            % PERSISTENT-ID: Find the case by ID and highlight corresponding row in cases table
-            [~, caseIndex] = app.CaseManager.findCaseById(caseId);
-            if ~isnan(caseIndex) && caseIndex > 0 && caseIndex <= app.CaseManager.CaseCount
-                if ~isempty(app.CaseStore)
-                    app.CaseStore.setSelection(caseIndex);
+            % Shift-click toggle handling
+            if startsWith(caseIdStr, 'toggle-select:')
+                actualCaseId = extractAfter(caseIdStr, 'toggle-select:');
+                if strlength(actualCaseId) > 0
+                    app.selectCases(actualCaseId, 'toggle');
                 end
+                return;
             end
+
+            % Normal single-click behavior: select case
+            app.selectCases(caseIdStr, 'replace');
 
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
             % This behavior remains managed centrally when selection changes.
@@ -1170,7 +1176,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function onCaseStoreSelectionChanged(app)
             % Respond to selection updates in the shared CaseStore.
             % Skip during session restore to avoid premature UI updates
-            if app.IsRestoringSession
+            if app.IsRestoringSession || app.IsSyncingCaseSelection
                 return;
             end
 
@@ -1178,21 +1184,56 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            selection = app.CaseStore.Selection;
+            selectedIds = app.CaseStore.getSelectedCaseIds();
+            app.assignSelectedCaseIds(selectedIds, "case-store");
+        end
 
-            if isempty(selection)
-                app.SelectedCaseId = "";
-            else
-                selectedIndex = selection(1);
-                if selectedIndex >= 1 && selectedIndex <= app.CaseManager.CaseCount
-                    caseObj = app.CaseManager.getCase(selectedIndex);
-                    app.SelectedCaseId = caseObj.CaseId;
-                else
-                    app.SelectedCaseId = "";
-                end
+        function selectCases(app, ids, mode)
+            %SELECTCASES Update the multi-selection source of truth (public helper).
+            if nargin < 2
+                ids = string.empty(0, 1);
+            end
+            if nargin < 3 || strlength(mode) == 0
+                mode = "replace";
             end
 
-            app.updateCaseSelectionVisuals();
+            ids = app.normalizeCaseIds(ids);
+            mode = lower(string(mode));
+
+            current = app.SelectedCaseIds;
+            switch mode
+                case "replace"
+                    newSelection = ids;
+                case "add"
+                    newSelection = unique([current; ids], 'stable');
+                case "remove"
+                    if isempty(ids)
+                        newSelection = current;
+                    else
+                        mask = ~ismember(current, ids);
+                        newSelection = current(mask);
+                    end
+                case "toggle"
+                    newSelection = current;
+                    for idx = 1:numel(ids)
+                        targetId = ids(idx);
+                        matchIdx = find(newSelection == targetId, 1, 'first');
+                        if isempty(matchIdx)
+                            newSelection(end+1, 1) = targetId; %#ok<AGROW>
+                        else
+                            newSelection(matchIdx) = [];
+                        end
+                    end
+                otherwise
+                    error('ProspectiveSchedulerApp:InvalidSelectMode', ...
+                        'Unsupported select mode "%s".', mode);
+            end
+
+            app.assignSelectedCaseIds(newSelection, "manual");
+        end
+
+        function tf = isMultiSelectActive(app)
+            tf = numel(app.SelectedCaseIds) > 1;
         end
 
         % --------------------- Date & Dropdown Events --------------------
@@ -1283,51 +1324,89 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function RemoveSelectedButtonPushed(app, event)
             %#ok<INUSD>
-            if isempty(app.CaseStore) || isempty(app.CaseManager)
+            app.removeSelectedCases();
+        end
+
+        function removeSelectedCases(app, confirmRemoval)
+            if nargin < 2
+                confirmRemoval = true;
+            end
+
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
                 return;
             end
 
-            selection = app.CaseStore.Selection;
-            if isempty(selection)
+            selectedIds = app.SelectedCaseIds;
+            if isempty(selectedIds) && ~isempty(app.CaseStore)
+                try
+                    selectedIds = app.CaseStore.getSelectedCaseIds();
+                catch
+                    selectedIds = string.empty(0, 1);
+                end
+            end
+            selectedIds = app.normalizeCaseIds(selectedIds);
+            if isempty(selectedIds)
                 return;
             end
 
-            selectedIndex = selection(1);
-            if selectedIndex < 1 || selectedIndex > app.CaseManager.CaseCount
-                return;
+            if confirmRemoval
+                prompt = sprintf('Remove %d selected case(s)?', numel(selectedIds));
+                answer = string(app.confirmAction(prompt, 'Remove Selected Cases', {'Remove', 'Cancel'}, 2));
+                if answer ~= "Remove"
+                    return;
+                end
             end
 
-            caseObj = app.CaseManager.getCase(selectedIndex);
-            caseId = caseObj.CaseId;
-
-            % Remove from case manager (using array index)
-            app.CaseManager.removeCase(selectedIndex);
-
-            % Remove from visualized schedule if it exists (using persistent ID)
-            scheduleWasUpdated = false;
-            if ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())
-                app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseId);
-                scheduleWasUpdated = true;
+            activeIndices = double.empty(1, 0);
+            archivedIds = string.empty(0, 1);
+            for idx = 1:numel(selectedIds)
+                caseId = selectedIds(idx);
+                [~, caseIndex] = app.CaseManager.findCaseById(char(caseId));
+                if ~isnan(caseIndex) && caseIndex >= 1
+                    activeIndices(end+1) = caseIndex; %#ok<AGROW>
+                else
+                    archivedIds(end+1, 1) = caseId; %#ok<AGROW>
+                end
             end
 
-            % Also remove from simulated schedule if time control is active
-            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
-                app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseId);
+            if ~isempty(activeIndices)
+                removalOrder = sort(unique(activeIndices, 'stable'), 'descend');
+                app.executeBatchUpdate(@() app.removeCasesAtIndices(removalOrder), true);
             end
 
-            app.markDirty();  % SAVE/LOAD: Mark as dirty when case removed (Stage 7)
-
-            % Clear selection to avoid referencing removed row
-            if ~isempty(app.CaseStore)
-                app.CaseStore.clearSelection();
+            if ~isempty(archivedIds) && ismethod(app.CaseManager, 'removeCompletedCasesByIds')
+                archivedIds = unique(archivedIds, 'stable');
+                app.CaseManager.removeCompletedCasesByIds(archivedIds);
             end
 
-            % Re-render the schedule immediately to show removal with fade effect
+            scheduleWasUpdated = app.removeCaseIdsFromSchedules(selectedIds);
+
+            scheduleForRender = [];
+            if app.IsTimeControlActive
+                currentTimeMinutes = app.CaseManager.getCurrentTime();
+                scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
+                app.SimulatedSchedule = scheduleForRender;
+            elseif scheduleWasUpdated
+                scheduleForRender = app.OptimizedSchedule;
+            end
+
             if scheduleWasUpdated
                 app.OptimizationController.markOptimizationDirty(app);
-                % Explicitly re-render the updated schedule
+            end
+
+            if ~isempty(scheduleForRender)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
+            elseif scheduleWasUpdated
                 app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
             end
+
+            app.LockedCaseIds = setdiff(app.LockedCaseIds, selectedIds, 'stable');
+            if isprop(app, 'TimeControlLockedCaseIds')
+                app.TimeControlLockedCaseIds = setdiff(app.TimeControlLockedCaseIds, selectedIds, 'stable');
+            end
+
+            app.assignSelectedCaseIds(string.empty(0, 1), "manual");
+            app.markDirty();
         end
 
         function ClearAllButtonPushed(app, event)
@@ -2485,6 +2564,122 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        function assignSelectedCaseIds(app, ids, source)
+            if nargin < 3
+                source = "manual";
+            end
+
+            normalized = app.normalizeCaseIds(ids);
+            if isempty(normalized)
+                app.SelectedCaseIds = string.empty(0, 1);
+                app.SelectedCaseId = "";
+            else
+                normalized = unique(normalized, 'stable');
+                app.SelectedCaseIds = normalized;
+                app.SelectedCaseId = normalized(end);
+            end
+
+            app.onSelectionChanged(source);
+        end
+
+        function onSelectionChanged(app, source)
+            if nargin < 2 || strlength(source) == 0
+                source = "manual";
+            else
+                source = lower(string(source));
+            end
+
+            % Keep SelectedCaseId aligned with SelectedCaseIds
+            if isempty(app.SelectedCaseIds)
+                app.SelectedCaseId = "";
+            else
+                app.SelectedCaseId = app.SelectedCaseIds(end);
+            end
+
+            if ~strcmp(source, "case-store")
+                app.pushSelectionToCaseStore();
+            end
+
+            app.updateCaseSelectionVisuals();
+        end
+
+        function pushSelectionToCaseStore(app)
+            if isempty(app.CaseStore) || ~isvalid(app.CaseStore)
+                return;
+            end
+
+            indices = app.caseIndicesFromIds(app.SelectedCaseIds);
+
+            app.IsSyncingCaseSelection = true;
+            cleanup = onCleanup(@() app.clearCaseSelectionSyncGuard()); %#ok<NASGU>
+            if isempty(indices)
+                app.CaseStore.clearSelection();
+            else
+                app.CaseStore.setSelection(indices);
+            end
+        end
+
+        function indices = caseIndicesFromIds(app, ids)
+            indices = double.empty(1, 0);
+            if isempty(ids) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            ids = app.normalizeCaseIds(ids);
+            for idx = 1:numel(ids)
+                targetId = ids(idx);
+                if strlength(targetId) == 0
+                    continue;
+                end
+                try
+                    [~, caseIndex] = app.CaseManager.findCaseById(char(targetId));
+                catch
+                    caseIndex = [];
+                end
+                if isempty(caseIndex) || caseIndex < 1
+                    continue;
+                end
+                indices(end+1) = caseIndex; %#ok<AGROW>
+            end
+
+            if isempty(indices)
+                indices = double.empty(1, 0);
+            else
+                indices = unique(indices, 'stable');
+            end
+        end
+
+        function removeCasesAtIndices(app, indices)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager) || isempty(indices)
+                return;
+            end
+            for i = 1:numel(indices)
+                idx = indices(i);
+                if idx >= 1 && idx <= app.CaseManager.CaseCount
+                    app.CaseManager.removeCase(idx);
+                end
+            end
+        end
+
+        function ids = normalizeCaseIds(~, ids)
+            if nargin < 2 || isempty(ids)
+                ids = string.empty(0, 1);
+                return;
+            end
+            if isa(ids, 'string')
+                ids = ids(:);
+            elseif iscell(ids)
+                ids = string(ids(:));
+            else
+                ids = string(ids(:));
+            end
+            ids = ids(strlength(ids) > 0);
+        end
+
+        function clearCaseSelectionSyncGuard(app)
+            app.IsSyncingCaseSelection = false;
+        end
+
         function syncCaseLocksWithIds(app)
             % CASE-LOCKING: Ensure ProspectiveCase.IsLocked reflects app.LockedCaseIds
             if isempty(app.CaseManager) || ~isvalid(app.CaseManager)

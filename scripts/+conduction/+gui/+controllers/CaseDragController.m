@@ -39,6 +39,8 @@ classdef CaseDragController < handle
         SelectionHoverMotionActive logical = false
         SelectionHoverMotionFcn = []
         SelectionHoverPrevMotionFcn = []
+        MultiSelectionRects = gobjects(0, 1)
+        MultiSelectionIds string = string.empty(0, 1)
     end
 
     methods
@@ -103,7 +105,9 @@ classdef CaseDragController < handle
 
             obj.enableSelectionHoverWatcher();
 
-            if strlength(obj.SelectionCaseId) > 0
+            if ~isempty(app) && isprop(app, 'SelectedCaseIds') && ~isempty(app.SelectedCaseIds)
+                obj.showSelectionOverlayForIds(app, app.SelectedCaseIds);
+            elseif strlength(obj.SelectionCaseId) > 0
                 obj.showSelectionOverlay(obj.SelectionCaseId);
             end
         end
@@ -226,6 +230,20 @@ classdef CaseDragController < handle
             if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
                 set(obj.SelectionGrip, 'Visible', 'off');
             end
+            obj.hideMultiSelectionOverlays();
+        end
+
+        function hideMultiSelectionOverlays(obj)
+            if ~isempty(obj.MultiSelectionRects)
+                for idx = 1:numel(obj.MultiSelectionRects)
+                    rect = obj.MultiSelectionRects(idx);
+                    if isgraphics(rect)
+                        delete(rect);
+                    end
+                end
+            end
+            obj.MultiSelectionRects = gobjects(0, 1);
+            obj.MultiSelectionIds = string.empty(0, 1);
         end
 
         function success = showSelectionOverlay(obj, caseId)
@@ -242,8 +260,8 @@ classdef CaseDragController < handle
             end
 
             obj.SelectionCaseId = caseId;
-            [entry, ~] = obj.findCaseById(caseId);
-            if isempty(entry) || ~isfield(entry, 'rectHandle') || ~isgraphics(entry.rectHandle)
+            [entry, axesHandle, selPos] = obj.resolveSelectionGeometry(caseId);
+            if isempty(entry) || isempty(selPos)
                 obj.hideSelectionOverlay(false);
                 return;
             end
@@ -252,21 +270,6 @@ classdef CaseDragController < handle
             timeControlActive = obj.isTimeControlActive();
 
             rectHandle = entry.rectHandle;
-            axesHandle = ancestor(rectHandle, 'axes');
-            if isempty(axesHandle) || ~isgraphics(axesHandle)
-                obj.hideSelectionOverlay(false);
-                return;
-            end
-
-            pos = get(rectHandle, 'Position');
-            if numel(pos) ~= 4 || any(~isfinite(pos))
-                return;
-            end
-
-            % Expand selection rectangle outward by lock line thickness to avoid overlap
-            lockLinePts = 3;  % Must match lock outline in visualizeDailySchedule
-            [growX, growY] = obj.pointsToDataOffsets(axesHandle, lockLinePts);
-            selPos = [pos(1)-growX, pos(2)-growY, pos(3)+2*growX, pos(4)+2*growY];
 
             if isempty(obj.SelectionRect) || ~isgraphics(obj.SelectionRect)
                 obj.SelectionRect = rectangle(axesHandle, ...
@@ -379,6 +382,110 @@ classdef CaseDragController < handle
             end
             obj.enableSelectionHoverWatcher();
             success = true;
+        end
+
+        function success = showSelectionOverlayForIds(obj, app, caseIds)
+            %SHOWSELECTIONOVERLAYFORIDS Draw overlays for multi-selection sets.
+            if nargin < 2 || isempty(app)
+                app = obj.AppHandle;
+            end
+            if nargin < 3
+                caseIds = string.empty(0, 1);
+            else
+                caseIds = string(caseIds(:));
+            end
+            caseIds = caseIds(strlength(caseIds) > 0);
+            caseIds = unique(caseIds, 'stable');
+
+            success = false;
+            if isempty(caseIds)
+                obj.hideSelectionOverlay(true);
+                return;
+            end
+
+            primaryId = "";
+            if ~isempty(app) && isprop(app, 'SelectedCaseId')
+                primaryId = app.SelectedCaseId;
+            end
+            if strlength(primaryId) == 0
+                primaryId = caseIds(end);
+            end
+
+            obj.hideMultiSelectionOverlays();
+
+            if strlength(primaryId) > 0
+                success = obj.showSelectionOverlay(primaryId);
+            end
+            if numel(caseIds) > 1 && ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
+                set(obj.SelectionGrip, 'Visible', 'off');
+            end
+
+            secondaryIds = caseIds(caseIds ~= primaryId);
+            if isempty(secondaryIds)
+                return;
+            end
+
+            handles = gobjects(0, 1);
+            appliedIds = string.empty(0, 1);
+            for idx = 1:numel(secondaryIds)
+                candidateId = secondaryIds(idx);
+                [entry, axesHandle, selPos] = obj.resolveSelectionGeometry(candidateId);
+                if isempty(entry) || isempty(selPos) || isempty(axesHandle) || ~isgraphics(axesHandle)
+                    continue;
+                end
+                rect = rectangle(axesHandle, ...
+                    'Position', selPos, ...
+                    'EdgeColor', obj.SelectionColor, ...
+                    'LineWidth', max(1, obj.SelectionLineWidth - 1), ...
+                    'FaceColor', 'none', ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'Clipping', 'on', ...
+                    'Tag', 'CaseSelectionOverlay');
+                try
+                    uistack(rect, 'top');
+                catch
+                    % ignore stacking failures
+                end
+                handles(end+1, 1) = rect; %#ok<AGROW>
+                appliedIds(end+1, 1) = candidateId; %#ok<AGROW>
+            end
+            obj.MultiSelectionRects = handles;
+            obj.MultiSelectionIds = appliedIds;
+            success = success || ~isempty(appliedIds);
+        end
+
+        function [entry, axesHandle, selPos] = resolveSelectionGeometry(obj, caseId)
+            entry = [];
+            axesHandle = gobjects(0, 1);
+            selPos = [];
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+
+            [candidate, ~] = obj.findCaseById(caseId);
+            if isempty(candidate) || ~isfield(candidate, 'rectHandle') || ~isgraphics(candidate.rectHandle)
+                return;
+            end
+
+            axesHandle = ancestor(candidate.rectHandle, 'axes');
+            if isempty(axesHandle) || ~isgraphics(axesHandle)
+                axesHandle = gobjects(0, 1);
+                return;
+            end
+
+            pos = get(candidate.rectHandle, 'Position');
+            if numel(pos) ~= 4 || any(~isfinite(pos))
+                axesHandle = gobjects(0, 1);
+                return;
+            end
+
+            lockLinePts = 3;  % Match visualizeDailySchedule outline thickness
+            [growX, growY] = obj.pointsToDataOffsets(axesHandle, lockLinePts);
+            selPos = [pos(1)-growX, pos(2)-growY, pos(3)+2*growX, pos(4)+2*growY];
+            entry = candidate;
         end
 
         function hideSoftHighlight(obj)
@@ -817,6 +924,10 @@ classdef CaseDragController < handle
 
             app = obj.AppHandle;
             if isempty(app)
+                return;
+            end
+
+            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
                 return;
             end
 

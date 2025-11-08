@@ -90,6 +90,73 @@ classdef CaseStore < handle
             obj.setSelection(double.empty(1, 0));
         end
 
+        function ids = getSelectedCaseIds(obj)
+            ids = string.empty(0, 1);
+            if isempty(obj.CaseManager)
+                return;
+            end
+
+            selection = obj.Selection;
+            if isempty(selection)
+                return;
+            end
+
+            validRows = selection(selection >= 1 & selection <= obj.caseCount());
+            if isempty(validRows)
+                return;
+            end
+
+            ids = strings(numel(validRows), 1);
+            for i = 1:numel(validRows)
+                row = validRows(i);
+                caseObj = obj.CaseManager.getCase(row);
+                if isempty(caseObj)
+                    ids(i) = "";
+                else
+                    ids(i) = string(caseObj.CaseId);
+                end
+            end
+            ids = ids(strlength(ids) > 0);
+        end
+
+        function setSelectedByIds(obj, ids)
+            if isempty(ids)
+                obj.clearSelection();
+                return;
+            end
+
+            if isempty(obj.CaseManager)
+                return;
+            end
+
+            ids = string(ids(:));
+            ids = ids(strlength(ids) > 0);
+            if isempty(ids)
+                obj.clearSelection();
+                return;
+            end
+
+            selection = double.empty(1, 0);
+            for i = 1:numel(ids)
+                caseId = ids(i);
+                try
+                    [~, idx] = obj.CaseManager.findCaseById(char(caseId));
+                catch
+                    idx = [];
+                end
+                if isempty(idx) || idx < 1
+                    continue;
+                end
+                selection(end+1) = idx; %#ok<AGROW>
+            end
+
+            if isempty(selection)
+                obj.clearSelection();
+            else
+                obj.setSelection(selection);
+            end
+        end
+
         function setSortState(obj, sortState)
             if nargin < 2 || isempty(sortState)
                 newState = struct();

@@ -15,7 +15,7 @@ Principles
 Potential Side‑Effects & Mitigations
 - Re‑render wipes overlays: hook selection re‑highlight after each render (centralized path already used for single‑select; extend to multi).
 - Performance with many selected cases: overlays are lightweight; if selection size > 200, cap highlights or switch to a simple tint (future safeguard).
-- Time Control: selection operations must not interfere with NOW‑line, simulated statuses, or lock sets. Bulk remove must clean `LockedCaseIds` and `TimeControlLockedCaseIds`.
+- Time Control: selection operations m t interfere with NOW‑line, simulated statuses, or lock sets. Bulk remove must clean `LockedCaseIds` and `TimeControlLockedCaseIds`.
 - Archive vs active: selection list may contain archived cases. Bulk remove should purge both active (`Cases`) and archived (`CompletedCases`) lists.
 
 ---
@@ -51,7 +51,7 @@ Changes
 - `ProspectiveSchedulerApp`: add `SelectedCaseIds` (+ simple getters/setters), add `selectCases(app, ids, mode)` and `onSelectionChanged`.
 - `CaseStore`: expose `getSelectedCaseIds()` and `setSelectedByIds(ids)`; ensure the table allows multi‑select (if not already enabled).
 
-CLI validation
+CLI validation (to be run after Phase 1 implementation)
 ```bash
 matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app = conduction.launchSchedulerGUI(); \
@@ -73,6 +73,10 @@ Acceptance
 - `SelectedCaseIds` updates correctly; `SelectedCaseId` mirrors the last member.
 - No visuals yet.
 
+**Status 2025-11-07**  
+Completed the selection plumbing (`SelectedCaseIds`, public `selectCases`, CaseStore ID helpers, table multiselect).  
+Test: `matlab -batch "...app.selectCases(ids(1:2), 'replace'); ..."` ✅ (see Phase 1 CLI validation command).
+
 ---
 
 ## Phase 2 — Visual Multi‑Highlight in Schedule
@@ -84,7 +88,7 @@ Changes
 Notes
 - Use existing overlay style (expand by lock line thickness); ensure overlays re‑register after any re‑render.
 
-CLI validation
+CLI validation (to be run after Phase 2 implementation)
 ```bash
 matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app = conduction.launchSchedulerGUI(); \
@@ -105,6 +109,10 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 Acceptance
 - Each selected id shows an outline; only one grip (for `SelectedCaseId`).
 
+**Status 2025-11-07**  
+Multi-case overlays now render via `CaseDragController.showSelectionOverlayForIds`, with ScheduleRenderer reapplying highlights after each draw.  
+Test: `matlab -batch "...app.selectCases(ids, 'replace'); h = findobj(...'CaseSelectionOverlay'...)"` ✅ (observed ≥2 overlays, single grip).
+
 ---
 
 ## Phase 3 — Bulk Remove Selected (active + archived)
@@ -122,7 +130,7 @@ Changes
 - `CasesWindowController`: bind Remove button to call `removeSelectedCases`.
 - `DailySchedule`: already has `removeCasesByIds`; reuse.
 
-CLI validation
+CLI validation (to be run after Phase 3 implementation)
 ```bash
 matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app = conduction.launchSchedulerGUI(); \
@@ -146,7 +154,11 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 ```
 
 Acceptance
-- Active and archived selections are removed; locks and selection cleared; schedule re‑rendered.
+- Active and archived selections are removed; locks and selection cleared; schedule re-rendered.
+
+**Status 2025-11-07**  
+Implemented `app.removeSelectedCases` orchestrator (batch removal, archive purge, lock cleanup, selection reset) plus `CaseManager.removeCompletedCasesByIds`.  
+Test: `matlab -batch "...app.selectCases(ids,'replace'); app.removeSelectedCases(false); ..."` ✅ (active+archived purged, locks cleared).
 
 ---
 
@@ -161,7 +173,7 @@ Behavior
 Changes
 - `removeSelectedCases` calls `ScheduleRenderer.updateCaseStatusesByTime` after removal when `IsTimeControlActive` to update `SimulatedSchedule` and keep locks consistent.
 
-CLI validation
+CLI validation (to be run after Phase 4 implementation)
 ```bash
 matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app = conduction.launchSchedulerGUI(); \
@@ -183,6 +195,10 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 Acceptance
 - No exceptions; removed ids absent from both views; locks & selection cleared.
 
+**Status 2025-11-07**  
+Time-control path now refreshes simulated schedules via `updateCaseStatusesByTime` after removals (also rebuilds NOW-line locks).  
+Test: `matlab -batch \"...app.IsTimeControlActive = true; ... app.removeSelectedCases(false); ...\"` ✅ (ids gone from optimized+simulated arrays).
+
 ---
 
 ## Phase 5 — Schedule Click Integration (shift‑click add)
@@ -195,7 +211,7 @@ Changes
 - `ScheduleRenderer.invokeCaseBlockClick`: detect `SelectionType == 'extend'` and use `app.selectCases(caseId, 'toggle')`; otherwise `replace`. Keep double‑click (SelectionType== 'open') behavior intact.
 - `ProspectiveSchedulerApp.selectCases`: support `toggle` mode (add if absent, remove if present).
 
-CLI validation (headless substitute)
+CLI validation (headless substitute; run after Phase 5 implementation)
 ```bash
 matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app = conduction.launchSchedulerGUI(); \
@@ -211,6 +227,30 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 
 Acceptance
 - Toggle logic works; later the schedule click handler will call into this.
+
+**Status 2025-11-07**  
+Schedule clicks now funnel through `selectCases` (shift-click => toggle, default => replace) via `ScheduleRenderer.invokeCaseBlockClick` prefixes.  
+Test: `matlab -batch \"...app.selectCases(ids(2),'toggle'); ...\"` ✅.
+
+### Multi-select Drag Guard (Nov 2025)
+- Drag and resize interactions are disabled while multiple cases are selected; selection overlays remain for bulk actions and resize grips stay hidden until the selection narrows to a single case.
+- Attempting to drag or resize while multi-select is active surfaces the existing drag warning dialog to explain why the action is blocked.
+
+CLI validation
+```bash
+matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
+  app = conduction.launchSchedulerGUI(); \
+  for i=1:2, app.CaseManager.addCase(sprintf('Dr %d',i),'Proc',30); end; \
+  app.OptimizationController.executeOptimization(app); \
+  ids = strings(2,1); for i=1:2, ids(i)=app.CaseManager.getCase(i).CaseId; end; \
+  app.selectCases(ids,'replace'); \
+  assert(~app.CaseDragController.canInteractWithCase(ids(1))); \
+  assert(isempty(findobj(app.ScheduleAxes,'Tag','CaseResizeHandle','Visible','on'))); \
+  app.selectCases(ids(1),'replace'); \
+  assert(app.CaseDragController.canInteractWithCase(ids(1))); \
+  assert(~isempty(findobj(app.ScheduleAxes,'Tag','CaseResizeHandle','Visible','on'))); \
+  delete(app);"
+```
 
 ---
 
@@ -238,3 +278,21 @@ Acceptance
 - Selection state is not serialized; session files unaffected.
 - All guards default to single‑select behavior until multi‑select is wired end‑to‑end.
 
+---
+
+## Test Runner Summary (what I will run after each phase)
+
+- Phase 1
+  - matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); app = conduction.launchSchedulerGUI(); app.CaseManager.addCase('Dr A','Proc X',60); app.CaseManager.addCase('Dr B','Proc Y',45); app.CaseManager.addCase('Dr C','Proc Z',30); ids = strings(3,1); for i=1:3, ids(i)=app.CaseManager.getCase(i).CaseId; end; app.selectCases(ids(1:2), 'replace'); assert(numel(app.SelectedCaseIds)==2 && all(app.SelectedCaseIds==ids(1:2))); app.selectCases(ids(3), 'add'); assert(numel(app.SelectedCaseIds)==3); delete(app);"
+
+- Phase 2
+  - matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); app = conduction.launchSchedulerGUI(); for i=1:2, app.CaseManager.addCase(sprintf('Dr %d',i),'Proc',30); end; app.OptimizationController.executeOptimization(app); ids = strings(2,1); for i=1:2, ids(i)=app.CaseManager.getCase(i).CaseId; end; app.selectCases(ids, 'replace'); h = findobj(app.ScheduleAxes,'Tag','CaseSelectionOverlay'); assert(numel(h)>=2, 'Expected >=2 selection overlays'); g = findobj(app.ScheduleAxes,'Tag','CaseResizeHandle'); assert(numel(g)<=1, 'Expected <=1 resize grip'); delete(app);"
+
+- Phase 3
+  - matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); app = conduction.launchSchedulerGUI(); for i=1:3, app.CaseManager.addCase(sprintf('Dr %d',i),'Proc',30); end; arcId = app.CaseManager.getCase(1).CaseId; [~,idx]=app.CaseManager.findCaseById(arcId); app.CaseManager.setCaseStatus(idx,'completed'); ids = string.empty(0,1); for i=2:3, ids(end+1)=app.CaseManager.getCase(i).CaseId; end; ids(end+1)=arcId; app.selectCases(ids,'replace'); app.removeSelectedCases(); actLeft = app.CaseManager.CaseCount; assert(actLeft==1,'Expected 1 active case remaining'); archLeft = numel(app.CaseManager.getCompletedCases()); assert(archLeft==0,'Expected archived case purged'); assert(~any(ismember(app.LockedCaseIds, ids))); delete(app);"
+
+- Phase 4
+  - matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); app = conduction.launchSchedulerGUI(); for i=1:3, app.CaseManager.addCase(sprintf('Dr %d',i),'Proc',30); end; app.OptimizationController.executeOptimization(app); app.IsTimeControlActive = true; app.CaseManager.setCurrentTime(9*60); ids = string.empty(0,1); for i=1:2, ids(end+1)=app.CaseManager.getCase(i).CaseId; end; app.selectCases(ids,'replace'); app.removeSelectedCases(); optCases = app.OptimizedSchedule.cases(); simCases = app.SimulatedSchedule.cases(); oc = {}; if ~isempty(optCases), oc = {optCases.caseID}; end; sc = {}; if ~isempty(simCases), sc = {simCases.caseID}; end; assert(~any(ismember(ids,string(oc)))) && ~any(ismember(ids,string(sc))); delete(app);"
+
+- Phase 5
+  - matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); app = conduction.launchSchedulerGUI(); for i=1:2, app.CaseManager.addCase(sprintf('Dr %d',i),'Proc',30); end; ids = strings(2,1); for i=1:2, ids(i)=app.CaseManager.getCase(i).CaseId; end; app.selectCases(ids(1),'replace'); app.selectCases(ids(2),'toggle'); assert(all(ismember(ids, app.SelectedCaseIds))); app.selectCases(ids(2),'toggle'); assert(~ismember(ids(2), app.SelectedCaseIds)); delete(app);"

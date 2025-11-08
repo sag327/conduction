@@ -151,6 +151,38 @@ classdef CaseManager < handle
             end
         end
 
+        function removedIds = removeCompletedCasesByIds(obj, caseIds)
+            arguments
+                obj
+                caseIds (:,1) string
+            end
+
+            removedIds = string.empty(0, 1);
+            if isempty(caseIds) || isempty(obj.CompletedCases)
+                return;
+            end
+
+            caseIds = string(caseIds(:));
+            caseIds = caseIds(strlength(caseIds) > 0);
+            if isempty(caseIds)
+                return;
+            end
+
+            caseIds = unique(caseIds, 'stable');
+            for idx = numel(obj.CompletedCases):-1:1
+                currentId = string(obj.CompletedCases(idx).CaseId);
+                if any(caseIds == currentId)
+                    removedIds(end+1, 1) = currentId; %#ok<AGROW>
+                    obj.CompletedCases(idx) = [];
+                end
+            end
+
+            if ~isempty(removedIds)
+                removedIds = flipud(removedIds);
+                obj.notifyChange();
+            end
+        end
+
         function caseObj = getCase(obj, index)
             arguments
                 obj

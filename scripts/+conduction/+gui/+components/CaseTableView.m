@@ -130,6 +130,7 @@ classdef CaseTableView < handle
             obj.Table.ColumnWidth = {45, 50, 110, 150, 80, 110, 90, 140, 90};
             obj.Table.RowName = {};
             obj.Table.SelectionType = 'row';
+            obj.Table.Multiselect = 'on';
             obj.Table.SelectionChangedFcn = @(src, event) obj.onTableSelectionChanged(event);
 
             rowStyle = uistyle('HorizontalAlignment', 'left');
