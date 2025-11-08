@@ -258,10 +258,6 @@ classdef ScheduleRenderer < handle
             if ~isgraphics(rectHandle)
                 return;
             end
-            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
-                obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
-                return;
-            end
             caseEntry = struct();
             if ~isempty(app.CaseDragController)
                 [resolvedEntry, ~] = app.CaseDragController.findCaseByHandle(rectHandle);
