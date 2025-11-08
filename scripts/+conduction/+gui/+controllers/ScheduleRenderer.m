@@ -387,7 +387,7 @@ classdef ScheduleRenderer < handle
             obj.clearTransientMouseHandlers(app);
         end
 
-        function clearTransientMouseHandlers(~, app)
+        function clearTransientMouseHandlers(obj, app)
             if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
                 return;
             end
