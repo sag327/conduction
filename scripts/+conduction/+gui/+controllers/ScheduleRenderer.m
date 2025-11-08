@@ -278,14 +278,25 @@ classdef ScheduleRenderer < handle
             obj.startDragCase(app, rectHandle, caseEntry);
         end
 
-        function setupMultiSelectDragGuard(obj, app)
+        function setupMultiSelectDragGuard(obj, app, rectHandle)
             if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
                 return;
             end
             fig = app.UIFigure;
+            % Record starting point in axes data units and the target handle
+            startPt = [NaN NaN];
+            try
+                cp = get(app.ScheduleAxes, 'CurrentPoint');
+                if ~isempty(cp)
+                    startPt = cp(1,1:2);
+                end
+            catch
+            end
+            guard = struct('startPoint', startPt, 'rectHandle', rectHandle, 'moved', false);
+            fig.UserData.msSelectGuard = guard;
             % Install transient handlers; they will clear themselves on first motion/up
             fig.WindowButtonMotionFcn = @(~,~) obj.guardMultiSelectDragAttempt(app);
-            fig.WindowButtonUpFcn = @(~,~) obj.clearTransientMouseHandlers(app);
+            fig.WindowButtonUpFcn = @(~,~) obj.finalizeMultiSelectClick(app);
         end
 
         function guardMultiSelectDragAttempt(obj, app)
@@ -294,7 +305,49 @@ classdef ScheduleRenderer < handle
             end
             % Only warn if multi-select still active at the time of motion
             if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
-                obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
+                try
+                    guard = app.UIFigure.UserData.msSelectGuard;
+                catch
+                    guard = struct();
+                end
+                moved = true;
+                try
+                    cp = get(app.ScheduleAxes, 'CurrentPoint');
+                    cp = cp(1,1:2);
+                    if isfield(guard, 'startPoint') && numel(guard.startPoint) == 2
+                        dx = abs(cp(1) - guard.startPoint(1));
+                        dy = abs(cp(2) - guard.startPoint(2));
+                        % Any detectable movement counts as a drag attempt
+                        moved = isfinite(dx) && isfinite(dy) && (dx > 0 || dy > 0);
+                    end
+                catch
+                    % Default: consider as moved
+                    moved = true;
+                end
+
+                if moved
+                    % Mark and warn once
+                    guard.moved = true;
+                    app.UIFigure.UserData.msSelectGuard = guard;
+                    obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
+                end
+            end
+            obj.clearTransientMouseHandlers(app);
+        end
+
+        function finalizeMultiSelectClick(obj, app)
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            % On mouse up with no motion, perform the selection click now
+            try
+                guard = app.UIFigure.UserData.msSelectGuard;
+            catch
+                guard = struct();
+            end
+            if isfield(guard, 'moved') && ~guard.moved && isfield(guard, 'rectHandle') && isgraphics(guard.rectHandle)
+                % Still OK to perform selection click
+                obj.invokeCaseBlockClick(app, guard.rectHandle);
             end
             obj.clearTransientMouseHandlers(app);
         end
@@ -305,6 +358,11 @@ classdef ScheduleRenderer < handle
             end
             app.UIFigure.WindowButtonMotionFcn = [];
             app.UIFigure.WindowButtonUpFcn = [];
+            % Clear guard
+            try
+                app.UIFigure.UserData.msSelectGuard = [];
+            catch
+            end
         end
 
         function startDragCase(obj, app, rectHandle, caseEntry)
