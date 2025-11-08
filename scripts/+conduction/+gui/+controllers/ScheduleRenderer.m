@@ -291,11 +291,39 @@ classdef ScheduleRenderer < handle
                 end
             catch
             end
-            guard = struct('startPoint', startPt, 'rectHandle', rectHandle, 'moved', false);
+            % Compute small pixel thresholds in data units (≈3px)
+            xThresh = 0; yThresh = 0;
+            try
+                if ~isempty(app.CaseDragController)
+                    [xThresh, yThresh] = app.CaseDragController.pointsToDataOffsets(app.ScheduleAxes, 3);
+                else
+                    oldUnits = app.ScheduleAxes.Units; app.ScheduleAxes.Units = 'pixels';
+                    pos = app.ScheduleAxes.Position; app.ScheduleAxes.Units = oldUnits;
+                    xl = xlim(app.ScheduleAxes); yl = ylim(app.ScheduleAxes);
+                    xThresh = max( (3/max(1,pos(3))) * abs(diff(xl)), eps );
+                    yThresh = max( (3/max(1,pos(4))) * abs(diff(yl)), eps );
+                end
+            catch
+                xThresh = 0; yThresh = 0;
+            end
+
+            % Suspend hover watcher to avoid handler contention
+            hoverSuspended = false;
+            try
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.disableSelectionHoverWatcher();
+                    hoverSuspended = true;
+                end
+            catch
+            end
+
+            guard = struct('startPoint', startPt, 'rectHandle', rectHandle, 'moved', false, ...
+                           'xThresh', xThresh, 'yThresh', yThresh, 'hoverSuspended', hoverSuspended);
             fig.UserData.msSelectGuard = guard;
             % Install transient handlers; they will clear themselves on first motion/up
             fig.WindowButtonMotionFcn = @(~,~) obj.guardMultiSelectDragAttempt(app);
             fig.WindowButtonUpFcn = @(~,~) obj.finalizeMultiSelectClick(app);
+            obj.debugGesture(app, 'GUARD set start=[%.3f,%.3f] thr=[%.4f,%.4f]', startPt(1), startPt(2), xThresh, yThresh);
         end
 
         function guardMultiSelectDragAttempt(obj, app)
@@ -309,15 +337,17 @@ classdef ScheduleRenderer < handle
                 catch
                     guard = struct();
                 end
-                moved = true;
+                moved = true; dx=NaN; dy=NaN;
                 try
                     cp = get(app.ScheduleAxes, 'CurrentPoint');
                     cp = cp(1,1:2);
                     if isfield(guard, 'startPoint') && numel(guard.startPoint) == 2
                         dx = abs(cp(1) - guard.startPoint(1));
                         dy = abs(cp(2) - guard.startPoint(2));
-                        % Any detectable movement counts as a drag attempt
-                        moved = isfinite(dx) && isfinite(dy) && (dx > 0 || dy > 0);
+                        xThresh = 0; yThresh = 0;
+                        if isfield(guard, 'xThresh'), xThresh = guard.xThresh; end
+                        if isfield(guard, 'yThresh'), yThresh = guard.yThresh; end
+                        moved = isfinite(dx) && isfinite(dy) && (dx > xThresh || dy > yThresh);
                     end
                 catch
                     % Default: consider as moved
@@ -328,7 +358,10 @@ classdef ScheduleRenderer < handle
                     % Mark and warn once
                     guard.moved = true;
                     app.UIFigure.UserData.msSelectGuard = guard;
+                    obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=1 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
                     obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
+                else
+                    obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=0 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
                 end
             end
             obj.clearTransientMouseHandlers(app);
@@ -346,7 +379,10 @@ classdef ScheduleRenderer < handle
             end
             if isfield(guard, 'moved') && ~guard.moved && isfield(guard, 'rectHandle') && isgraphics(guard.rectHandle)
                 % Still OK to perform selection click
+                obj.debugGesture(app, 'UP moved=0 finalizeClick=1');
                 obj.invokeCaseBlockClick(app, guard.rectHandle);
+            else
+                obj.debugGesture(app, 'UP moved=1 finalizeClick=0');
             end
             obj.clearTransientMouseHandlers(app);
         end
@@ -359,7 +395,25 @@ classdef ScheduleRenderer < handle
             app.UIFigure.WindowButtonUpFcn = [];
             % Clear guard
             try
+                guard = app.UIFigure.UserData.msSelectGuard;
                 app.UIFigure.UserData.msSelectGuard = [];
+                if isfield(guard,'hoverSuspended') && guard.hoverSuspended && ~isempty(app.CaseDragController)
+                    try
+                        app.CaseDragController.enableSelectionHoverWatcher();
+                    catch
+                    end
+                end
+            catch
+            end
+            obj.debugGesture(app, 'CLEAR handlers');
+        end
+
+        function debugGesture(~, app, msg, varargin)
+            try
+                if isprop(app,'DebugGestureLogging') && app.DebugGestureLogging
+                    ts = char(string(datetime('now','Format','HH:mm:ss.SSS')));
+                    fprintf('[%s] %s\n', ts, sprintf(msg, varargin{:}));
+                end
             catch
             end
         end
