@@ -306,7 +306,17 @@ classdef ScheduleRenderer < handle
                 dragController.showSoftHighlight(app.ScheduleAxes, rectHandle);
             end
 
-            if app.IsOptimizationRunning || app.IsTimeControlActive
+            allowTimeControlEdits = false;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            timeControlActive = isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive;
+
+            if app.IsOptimizationRunning || (timeControlActive && ~allowTimeControlEdits)
                 if ~isempty(dragController)
                     dragController.hideSoftHighlight();
                 end
@@ -378,6 +388,8 @@ classdef ScheduleRenderer < handle
             if ~isempty(dragController)
                 dragController.setActiveDrag(drag);
             end
+
+            obj.pauseNowTimerForEdit(app);
 
             app.UIFigure.Pointer = 'fleur';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateDragCase(app);
@@ -454,6 +466,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.WindowButtonUpFcn = [];
             app.UIFigure.Pointer = 'arrow';
             dragController.clearActiveDrag();
+            obj.resumeNowTimerAfterEdit(app);
             dragController.enableSelectionHoverWatcher();
 
             if ~isgraphics(drag.rectHandle)
@@ -543,7 +556,17 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            if app.IsOptimizationRunning || app.IsTimeControlActive
+            allowTimeControlEdits = false;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            timeControlActive = isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive;
+
+            if app.IsOptimizationRunning || (timeControlActive && ~allowTimeControlEdits)
                 obj.restoreSelectionOverlay(app);
                 return;
             end
@@ -595,6 +618,8 @@ classdef ScheduleRenderer < handle
             dragController.setActiveResize(resize);
             dragController.clearActiveDrag();
             dragController.markMotionUpdate();
+
+            obj.pauseNowTimerForEdit(app);
 
             app.UIFigure.Pointer = 'crosshair';
             app.UIFigure.WindowButtonMotionFcn = @(~, ~) obj.updateResizeCase(app);
@@ -677,6 +702,9 @@ classdef ScheduleRenderer < handle
 
             dragController.hideSoftHighlight();
             dragController.clearActiveResize();
+            if resizeWasActive
+                obj.resumeNowTimerAfterEdit(app);
+            end
 
             app.UIFigure.WindowButtonMotionFcn = [];
             app.UIFigure.WindowButtonUpFcn = [];
@@ -1375,10 +1403,14 @@ classdef ScheduleRenderer < handle
             % Detect and cache overlapping cases after the resize
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
-            if ~ismember(caseId, app.LockedCaseIds)
+            if obj.shouldAddPersistentLock(app) && ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
+
+            obj.triggerTimeControlFinalize(app, caseId, struct( ...
+                'action', 'resize', ...
+                'newProcEndMinutes', newProcEndMinutes));
 
             % DURATION-EDITING: Update the ProspectiveCase object's EstimatedDurationMinutes
             % so the case table reflects the new duration
@@ -1398,6 +1430,7 @@ classdef ScheduleRenderer < handle
                     app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                 app.DrawerController.populateDrawer(app, caseId);
             end
+
         end
 
         function updateCaseSetupDuration(obj, app, caseId, newSetupMinutes)
@@ -1606,10 +1639,15 @@ classdef ScheduleRenderer < handle
             % Detect and cache overlapping cases after the move
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
-            if ~ismember(caseId, app.LockedCaseIds)
+            if obj.shouldAddPersistentLock(app) && ~ismember(caseId, app.LockedCaseIds)
                 app.LockedCaseIds(end+1) = caseId;
                 app.LockedCaseIds = unique(app.LockedCaseIds, 'stable');
             end
+
+            obj.triggerTimeControlFinalize(app, caseId, struct( ...
+                'action', 'move', ...
+                'targetLabIndex', targetLabIndex, ...
+                'targetStartMinutes', newSetupStartMinutes));
         end
 
         function [sourceLabIdx, caseIdx, caseStruct] = findCaseInAssignments(obj, assignments, caseId)
@@ -1719,7 +1757,17 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            if app.IsOptimizationRunning || app.IsTimeControlActive
+            allowTimeControlEdits = false;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            timeControlActive = isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive;
+
+            if app.IsOptimizationRunning || (timeControlActive && ~allowTimeControlEdits)
                 return;
             end
 
@@ -1728,7 +1776,106 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            if timeControlActive && allowTimeControlEdits
+                tf = true;
+                return;
+            end
+
             tf = caseObj.isPending();
+        end
+
+        function triggerTimeControlFinalize(obj, app, caseId, context)
+            if nargin < 4
+                context = struct();
+            end
+
+            controller = obj.resolveTimeControlController(app);
+            if isempty(controller)
+                return;
+            end
+
+            try
+                controller.finalizePostEdit(app, caseId, context);
+            catch ME
+                warning('ScheduleRenderer:TimeControlFinalizeFailed', ...
+                    'Failed to finalize Time Control edit for case %s: %s', ...
+                    char(caseId), ME.message);
+            end
+        end
+
+        function tf = shouldAddPersistentLock(~, app)
+            tf = true;
+            if isempty(app)
+                return;
+            end
+
+            timeControlActive = isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive;
+            allowTimeControlEdits = true;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+
+            if timeControlActive && allowTimeControlEdits
+                tf = false;
+            end
+        end
+
+        function pauseNowTimerForEdit(obj, app)
+            controller = obj.resolveTimeControlController(app);
+            if isempty(controller)
+                return;
+            end
+            try
+                controller.pauseNowTimer(app);
+            catch ME
+                warning('ScheduleRenderer:PauseNowTimerFailed', ...
+                    'Failed to pause NOW timer: %s', ME.message);
+            end
+        end
+
+        function resumeNowTimerAfterEdit(obj, app)
+            controller = obj.resolveTimeControlController(app);
+            if isempty(controller)
+                return;
+            end
+            try
+                controller.resumeNowTimer(app);
+            catch ME
+                warning('ScheduleRenderer:ResumeNowTimerFailed', ...
+                    'Failed to resume NOW timer: %s', ME.message);
+            end
+        end
+
+        function controller = resolveTimeControlController(~, app)
+            controller = [];
+            if isempty(app) || ~isprop(app, 'IsTimeControlActive') || ~app.IsTimeControlActive
+                return;
+            end
+
+            allowTimeControlEdits = true;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            if ~allowTimeControlEdits
+                return;
+            end
+
+            if ~isprop(app, 'TimeControlEditController') || isempty(app.TimeControlEditController)
+                return;
+            end
+
+            candidate = app.TimeControlEditController;
+            if isa(candidate, 'handle') && isvalid(candidate)
+                controller = candidate;
+            end
         end
 
         function invokeCaseBlockClick(~, app, rectHandle)

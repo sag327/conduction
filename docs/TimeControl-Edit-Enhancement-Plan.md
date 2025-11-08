@@ -48,6 +48,13 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 ```
 - Expected: methods return without early abort; no errors thrown. (Functional correctness validated in later phases.)
 
+### Phase 1 Status — 2025-11-07
+
+- Added `ProspectiveSchedulerApp.AllowEditInTimeControl` (default `true`) so we can toggle this behavior if needed.
+- Relaxed the drag/resize gating in `CaseDragController.canInteractWithCase`, `ScheduleRenderer.startDragCase`, `onCaseResizeMouseDown`, and `isCaseBlockDraggable` so edits proceed whenever Time Control is ON and the new flag remains enabled.
+- `IsOptimizationRunning` still blocks edits, matching prior UX, and the legacy behavior can be restored instantly by flipping the new flag.
+- Verified the gating behavior in MATLAB CLI (`matlab -batch`) by asserting `CaseDragController.canInteractWithCase` returns true when Time Control edits are enabled and false when toggled off (output: `allow=1, block=0`).
+
 ## Phase 2 — Post-Edit Status Recompute (NOW)
 
 Scope
@@ -79,6 +86,14 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 ```
 - Expected: status becomes `in_progress` and `TimeControlLockedCaseIds` includes `caseId`.
 
+### Phase 2 Status — 2025-11-07
+
+- Added `scripts/+conduction/+gui/+controllers/TimeControlEditController.m` to own the simulated-schedule refresh, lock reconciliation, and future timer hooks. `ProspectiveSchedulerApp` now instantiates/disposes this controller alongside the others.
+- `ScheduleRenderer.applyCaseMove` / `applyCaseResize` call into the new controller whenever Time Control edits are permitted so the user immediately sees their adjustments reflected (and the lock set stays in sync). A lightweight helper keeps the guard logic in one place.
+- The resize flow now finalizes before triggering `markOptimizationDirty`, ensuring the first re-render after a drag uses the refreshed simulated schedule instead of snapping back.
+- `CaseDragController.showSelectionOverlay` now shows resize grips while Time Control is active whenever `AllowEditInTimeControl` is true, so duration edits are no longer silently blocked.
+- Validation: `matlab -batch "cd('<repo_root>'); run('tests/matlab/manual_verify_time_control_phase2.m');"` manipulates the optimized schedule directly, calls `TimeControlEditController.finalizePostEdit`, and asserts that the simulated schedule tracks both move and resize scenarios (`Time control phase 2 verification passed.`).
+
 ## Phase 3 — Ignore Locks During Edit; Optimizer Resolves Later
 
 Scope
@@ -102,6 +117,12 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   delete(app);"
 ```
 - Expected: edit succeeds; no post-edit overlap validation runs.
+
+### Phase 3 Status — 2025-11-07
+
+- `ScheduleRenderer.applyCaseMove`/`applyCaseResize` now call a shared `shouldAddPersistentLock` helper before touching `app.LockedCaseIds`. When Time Control edits are allowed, the helper returns false so manual adjustments no longer create permanent locks; the optimizer (or the simulated lock set) can reconcile overlaps later.
+- Added a regression smoke test (`tests/matlab/manual_verify_time_control_phase2.m`) that locks a case, enables Time Control, and exercises resize edits to confirm the simulated schedule updates immediately while `LockedCaseIds` stays unchanged. Run with `matlab -batch "cd('<repo_root>'); run('tests/matlab/manual_verify_time_control_phase2.m');"`.
+- Confirmed via the same test that `CaseDragController.canInteractWithCase` reports true for locked cases while Time Control is active, so existing user/time-control locks no longer block drag/resize gestures.
 
 ## Phase 4 — Simulated “Completed” Still Editable; True Archive Not
 
@@ -131,6 +152,12 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
 ```
 - Expected: first edit succeeds; after archiving, edit returns false/no-op (case no longer active).
 
+### Phase 4 Status — 2025-11-07
+
+- `CaseDragController.canInteractWithCase` now returns `false` when a case ID is absent from the active CaseManager set, so truly archived (completed) cases can no longer be dragged or resized even if lingering visual elements remain.
+- `TimeControlEditController.finalizePostEdit` checks for an active case before recomputing statuses, allowing it to no-op safely when a case was archived mid-session.
+- Regression test `tests/matlab/manual_verify_time_control_phase2.m` now exercises three stages: (A) direct assignment tweaks keep the simulated schedule in sync, (B) locked cases remain editable without adding persistent locks, and (C) archiving the case causes `CaseDragController` to reject further edits. Run via `matlab -batch "cd('<repo_root>'); run('tests/matlab/manual_verify_time_control_phase2.m');"`.
+
 ## Phase 5 — Timer Coordination & Stability
 
 Scope
@@ -149,6 +176,11 @@ matlab -batch "cd('<repo_root>'); addpath(genpath('scripts')); \
   app.CaseManager.setCurrentTime(9*60+20); updated = app.ScheduleRenderer.updateCaseStatusesByTime(app, 9*60+20); \
   delete(app);"
 ```
+
+### Phase 5 Status — 2025-11-07
+
+- Added small helpers in `ScheduleRenderer` to pause/resume the Time Control “NOW” timer through `TimeControlEditController` whenever a drag/resize session begins or ends. The timer now stays paused during the interaction (preventing mid-edit recomputes) and resumes automatically even if the drag is cancelled.
+- `TimeControlEditController.pauseNowTimer/resumeNowTimer` were already delegating into `CaseStatusController`; the renderer now uses them to keep the timer logic centralized, and the existing manual smoke test still passes after the change (`matlab -batch "cd('<repo_root>'); run('tests/matlab/manual_verify_time_control_phase2.m');"`).
 
 ---
 

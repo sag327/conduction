@@ -294,8 +294,17 @@ classdef CaseDragController < handle
             end
 
             % Create/update resize grip when case is selectable
-            % Allow resizing even when the case is locked; only block during time control
-            canResize = ~timeControlActive;
+            % Allow resizing even when the case is locked; only block when edits are disallowed
+            allowTimeControlEdits = true;
+            app = obj.AppHandle;
+            if timeControlActive && ~isempty(app) && isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            canResize = ~(timeControlActive && ~allowTimeControlEdits);
             if ~canResize
                 if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
                     set(obj.SelectionGrip, 'Visible', 'off');
@@ -814,7 +823,17 @@ classdef CaseDragController < handle
             if isprop(app, 'IsOptimizationRunning') && app.IsOptimizationRunning
                 return;
             end
-            if isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive
+
+            isTimeControlActive = isprop(app, 'IsTimeControlActive') && app.IsTimeControlActive;
+            allowTimeControlEdits = false;
+            if isprop(app, 'AllowEditInTimeControl')
+                try
+                    allowTimeControlEdits = logical(app.AllowEditInTimeControl);
+                catch
+                    allowTimeControlEdits = false;
+                end
+            end
+            if isTimeControlActive && ~allowTimeControlEdits
                 return;
             end
 
@@ -831,6 +850,10 @@ classdef CaseDragController < handle
             end
 
             if isempty(caseObj)
+                return;
+            end
+
+            if isTimeControlActive && allowTimeControlEdits
                 tf = true;
                 return;
             end

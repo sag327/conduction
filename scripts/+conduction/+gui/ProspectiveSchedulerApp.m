@@ -482,6 +482,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SessionController conduction.gui.controllers.SessionController
         TestingModeController conduction.gui.controllers.TestingModeController
         CaseStatusController conduction.gui.controllers.CaseStatusController  % REALTIME-SCHEDULING
+        TimeControlEditController conduction.gui.controllers.TimeControlEditController
         CaseDragController conduction.gui.controllers.CaseDragController
         ResourceFormStateManager conduction.gui.utils.FormStateManager  % Form state manager for Resources tab
         ResourceStoreListener event.listener = event.listener.empty
@@ -504,6 +505,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
+        AllowEditInTimeControl logical = true  % REALTIME-SCHEDULING: Gate to allow edits while time control is active
         SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
         TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
         TimeControlLockedCaseIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks applied by time control mode
@@ -955,6 +957,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.SessionController = conduction.gui.controllers.SessionController();
             app.TestingModeController = conduction.gui.controllers.TestingModeController();
             app.CaseStatusController = conduction.gui.controllers.CaseStatusController();  % REALTIME-SCHEDULING
+            app.TimeControlEditController = conduction.gui.controllers.TimeControlEditController();
             app.CaseDragController = conduction.gui.controllers.CaseDragController();
 
             % Initialize app state
@@ -1134,6 +1137,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             if ~isempty(app.CaseDragController) && isvalid(app.CaseDragController)
                 delete(app.CaseDragController);
+            end
+            if ~isempty(app.TimeControlEditController) && isvalid(app.TimeControlEditController)
+                delete(app.TimeControlEditController);
             end
 
             % Delete CaseStore (holds reference to CaseManager)
