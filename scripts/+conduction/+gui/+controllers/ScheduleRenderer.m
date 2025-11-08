@@ -317,8 +317,15 @@ classdef ScheduleRenderer < handle
             catch
             end
 
+            startTs = NaN;
+            try
+                startTs = posixtime(datetime('now'));
+            catch
+                startTs = NaN;
+            end
             guard = struct('startPoint', startPt, 'rectHandle', rectHandle, 'moved', false, ...
-                           'xThresh', xThresh, 'yThresh', yThresh, 'hoverSuspended', hoverSuspended);
+                           'xThresh', xThresh, 'yThresh', yThresh, 'hoverSuspended', hoverSuspended, ...
+                           'startTs', startTs);
             fig.UserData.msSelectGuard = guard;
             % Install transient handlers; they will clear themselves on first motion/up
             fig.WindowButtonMotionFcn = @(~,~) obj.guardMultiSelectDragAttempt(app);
@@ -359,6 +366,21 @@ classdef ScheduleRenderer < handle
                     guard.moved = true;
                     app.UIFigure.UserData.msSelectGuard = guard;
                     obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=1 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
+                    % Detailed WARN log with elapsed time and target case id
+                    elapsed = NaN; caseIdStr = "";
+                    try
+                        if isfield(guard,'startTs'), elapsed = posixtime(datetime('now')) - guard.startTs; end
+                    catch
+                        elapsed = NaN;
+                    end
+                    try
+                        ud = get(guard.rectHandle, 'UserData');
+                        if isstruct(ud) && isfield(ud,'caseId')
+                            caseIdStr = string(ud.caseId);
+                        end
+                    catch
+                    end
+                    obj.debugGesture(app, 'WARN fired t=%.3fs caseId=%s selCount=%d', elapsed, caseIdStr, numel(app.SelectedCaseIds));
                     obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
                 else
                     obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=0 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
