@@ -317,20 +317,13 @@ classdef ScheduleRenderer < handle
             catch
             end
 
-            startTs = NaN;
-            try
-                startTs = posixtime(datetime('now'));
-            catch
-                startTs = NaN;
-            end
             guard = struct('startPoint', startPt, 'rectHandle', rectHandle, 'moved', false, ...
-                           'xThresh', xThresh, 'yThresh', yThresh, 'hoverSuspended', hoverSuspended, ...
-                           'startTs', startTs);
+                           'xThresh', xThresh, 'yThresh', yThresh, 'hoverSuspended', hoverSuspended);
             fig.UserData.msSelectGuard = guard;
             % Install transient handlers; they will clear themselves on first motion/up
             fig.WindowButtonMotionFcn = @(~,~) obj.guardMultiSelectDragAttempt(app);
             fig.WindowButtonUpFcn = @(~,~) obj.finalizeMultiSelectClick(app);
-            obj.debugGesture(app, 'GUARD set start=[%.3f,%.3f] thr=[%.4f,%.4f]', startPt(1), startPt(2), xThresh, yThresh);
+            % Guard installed with thresholds; wait for motion or mouse-up
         end
 
         function guardMultiSelectDragAttempt(obj, app)
@@ -365,27 +358,9 @@ classdef ScheduleRenderer < handle
                     % Mark and warn once
                     guard.moved = true;
                     app.UIFigure.UserData.msSelectGuard = guard;
-                    obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=1 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
-                    % Detailed WARN log with elapsed time and target case id
-                    elapsed = NaN; caseIdStr = "";
-                    try
-                        if isfield(guard,'startTs'), elapsed = posixtime(datetime('now')) - guard.startTs; end
-                    catch
-                        elapsed = NaN;
-                    end
-                    try
-                        ud = get(guard.rectHandle, 'UserData');
-                        if isstruct(ud) && isfield(ud,'caseId')
-                            caseIdStr = string(ud.caseId);
-                        end
-                    catch
-                    end
-                    obj.debugGesture(app, 'WARN fired t=%.3fs caseId=%s selCount=%d', elapsed, caseIdStr, numel(app.SelectedCaseIds));
                     obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
                     % Clear handlers now that we've handled a true drag attempt
                     obj.clearTransientMouseHandlers(app);
-                else
-                    obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=0 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
                 end
                 return; % Keep handlers active until moved or mouse-up
             end
@@ -405,10 +380,7 @@ classdef ScheduleRenderer < handle
             end
             if isfield(guard, 'moved') && ~guard.moved && isfield(guard, 'rectHandle') && isgraphics(guard.rectHandle)
                 % Still OK to perform selection click
-                obj.debugGesture(app, 'UP moved=0 finalizeClick=1');
                 obj.invokeCaseBlockClick(app, guard.rectHandle);
-            else
-                obj.debugGesture(app, 'UP moved=1 finalizeClick=0');
             end
             obj.clearTransientMouseHandlers(app);
         end
@@ -428,17 +400,6 @@ classdef ScheduleRenderer < handle
                         app.CaseDragController.enableSelectionHoverWatcher();
                     catch
                     end
-                end
-            catch
-            end
-            obj.debugGesture(app, 'CLEAR handlers');
-        end
-
-        function debugGesture(~, app, msg, varargin)
-            try
-                if isprop(app,'DebugGestureLogging') && app.DebugGestureLogging
-                    ts = char(string(datetime('now','Format','HH:mm:ss.SSS')));
-                    fprintf('[%s] %s\n', ts, sprintf(msg, varargin{:}));
                 end
             catch
             end

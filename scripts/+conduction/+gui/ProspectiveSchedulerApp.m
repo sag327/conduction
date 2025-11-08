@@ -545,8 +545,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
         IsHandlingTabSelection logical = false
 
-        % DEBUG: Gesture logging toggle for diagnosing input handling
-        DebugGestureLogging logical = false
     end
 
     properties (Access = private)
