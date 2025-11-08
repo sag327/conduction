@@ -43,6 +43,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerStartValueLabel       matlab.ui.control.Label
         DrawerEndValueLabel         matlab.ui.control.Label
         DrawerLockToggle            matlab.ui.control.CheckBox  % CASE-LOCKING: Lock toggle in drawer
+        DrawerMultiSelectMessage    matlab.ui.control.Label = matlab.ui.control.Label.empty
         DrawerResourcesTitle        matlab.ui.control.Label     % Resources section title
         DrawerDurationsTitle        matlab.ui.control.Label     % DURATION-EDITING: Duration section title
         DrawerDurationsGrid         matlab.ui.container.GridLayout  % DURATION-EDITING: Duration grid
@@ -372,6 +373,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function updateCaseSelectionVisuals(app)
             selectedIds = app.SelectedCaseIds;
             selectedId = app.SelectedCaseId;
+            isMultiSelect = numel(selectedIds) > 1;
 
             if ~isempty(selectedIds)
                 overlayApplied = false;
@@ -391,13 +393,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     conduction.gui.app.redrawSchedule(app);
                 end
 
-                app.DrawerCurrentCaseId = selectedId;
-                if ~isempty(app.DrawerController) && strlength(selectedId) > 0
-                    if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
-                        app.DrawerController.populateDrawer(app, selectedId);
-                    elseif app.DrawerAutoOpenOnSelect && ...
-                            app.DrawerWidth <= conduction.gui.app.Constants.DrawerHandleWidth
-                        app.DrawerController.openDrawer(app, selectedId);
+                if isMultiSelect
+                    app.DrawerCurrentCaseId = "";
+                    if ~isempty(app.DrawerController)
+                        app.DrawerController.showMultiSelectMessage(app);
+                    end
+                else
+                    app.DrawerCurrentCaseId = selectedId;
+                    if ~isempty(app.DrawerController) && strlength(selectedId) > 0
+                        app.DrawerController.showInspectorContents(app);
+                        if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                            app.DrawerController.populateDrawer(app, selectedId);
+                        elseif app.DrawerAutoOpenOnSelect && ...
+                                app.DrawerWidth <= conduction.gui.app.Constants.DrawerHandleWidth
+                            app.DrawerController.openDrawer(app, selectedId);
+                        end
                     end
                 end
             else
@@ -407,6 +417,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     conduction.gui.app.redrawSchedule(app);
                 end
                 app.DrawerCurrentCaseId = "";
+                if ~isempty(app.DrawerController)
+                    app.DrawerController.showInspectorContents(app);
+                end
             end
         end
 

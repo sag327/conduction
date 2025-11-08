@@ -1924,13 +1924,16 @@ classdef ScheduleRenderer < handle
                     return;
                 end
 
-                selectionType = get(fig, 'SelectionType');
+                selectionType = string(get(fig, 'SelectionType'));
+                modifiers = string(get(fig, 'CurrentModifier'));
+                modifiers = modifiers(strlength(modifiers) > 0);
+                hasToggleModifier = any(modifiers == "shift" | modifiers == "control" | modifiers == "command");
 
-                if strcmp(selectionType, 'open')
+                if selectionType == "open"
                     % Double-click detected - toggle lock
                     callbackArg = sprintf('lock-toggle:%s', caseId);
-                elseif strcmp(selectionType, 'extend')
-                    % Shift-click toggles selection membership
+                elseif selectionType == "extend" || hasToggleModifier
+                    % Shift/Ctrl-click toggles selection membership
                     callbackArg = sprintf('toggle-select:%s', caseId);
                 else
                     % Single-click or other - normal behavior

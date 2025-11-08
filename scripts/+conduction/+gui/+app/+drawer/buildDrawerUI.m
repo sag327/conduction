@@ -151,6 +151,16 @@ function buildDrawerUI(app)
 
     app.DrawerHistogramPanel.SizeChangedFcn = [];
 
+    app.DrawerMultiSelectMessage = uilabel(contentGrid);
+    app.DrawerMultiSelectMessage.Text = "Multiple cases selected; bulk edits coming soon.";
+    app.DrawerMultiSelectMessage.WordWrap = 'on';
+    app.DrawerMultiSelectMessage.HorizontalAlignment = 'center';
+    app.DrawerMultiSelectMessage.VerticalAlignment = 'center';
+    app.DrawerMultiSelectMessage.FontColor = [0.9 0.9 0.9];
+    app.DrawerMultiSelectMessage.Layout.Row = [2 10];
+    app.DrawerMultiSelectMessage.Layout.Column = 1;
+    app.DrawerMultiSelectMessage.Visible = 'off';
+
     app.DrawerController.setDrawerWidth(app, conduction.gui.app.Constants.DrawerHandleWidth);
 end
 

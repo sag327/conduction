@@ -14,6 +14,7 @@ Principles
 - Single source of truth: `app.SelectedCaseIds` (last member mirrored as `app.SelectedCaseId` for legacy paths).
 - DRY reuse of existing selection, overlay, and guard logic implemented for multi‑select from the table.
 - Clear, minimal UX: show multi‑select message in the drawer; maintain current drag/resize disable with concise warnings.
+- Avoid bloating large controllers: prefer small helper methods (e.g., DrawerController helpers, modular UI labels) over inlining more logic inside already dense scripts.
 
 Current State (baseline)
 - Multi‑select plumbing exists (SelectedCaseIds, selectCases, ID↔index sync to CaseStore).
@@ -213,4 +214,3 @@ Acceptance
 - Single, Shift, Ctrl/Command clicks on schedule blocks with a few cases added.
 - Double‑click still toggles lock state.
 - Drawer shows neutral text only when multi‑select is active; returns to normal inspector on single select.
-

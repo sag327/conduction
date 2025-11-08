@@ -94,6 +94,8 @@ classdef DrawerController < handle
                 return;
             end
 
+            obj.showInspectorContents(app);
+
             details = obj.extractCaseDetails(app, caseId);
 
             obj.setLabelText(app.DrawerCaseValueLabel, details.DisplayCase);
@@ -126,6 +128,28 @@ classdef DrawerController < handle
             obj.updateHistogram(app, details.Operator, details.Procedure);
 
             app.DrawerCurrentCaseId = caseId;
+        end
+
+        function showMultiSelectMessage(obj, app)
+            if ~obj.canUseDrawer(app)
+                return;
+            end
+
+            obj.setDrawerSectionVisibility(app, false);
+            if ~isempty(app.DrawerMultiSelectMessage) && isvalid(app.DrawerMultiSelectMessage)
+                app.DrawerMultiSelectMessage.Visible = 'on';
+            end
+        end
+
+        function showInspectorContents(obj, app)
+            if ~obj.canUseDrawer(app)
+                return;
+            end
+
+            if ~isempty(app.DrawerMultiSelectMessage) && isvalid(app.DrawerMultiSelectMessage)
+                app.DrawerMultiSelectMessage.Visible = 'off';
+            end
+            obj.setDrawerSectionVisibility(app, true);
         end
 
         function resetDrawerInspector(obj, app)
@@ -771,6 +795,34 @@ classdef DrawerController < handle
             mins = round(minutesValue - hours * 60);
             hours = mod(hours, 24);
             formatted = string(sprintf('%02d:%02d', hours, mins));
+        end
+
+    end
+
+    methods (Access = private)
+
+        function tf = canUseDrawer(~, app)
+            tf = ~(isempty(app) || isempty(app.Drawer) || ~isvalid(app.Drawer));
+        end
+
+        function setDrawerSectionVisibility(~, app, isVisible)
+            components = { ...
+                app.DrawerInspectorTitle, ...
+                app.DrawerLockToggle, ...
+                app.DrawerInspectorGrid, ...
+                app.DrawerResourcesTitle, ...
+                app.DrawerResourcesPanel, ...
+                app.DrawerDurationsTitle, ...
+                app.DrawerDurationsGrid, ...
+                app.DrawerHistogramTitle, ...
+                app.DrawerHistogramPanel};
+
+            for idx = 1:numel(components)
+                comp = components{idx};
+                if ~isempty(comp) && isvalid(comp)
+                    comp.Visible = matlab.lang.OnOffSwitchState(isVisible);
+                end
+            end
         end
 
     end
