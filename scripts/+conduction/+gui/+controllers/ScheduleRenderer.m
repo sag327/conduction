@@ -262,10 +262,9 @@ classdef ScheduleRenderer < handle
             % drag initiation. We attach a lightweight motion guard that
             % shows a warning only if the user actually moves the mouse.
             if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
-                % Route to click handler (handles toggle/replace based on modifiers)
-                obj.invokeCaseBlockClick(app, rectHandle);
-                % Arm a transient guard to warn on motion while multi-select remains
-                obj.setupMultiSelectDragGuard(app);
+                % Arm a transient guard to differentiate click vs drag while
+                % multi-select remains active. Do not change selection yet.
+                obj.setupMultiSelectDragGuard(app, rectHandle);
                 return;
             end
             caseEntry = struct();
