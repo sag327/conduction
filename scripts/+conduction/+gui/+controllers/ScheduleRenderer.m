@@ -382,10 +382,14 @@ classdef ScheduleRenderer < handle
                     end
                     obj.debugGesture(app, 'WARN fired t=%.3fs caseId=%s selCount=%d', elapsed, caseIdStr, numel(app.SelectedCaseIds));
                     obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
+                    % Clear handlers now that we've handled a true drag attempt
+                    obj.clearTransientMouseHandlers(app);
                 else
                     obj.debugGesture(app, 'MOVE multi=1 dx=%.4f dy=%.4f moved=0 selCount=%d', dx, dy, numel(app.SelectedCaseIds));
                 end
+                return; % Keep handlers active until moved or mouse-up
             end
+            % Not in multi-select anymore: clear transient handlers
             obj.clearTransientMouseHandlers(app);
         end
 
