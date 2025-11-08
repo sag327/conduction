@@ -258,6 +258,16 @@ classdef ScheduleRenderer < handle
             if ~isgraphics(rectHandle)
                 return;
             end
+            % When multi-select is active, we allow selection clicks but block
+            % drag initiation. We attach a lightweight motion guard that
+            % shows a warning only if the user actually moves the mouse.
+            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
+                % Route to click handler (handles toggle/replace based on modifiers)
+                obj.invokeCaseBlockClick(app, rectHandle);
+                % Arm a transient guard to warn on motion while multi-select remains
+                obj.setupMultiSelectDragGuard(app);
+                return;
+            end
             caseEntry = struct();
             if ~isempty(app.CaseDragController)
                 [resolvedEntry, ~] = app.CaseDragController.findCaseByHandle(rectHandle);
@@ -266,6 +276,35 @@ classdef ScheduleRenderer < handle
                 end
             end
             obj.startDragCase(app, rectHandle, caseEntry);
+        end
+
+        function setupMultiSelectDragGuard(obj, app)
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            fig = app.UIFigure;
+            % Install transient handlers; they will clear themselves on first motion/up
+            fig.WindowButtonMotionFcn = @(~,~) obj.guardMultiSelectDragAttempt(app);
+            fig.WindowButtonUpFcn = @(~,~) obj.clearTransientMouseHandlers(app);
+        end
+
+        function guardMultiSelectDragAttempt(obj, app)
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            % Only warn if multi-select still active at the time of motion
+            if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
+                obj.showCaseDragWarning(app, 'Drag disabled while multiple cases are selected.');
+            end
+            obj.clearTransientMouseHandlers(app);
+        end
+
+        function clearTransientMouseHandlers(~, app)
+            if isempty(app) || isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            app.UIFigure.WindowButtonMotionFcn = [];
+            app.UIFigure.WindowButtonUpFcn = [];
         end
 
         function startDragCase(obj, app, rectHandle, caseEntry)
