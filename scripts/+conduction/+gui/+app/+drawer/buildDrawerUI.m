@@ -74,8 +74,17 @@ function buildDrawerUI(app)
     app.DrawerLockToggle.Layout.Column = 1;
     app.DrawerLockToggle.ValueChangedFcn = @(src, event) app.DrawerLockToggleChanged(event);
 
+    app.DrawerMarkCompleteButton = uibutton(contentGrid, 'push');
+    app.DrawerMarkCompleteButton.Text = 'Mark case complete';
+    app.DrawerMarkCompleteButton.BackgroundColor = [0.18 0.5 0.18];
+    app.DrawerMarkCompleteButton.FontColor = [1 1 1];
+    app.DrawerMarkCompleteButton.Layout.Row = 4;
+    app.DrawerMarkCompleteButton.Layout.Column = 1;
+    app.DrawerMarkCompleteButton.ButtonPushedFcn = @(~, ~) app.onDrawerMarkComplete();
+    app.DrawerMarkCompleteButton.Tooltip = 'Archive this case so it will be excluded from re-optimization';
+
     app.DrawerInspectorGrid = uigridlayout(contentGrid);
-    app.DrawerInspectorGrid.Layout.Row = 4;
+    app.DrawerInspectorGrid.Layout.Row = 5;
     app.DrawerInspectorGrid.Layout.Column = 1;
     app.DrawerInspectorGrid.RowHeight = repmat({'fit'}, 1, 6);
     app.DrawerInspectorGrid.ColumnWidth = {90, '1x'};
@@ -96,11 +105,11 @@ function buildDrawerUI(app)
     app.DrawerResourcesTitle.Text = 'Resources';
     app.DrawerResourcesTitle.FontWeight = 'bold';
     app.DrawerResourcesTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerResourcesTitle.Layout.Row = 5;
+    app.DrawerResourcesTitle.Layout.Row = 6;
     app.DrawerResourcesTitle.Layout.Column = 1;
 
     resourcesPanel = uipanel(contentGrid);
-    resourcesPanel.Layout.Row = 6;
+    resourcesPanel.Layout.Row = 7;
     resourcesPanel.Layout.Column = 1;
     resourcesPanel.BorderType = 'none';
     resourcesPanel.BackgroundColor = contentGrid.BackgroundColor;
@@ -112,11 +121,11 @@ function buildDrawerUI(app)
     app.DrawerDurationsTitle.Text = 'Case Durations (minutes)';
     app.DrawerDurationsTitle.FontWeight = 'bold';
     app.DrawerDurationsTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerDurationsTitle.Layout.Row = 7;
+    app.DrawerDurationsTitle.Layout.Row = 8;
     app.DrawerDurationsTitle.Layout.Column = 1;
 
     app.DrawerDurationsGrid = uigridlayout(contentGrid);
-    app.DrawerDurationsGrid.Layout.Row = 8;
+    app.DrawerDurationsGrid.Layout.Row = 9;
     app.DrawerDurationsGrid.Layout.Column = 1;
     app.DrawerDurationsGrid.RowHeight = repmat({'fit'}, 1, 3);
     app.DrawerDurationsGrid.ColumnWidth = {90, 82, '1x'};  % Label + spinner take ~half width (90 + 12 spacing + 82 ≈ 184px of 368px available)
@@ -133,11 +142,11 @@ function buildDrawerUI(app)
     app.DrawerHistogramTitle.Text = 'Historical Durations';
     app.DrawerHistogramTitle.FontWeight = 'bold';
     app.DrawerHistogramTitle.FontColor = [0.9 0.9 0.9];
-    app.DrawerHistogramTitle.Layout.Row = 9;
+    app.DrawerHistogramTitle.Layout.Row = 10;
     app.DrawerHistogramTitle.Layout.Column = 1;
 
     app.DrawerHistogramPanel = uipanel(contentGrid);
-    app.DrawerHistogramPanel.Layout.Row = 10;
+    app.DrawerHistogramPanel.Layout.Row = 11;
     app.DrawerHistogramPanel.Layout.Column = 1;
     app.DrawerHistogramPanel.BackgroundColor = app.Drawer.BackgroundColor;
     app.DrawerHistogramPanel.BorderType = 'none';

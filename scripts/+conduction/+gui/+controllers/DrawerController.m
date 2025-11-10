@@ -128,6 +128,7 @@ classdef DrawerController < handle
             obj.updateHistogram(app, details.Operator, details.Procedure);
 
             app.DrawerCurrentCaseId = caseId;
+            obj.updateCompletionButtonState(app, caseId);
         end
 
         function showMultiSelectMessage(obj, app)
@@ -136,6 +137,7 @@ classdef DrawerController < handle
             end
 
             obj.setDrawerSectionVisibility(app, false);
+            obj.updateCompletionButtonState(app, "");
             if ~isempty(app.DrawerMultiSelectMessage) && isvalid(app.DrawerMultiSelectMessage)
                 app.DrawerMultiSelectMessage.Visible = 'on';
             end
@@ -168,6 +170,7 @@ classdef DrawerController < handle
             if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
                 app.DrawerResourcesChecklist.setSelection(string.empty(0,1));
             end
+            obj.updateCompletionButtonState(app, "");
         end
 
         function updateHistogram(obj, app, operatorName, procedureName)
@@ -809,6 +812,7 @@ classdef DrawerController < handle
             components = { ...
                 app.DrawerInspectorTitle, ...
                 app.DrawerLockToggle, ...
+                app.DrawerMarkCompleteButton, ...
                 app.DrawerInspectorGrid, ...
                 app.DrawerResourcesTitle, ...
                 app.DrawerResourcesPanel, ...
@@ -822,6 +826,17 @@ classdef DrawerController < handle
                 if ~isempty(comp) && isvalid(comp)
                     comp.Visible = matlab.lang.OnOffSwitchState(isVisible);
                 end
+            end
+        end
+
+        function updateCompletionButtonState(~, app, caseId)
+            if isempty(app.DrawerMarkCompleteButton) || ~isvalid(app.DrawerMarkCompleteButton)
+                return;
+            end
+            if nargin < 3 || strlength(caseId) == 0
+                app.DrawerMarkCompleteButton.Enable = 'off';
+            else
+                app.DrawerMarkCompleteButton.Enable = 'on';
             end
         end
 

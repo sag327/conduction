@@ -2,13 +2,14 @@ classdef CasesPopout < handle
     %CASEsPOPOUT Pop-out window hosting the cases table view.
 
     properties (SetAccess = private)
-        Store conduction.gui.stores.CaseStore = conduction.gui.stores.CaseStore.empty
+        Stores struct = struct('unscheduled', [], 'scheduled', [], 'completed', [])
+        BucketHandlers struct = struct()
         OnRedock function_handle = function_handle.empty
         UIFigure matlab.ui.Figure = matlab.ui.Figure.empty
         RootGrid matlab.ui.container.GridLayout = matlab.ui.container.GridLayout.empty
         HeaderGrid matlab.ui.container.GridLayout = matlab.ui.container.GridLayout.empty
         RedockButton matlab.ui.control.Button = matlab.ui.control.Button.empty
-        TableView conduction.gui.components.CaseTableView = conduction.gui.components.CaseTableView.empty
+        TableViews struct = struct('unscheduled', [], 'scheduled', [], 'completed', [])
         TitleLabel matlab.ui.control.Label = matlab.ui.control.Label.empty
         Options struct = struct()
     end
@@ -19,7 +20,7 @@ classdef CasesPopout < handle
     end
 
     methods
-        function obj = CasesPopout(store, onRedock, opts)
+        function obj = CasesPopout(stores, onRedock, opts)
             if nargin < 3 || isempty(opts)
                 opts = struct();
             end
@@ -28,12 +29,7 @@ classdef CasesPopout < handle
                 onRedock = [];
             end
 
-            if nargin < 1 || ~isa(store, 'conduction.gui.stores.CaseStore')
-                error('CasesPopout:InvalidStore', ...
-                    'First argument must be a conduction.gui.stores.CaseStore instance.');
-            end
-
-            obj.Store = store;
+            obj.Stores = obj.normalizeStores(stores);
             if ~isempty(onRedock)
                 if ~isa(onRedock, 'function_handle')
                     error('CasesPopout:InvalidCallback', 'onRedock must be a function handle.');
@@ -41,6 +37,13 @@ classdef CasesPopout < handle
                 obj.OnRedock = onRedock;
             else
                 obj.OnRedock = [];
+            end
+
+            if isfield(opts, 'BucketHandlers') && ~isempty(opts.BucketHandlers)
+                obj.BucketHandlers = opts.BucketHandlers;
+                opts = rmfield(opts, 'BucketHandlers');
+            else
+                obj.BucketHandlers = struct();
             end
 
             obj.Options = obj.normalizeOptions(opts);
@@ -79,10 +82,14 @@ classdef CasesPopout < handle
         end
 
         function destroy(obj)
-            if ~isempty(obj.TableView) && isvalid(obj.TableView)
-                delete(obj.TableView);
+            fields = fieldnames(obj.TableViews);
+            for i = 1:numel(fields)
+                view = obj.TableViews.(fields{i});
+                if ~isempty(view) && isvalid(view)
+                    delete(view);
+                end
+                obj.TableViews.(fields{i}) = conduction.gui.components.CaseTableView.empty;
             end
-            obj.TableView = conduction.gui.components.CaseTableView.empty;
 
             if obj.isOpen()
                 delete(obj.UIFigure);
@@ -150,15 +157,15 @@ classdef CasesPopout < handle
             tableParent.BackgroundColor = fig.Color;
 
             tableGrid = uigridlayout(tableParent);
-            tableGrid.RowHeight = {'1x'};
+            tableGrid.RowHeight = {'1x', '1x', '1x'};
             tableGrid.ColumnWidth = {'1x'};
             tableGrid.Padding = [0 0 0 0];
-            tableGrid.RowSpacing = 0;
+            tableGrid.RowSpacing = 8;
             tableGrid.ColumnSpacing = 0;
 
-            layoutOverrides = struct('Padding', [0 0 0 0]);
-            obj.TableView = conduction.gui.components.CaseTableView(tableGrid, obj.Store, ...
-                struct('Title', "", 'Layout', layoutOverrides));
+            obj.TableViews.unscheduled = obj.createBucketTable(tableGrid, 1, 'unscheduled', 'Unscheduled Cases');
+            obj.TableViews.scheduled = obj.createBucketTable(tableGrid, 2, 'scheduled', 'Scheduled Cases');
+            obj.TableViews.completed = obj.createBucketTable(tableGrid, 3, 'completed', 'Completed Cases');
 
             fig.KeyPressFcn = @(src, event) obj.onKeyPress(event);
 
@@ -214,6 +221,76 @@ classdef CasesPopout < handle
             opts.Position = double(opts.Position);
             if numel(opts.Position) ~= 4
                 error('CasesPopout:InvalidPosition', 'Position must be a 1x4 numeric array.');
+            end
+        end
+
+        function view = createBucketTable(obj, grid, rowIndex, bucketName, title)
+            if isempty(grid) || ~isvalid(grid)
+                view = conduction.gui.components.CaseTableView.empty;
+                return;
+            end
+
+            store = obj.Stores.(bucketName);
+            if isempty(store) || ~isvalid(store)
+                view = conduction.gui.components.CaseTableView.empty;
+                return;
+            end
+
+            panel = uipanel(grid);
+            panel.Layout.Row = rowIndex;
+            panel.Layout.Column = 1;
+            panel.BorderType = 'none';
+            panel.BackgroundColor = grid.Parent.BackgroundColor;
+
+            handlers = obj.resolveHandlers(bucketName);
+            options = struct('Title', title);
+            if ~isempty(handlers.RemoveHandler)
+                options.RemoveHandler = handlers.RemoveHandler;
+            end
+            if ~isempty(handlers.ClearHandler)
+                options.ClearHandler = handlers.ClearHandler;
+            end
+            options.Layout = struct('Padding', [0 0 0 0]);
+
+            view = conduction.gui.components.CaseTableView(panel, store, options);
+        end
+
+        function handlers = resolveHandlers(obj, bucketName)
+            handlers = struct('RemoveHandler', [], 'ClearHandler', []);
+            field = char(bucketName);
+            if isfield(obj.BucketHandlers, field)
+                bucketHandlers = obj.BucketHandlers.(field);
+            elseif isfield(obj.BucketHandlers, lower(field))
+                bucketHandlers = obj.BucketHandlers.(lower(field));
+            else
+                bucketHandlers = struct();
+            end
+
+            if isfield(bucketHandlers, 'RemoveHandler') && ~isempty(bucketHandlers.RemoveHandler)
+                handlers.RemoveHandler = bucketHandlers.RemoveHandler;
+            end
+            if isfield(bucketHandlers, 'ClearHandler') && ~isempty(bucketHandlers.ClearHandler)
+                handlers.ClearHandler = bucketHandlers.ClearHandler;
+            end
+        end
+
+        function stores = normalizeStores(obj, stores)
+            if nargin < 2 || ~isstruct(stores)
+                error('CasesPopout:InvalidStores', ...
+                    'Store bundle must be a struct with fields unscheduled, scheduled, and completed.');
+            end
+
+            required = {'unscheduled', 'scheduled', 'completed'};
+            for i = 1:numel(required)
+                field = required{i};
+                if ~isfield(stores, field)
+                    stores.(field) = conduction.gui.stores.AbstractCaseStore.empty;
+                end
+                value = stores.(field);
+                if ~isempty(value) && ~isa(value, 'conduction.gui.stores.AbstractCaseStore')
+                    error('CasesPopout:InvalidStoreType', ...
+                        'Store "%s" must inherit from AbstractCaseStore.', field);
+                end
             end
         end
     end

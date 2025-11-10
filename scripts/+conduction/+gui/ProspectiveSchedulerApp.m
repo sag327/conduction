@@ -43,6 +43,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerStartValueLabel       matlab.ui.control.Label
         DrawerEndValueLabel         matlab.ui.control.Label
         DrawerLockToggle            matlab.ui.control.CheckBox  % CASE-LOCKING: Lock toggle in drawer
+        DrawerMarkCompleteButton    matlab.ui.control.Button
         DrawerMultiSelectMessage    matlab.ui.control.Label = matlab.ui.control.Label.empty
         DrawerResourcesTitle        matlab.ui.control.Label     % Resources section title
         DrawerDurationsTitle        matlab.ui.control.Label     % DURATION-EDITING: Duration section title
@@ -96,6 +97,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CasesLabel                  matlab.ui.control.Label
         CasesUndockButton           matlab.ui.control.Button
         CasesEmbeddedContainer      matlab.ui.container.Panel
+        UnscheduledCasesPanel       matlab.ui.container.Panel
+        ScheduledCasesPanel         matlab.ui.container.Panel
+        CompletedCasesPanel         matlab.ui.container.Panel
         CasesTable                  matlab.ui.control.Table
         RemoveSelectedButton        matlab.ui.control.Button
         ClearAllButton              matlab.ui.control.Button
@@ -156,6 +160,323 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function isAssigned = isResourceAssigned(app, resourceId)
             %ISRESOURCEASSIGNED Check if any case uses this resource
             isAssigned = app.ResourceController.isResourceAssigned(app, resourceId);
+        end
+
+        function view = createCaseTableView(app, parentPanel, store, title, scopeLabel, affectsSelection)
+            if nargin < 6
+                affectsSelection = true;
+            end
+
+            if isempty(parentPanel) || ~isvalid(parentPanel) || isempty(store)
+                view = conduction.gui.components.CaseTableView.empty;
+                return;
+            end
+
+            if ~isvalid(store)
+                view = conduction.gui.components.CaseTableView.empty;
+                return;
+            end
+
+            removeHandler = @(v) app.handleBucketRemove(v.Store, scopeLabel, affectsSelection);
+            clearHandler = @(v) app.handleBucketClear(v.Store, scopeLabel, affectsSelection);
+
+            options = struct(...
+                'Title', title, ...
+                'RemoveHandler', removeHandler, ...
+                'ClearHandler', clearHandler);
+
+            view = conduction.gui.components.CaseTableView(parentPanel, store, options);
+        end
+
+        function destroyCaseTableView(~, view)
+            if ~isempty(view) && isvalid(view)
+                delete(view);
+            end
+        end
+
+        function handleBucketRemove(app, store, scopeLabel, affectsSelection)
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+            ids = store.getSelectedCaseIds();
+            if isempty(ids)
+                return;
+            end
+
+            prettyScope = app.prettyScopeLabel(scopeLabel);
+            prompt = sprintf('Remove %d %s case(s)?', numel(ids), prettyScope);
+            answer = string(app.confirmAction(prompt, 'Remove Cases', {'Remove', 'Cancel'}, 2));
+            if answer ~= "Remove"
+                return;
+            end
+
+            store.removeSelected();
+
+            if affectsSelection && ~isempty(ids)
+                remaining = setdiff(app.SelectedCaseIds, ids, 'stable');
+                app.selectCases(remaining, "replace");
+            end
+            app.markDirty();
+        end
+
+        function handleBucketClear(app, store, scopeLabel, affectsSelection)
+            if isempty(store) || ~isvalid(store) || ~store.hasCases()
+                return;
+            end
+
+            prettyScope = app.prettyScopeLabel(scopeLabel);
+            prompt = sprintf('Clear all %s cases?', prettyScope);
+            answer = string(app.confirmAction(prompt, 'Clear Cases', {'Clear', 'Cancel'}, 2));
+            if answer ~= "Clear"
+                return;
+            end
+
+            idsBefore = store.getSelectedCaseIds();
+            store.clearAll();
+
+            if affectsSelection && ~isempty(idsBefore)
+                remaining = setdiff(app.SelectedCaseIds, idsBefore, 'stable');
+                app.selectCases(remaining, "replace");
+            end
+            app.markDirty();
+        end
+
+        function label = prettyScopeLabel(~, scopeLabel)
+            scope = lower(string(scopeLabel));
+            switch scope
+                case "unscheduled"
+                    label = "Unscheduled";
+                case "scheduled"
+                    label = "Scheduled";
+                case "completed"
+                    label = "Completed";
+                otherwise
+                    if strlength(scope) == 0
+                        label = "Selected";
+                    else
+                        label = char(scope);
+                        label(1) = upper(label(1));
+                    end
+            end
+        end
+
+        function ensureBucketStores(app)
+            if isempty(app.UnscheduledCaseStore) || ~isvalid(app.UnscheduledCaseStore)
+                app.UnscheduledCaseStore = conduction.gui.stores.FilteredCaseStore(app.CaseManager, "unscheduled");
+            end
+            if isempty(app.ScheduledCaseStore) || ~isvalid(app.ScheduledCaseStore)
+                app.ScheduledCaseStore = conduction.gui.stores.FilteredCaseStore(app.CaseManager, "scheduled");
+            end
+            if isempty(app.CompletedCaseStore) || ~isvalid(app.CompletedCaseStore)
+                app.CompletedCaseStore = conduction.gui.stores.CompletedCaseStore(app.CaseManager);
+            end
+            app.attachBucketStoreListeners();
+        end
+
+        function attachBucketStoreListeners(app)
+            app.detachBucketStoreListeners();
+            listeners = event.listener.empty;
+
+            if ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                listeners(end+1) = addlistener(app.UnscheduledCaseStore, 'SelectionChanged', ...
+                    @(~, ~) app.onBucketSelectionChanged(app.UnscheduledCaseStore));
+            end
+            if ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
+                listeners(end+1) = addlistener(app.ScheduledCaseStore, 'SelectionChanged', ...
+                    @(~, ~) app.onBucketSelectionChanged(app.ScheduledCaseStore));
+            end
+
+            app.BucketStoreListeners = listeners;
+        end
+
+        function detachBucketStoreListeners(app)
+            if ~isempty(app.BucketStoreListeners)
+                delete(app.BucketStoreListeners);
+                app.BucketStoreListeners = event.listener.empty;
+            end
+        end
+
+        function onBucketSelectionChanged(app, sourceStore)
+            if app.IsSyncingBucketSelection
+                return;
+            end
+
+            app.IsSyncingBucketSelection = true;
+            cleanup = onCleanup(@() app.clearBucketSelectionSyncGuard()); %#ok<NASGU>
+
+            if sourceStore == app.UnscheduledCaseStore && ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
+                app.ScheduledCaseStore.clearSelection();
+            elseif sourceStore == app.ScheduledCaseStore && ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                app.UnscheduledCaseStore.clearSelection();
+            end
+
+            selectedIds = sourceStore.getSelectedCaseIds();
+            app.assignSelectedCaseIds(selectedIds, "bucket");
+        end
+
+        function pushSelectionToBucketStores(app)
+            if app.IsSyncingBucketSelection
+                return;
+            end
+            app.IsSyncingBucketSelection = true;
+            cleanup = onCleanup(@() app.clearBucketSelectionSyncGuard()); %#ok<NASGU>
+
+            ids = app.SelectedCaseIds;
+            if ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                unschedIds = app.filterIdsByBucket(ids, "unscheduled");
+                app.UnscheduledCaseStore.setSelectedByIds(unschedIds);
+            end
+            if ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
+                schedIds = app.filterIdsByBucket(ids, "scheduled");
+                app.ScheduledCaseStore.setSelectedByIds(schedIds);
+            end
+        end
+
+        function subset = filterIdsByBucket(app, ids, bucket)
+            subset = string.empty(0, 1);
+            if isempty(ids) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            ids = app.normalizeCaseIds(ids);
+            for idx = 1:numel(ids)
+                caseId = ids(idx);
+                if strlength(caseId) == 0
+                    continue;
+                end
+                [caseObj, ~] = app.CaseManager.findCaseById(char(caseId));
+                if isempty(caseObj)
+                    continue;
+                end
+                bucketName = conduction.gui.status.computeBucket(caseObj);
+                if bucketName == bucket
+                    subset(end+1, 1) = caseId; %#ok<AGROW>
+                end
+            end
+        end
+
+        function clearBucketSelectionSyncGuard(app)
+            app.IsSyncingBucketSelection = false;
+        end
+
+        function refreshCaseBuckets(app, source)
+            if nargin < 2
+                source = "";
+            end
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            app.ensureBucketStores();
+            stores = {app.UnscheduledCaseStore, app.ScheduledCaseStore, app.CompletedCaseStore};
+            for idx = 1:numel(stores)
+                store = stores{idx};
+                if isempty(store) || ~isvalid(store)
+                    continue;
+                end
+                store.refresh();
+            end
+            % Keep bucket selection aligned with the refreshed data.
+            app.pushSelectionToBucketStores();
+
+            % debug output removed
+        end
+
+        function syncCaseScheduleFields(app, dailySchedule)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            % Reset scheduled metadata for all active cases
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                caseObj.AssignedLab = NaN;
+                caseObj.ScheduledStartTime = NaN;
+                caseObj.ScheduledProcStartTime = NaN;
+                caseObj.ScheduledEndTime = NaN;
+            end
+
+            if nargin < 2 || isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
+                app.refreshCaseBuckets('syncCaseScheduleFields-empty');
+                return;
+            end
+
+            assignments = dailySchedule.labAssignments();
+            labs = dailySchedule.Labs;
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+
+                assignedLabValue = labIdx;
+                if labIdx <= numel(labs) && ~isempty(labs(labIdx)) && isprop(labs(labIdx), 'Room')
+                    % Optional: store numeric component if room like "Lab 1"
+                    tokens = regexp(char(labs(labIdx).Room), '(\d+)$', 'tokens', 'once');
+                    if ~isempty(tokens)
+                        assignedLabValue = str2double(tokens{1});
+                    end
+                end
+
+                for caseIdx = 1:numel(labCases)
+                    caseStruct = labCases(caseIdx);
+                    caseId = string(conduction.utils.conversion.asString(caseStruct.caseID));
+                    if strlength(caseId) == 0
+                        continue;
+                    end
+
+                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    if isempty(caseObj)
+                        continue;
+                    end
+
+                    caseObj.AssignedLab = assignedLabValue;
+                    caseObj.ScheduledStartTime = coerceNumericField(caseStruct, 'startTime');
+                    caseObj.ScheduledProcStartTime = coerceNumericField(caseStruct, 'procStartTime');
+                    % Fallback: if procStart missing, treat startTime as scheduled procedure start
+                    if isnan(caseObj.ScheduledProcStartTime) && ~isnan(caseObj.ScheduledStartTime)
+                        caseObj.ScheduledProcStartTime = caseObj.ScheduledStartTime;
+                    end
+
+                    procEnd = coerceNumericField(caseStruct, 'procEndTime');
+                    post = coerceNumericField(caseStruct, 'postTime');
+                    turnover = coerceNumericField(caseStruct, 'turnoverTime');
+                    if isnan(post)
+                        post = 0;
+                    end
+                    if isnan(turnover)
+                        turnover = 0;
+                    end
+                    if isnan(procEnd)
+                        caseObj.ScheduledEndTime = NaN;
+                    else
+                        caseObj.ScheduledEndTime = procEnd + post + turnover;
+                    end
+                end
+            end
+
+            app.refreshCaseBuckets('syncCaseScheduleFields');
+
+            % end debug summary removed
+
+            function value = coerceNumericField(structValue, fieldName)
+                if ~isstruct(structValue) || ~isfield(structValue, fieldName)
+                    value = NaN;
+                    return;
+                end
+                raw = structValue.(fieldName);
+                if isempty(raw)
+                    value = NaN;
+                elseif isnumeric(raw)
+                    value = double(raw(1));
+                elseif ischar(raw) || isstring(raw)
+                    value = str2double(raw(1));
+                else
+                    value = NaN;
+                end
+            end
         end
 
         function hasChanges = applyResourcesToCase(app, caseObj, desiredIds)
@@ -335,39 +656,39 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.DrawerResourcesChecklist.refresh();
             end
 
+            app.ensureBucketStores();
             app.createEmbeddedCaseView();
+            app.pushSelectionToBucketStores();
         end
 
         function createEmbeddedCaseView(app)
-            if isempty(app.CaseStore) || isempty(app.CasesEmbeddedContainer) || ...
-                    ~isvalid(app.CasesEmbeddedContainer)
+            if isempty(app.CasesEmbeddedContainer) || ~isvalid(app.CasesEmbeddedContainer)
                 return;
             end
 
-            if ~isempty(app.CasesView) && isvalid(app.CasesView)
-                delete(app.CasesView);
+            app.destroyCaseTableView(app.UnscheduledCasesView);
+            app.destroyCaseTableView(app.ScheduledCasesView);
+            app.destroyCaseTableView(app.CompletedCasesView);
+
+            app.UnscheduledCasesView = app.createCaseTableView( ...
+                app.UnscheduledCasesPanel, app.UnscheduledCaseStore, ...
+                "Unscheduled Cases", "unscheduled", true);
+
+            app.ScheduledCasesView = app.createCaseTableView( ...
+                app.ScheduledCasesPanel, app.ScheduledCaseStore, ...
+                "Scheduled Cases", "scheduled", true);
+
+            app.CompletedCasesView = app.createCaseTableView( ...
+                app.CompletedCasesPanel, app.CompletedCaseStore, ...
+                "Completed Cases", "completed", false);
+
+            % Maintain legacy handles for compatibility with existing tests/utilities
+            app.CasesView = app.UnscheduledCasesView;
+            if ~isempty(app.UnscheduledCasesView) && isvalid(app.UnscheduledCasesView)
+                app.CasesTable = app.UnscheduledCasesView.Table;
+                app.RemoveSelectedButton = app.UnscheduledCasesView.RemoveButton;
+                app.ClearAllButton = app.UnscheduledCasesView.ClearButton;
             end
-
-            options = struct(...
-                'Title', "Added Cases", ...
-                'RemoveHandler', @(view) app.handleCaseTableRemove(view), ...
-                'ClearHandler', @(view) app.handleCaseTableClear(view));
-
-            app.CasesView = conduction.gui.components.CaseTableView( ...
-                app.CasesEmbeddedContainer, app.CaseStore, options);
-
-            % Maintain legacy handles for existing logic
-            app.CasesTable = app.CasesView.Table;
-            app.RemoveSelectedButton = app.CasesView.RemoveButton;
-            app.ClearAllButton = app.CasesView.ClearButton;
-        end
-
-        function handleCaseTableRemove(app, ~)
-            app.RemoveSelectedButtonPushed([]);
-        end
-
-        function handleCaseTableClear(app, ~)
-            app.ClearAllButtonPushed([]);
         end
 
         function updateCaseSelectionVisuals(app)
@@ -472,7 +793,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
     properties (Access = public)
         CaseManager conduction.gui.controllers.CaseManager
         CaseStore conduction.gui.stores.CaseStore
+        UnscheduledCaseStore conduction.gui.stores.FilteredCaseStore
+        ScheduledCaseStore conduction.gui.stores.FilteredCaseStore
+        CompletedCaseStore conduction.gui.stores.CompletedCaseStore
         CasesView conduction.gui.components.CaseTableView
+        UnscheduledCasesView conduction.gui.components.CaseTableView
+        ScheduledCasesView conduction.gui.components.CaseTableView
+        CompletedCasesView conduction.gui.components.CaseTableView
         CasesPopout conduction.gui.windows.CasesPopout
         CasesTabOverlay matlab.ui.container.Panel = matlab.ui.container.Panel.empty
         AddResourcesPanel matlab.ui.container.Panel = matlab.ui.container.Panel.empty
@@ -533,6 +860,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SelectedCaseIds string = string.empty(0, 1)  % Multi-select source of truth (column vector of case IDs)
         SelectedCaseId string = ""  % Currently selected case ID (last member of SelectedCaseIds)
         SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
+        % (Removed) EnableBucketDebug
         OperatorColors containers.Map = containers.Map('KeyType', 'char', 'ValueType', 'any')  % Persistent operator colors
         IsDirty logical = false  % SAVE/LOAD: Track unsaved changes (Stage 7)
         AutoSaveEnabled logical = false  % SAVE/LOAD: Auto-save enabled flag (Stage 8)
@@ -553,6 +881,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SuppressOptimizationDirty logical = false  % Skip markOptimizationDirty in onCaseManagerChanged when already handled
         CaseStoreListeners event.listener = event.listener.empty
         IsSyncingCaseSelection logical = false  % Guard when pushing selection updates back to CaseStore
+        BucketStoreListeners event.listener = event.listener.empty
+        IsSyncingBucketSelection logical = false
     end
 
 
@@ -1123,6 +1453,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CasesView) && isvalid(app.CasesView)
                 delete(app.CasesView);
             end
+            app.destroyCaseTableView(app.ScheduledCasesView);
+            app.destroyCaseTableView(app.CompletedCasesView);
 
             % Clear schedule objects to release conduction class instances
             app.OptimizedSchedule = conduction.DailySchedule.empty;
@@ -1162,9 +1494,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 delete(app.TimeControlEditController);
             end
 
+            app.detachBucketStoreListeners();
+
             % Delete CaseStore (holds reference to CaseManager)
             if ~isempty(app.CaseStore) && isvalid(app.CaseStore)
                 delete(app.CaseStore);
+            end
+            if ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                delete(app.UnscheduledCaseStore);
+            end
+            if ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
+                delete(app.ScheduledCaseStore);
+            end
+            if ~isempty(app.CompletedCaseStore) && isvalid(app.CompletedCaseStore)
+                delete(app.CompletedCaseStore);
             end
 
             % Delete CaseManager (now has destructor to clear ScheduleCollection, Operator, Procedure, Lab, CaseRequest objects)
@@ -1852,6 +2195,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.markDirty();  % SAVE/LOAD: Mark as dirty when case lock state changed (Stage 7)
         end
 
+        function onDrawerMarkComplete(app)
+            if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
+                return;
+            end
+            app.archiveCaseById(app.DrawerCurrentCaseId);
+        end
+
         function DrawerSetupSpinnerChanged(app, event)
             % DURATION-EDITING: Handle setup duration change from drawer
             app.applyDrawerDurationChange('setup', event.Value);
@@ -1945,6 +2295,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.updateCasesTable();
+            app.refreshCaseBuckets('CaseManagerChanged');
 
             if ~app.IsRestoringSession && ~app.SuppressOptimizationDirty
                 app.OptimizationController.markOptimizationDirty(app);
@@ -2173,8 +2524,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.executeBatchUpdate(@() restoreCasesImpl(app, restoredCases, sessionData), true);
             end
 
-            % Note: Completed cases are not directly restorable through public API
-            % They would need a special CaseManager method to restore
+            if isfield(sessionData, 'completedCases')
+                completedStruct = sessionData.completedCases;
+                completedObjs = conduction.session.deserializeProspectiveCase(completedStruct);
+                if isempty(completedObjs)
+                    completedObjs = conduction.gui.models.ProspectiveCase.empty;
+                end
+                app.CaseManager.setCompletedCaseArchive(completedObjs);
+            end
 
             % Restore schedules
             if isfield(sessionData, 'optimizedSchedule') && ...
@@ -2614,6 +2971,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.pushSelectionToCaseStore();
             end
 
+            if ~strcmp(source, "bucket")
+                app.pushSelectionToBucketStores();
+            end
+
             app.updateCaseSelectionVisuals();
         end
 
@@ -2673,6 +3034,55 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.CaseManager.removeCase(idx);
                 end
             end
+        end
+
+        function archiveCaseById(app, caseId)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+
+            [~, caseIndex] = app.CaseManager.findCaseById(char(caseId));
+            if isnan(caseIndex) || caseIndex < 1
+                return;
+            end
+
+            app.CaseManager.setCaseStatus(caseIndex, "completed");
+
+            selectedIds = caseId;
+            scheduleWasUpdated = app.removeCaseIdsFromSchedules(selectedIds);
+
+            scheduleForRender = [];
+            if app.IsTimeControlActive
+                currentTimeMinutes = app.CaseManager.getCurrentTime();
+                scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
+                app.SimulatedSchedule = scheduleForRender;
+            elseif scheduleWasUpdated
+                scheduleForRender = app.OptimizedSchedule;
+            end
+
+            if scheduleWasUpdated
+                app.OptimizationController.markOptimizationDirty(app);
+            end
+
+            if ~isempty(scheduleForRender)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
+            elseif scheduleWasUpdated
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            end
+
+            app.LockedCaseIds = setdiff(app.LockedCaseIds, selectedIds, 'stable');
+            if isprop(app, 'TimeControlLockedCaseIds')
+                app.TimeControlLockedCaseIds = setdiff(app.TimeControlLockedCaseIds, selectedIds, 'stable');
+            end
+
+            remainingSelection = setdiff(app.SelectedCaseIds, selectedIds, 'stable');
+            app.assignSelectedCaseIds(remainingSelection, "manual");
+            app.markDirty();
         end
 
         function ids = normalizeCaseIds(~, ids)

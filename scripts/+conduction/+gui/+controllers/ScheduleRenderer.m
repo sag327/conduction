@@ -80,6 +80,10 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % debug logs removed
+
+            app.syncCaseScheduleFields(dailySchedule);
+
             % Use fade effect if schedule is stale/dirty
             fadeAlpha = 1.0;  % Default: full opacity
             if app.IsOptimizationDirty
@@ -1171,6 +1175,9 @@ classdef ScheduleRenderer < handle
 
             % Update cases table to reflect status and lock changes
             app.updateCasesTable();
+            if ismethod(app, 'refreshCaseBuckets')
+                app.refreshCaseBuckets('TimeControlUpdate');
+            end
 
             % Create new DailySchedule with updated case statuses
             updatedSchedule = conduction.DailySchedule( ...

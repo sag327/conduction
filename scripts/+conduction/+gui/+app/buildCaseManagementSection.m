@@ -45,4 +45,29 @@ function buildCaseManagementSection(app, casesGrid)
     container.BorderType = 'none';
     container.BackgroundColor = casesGrid.BackgroundColor;
     app.CasesEmbeddedContainer = container;
+
+    tablesGrid = uigridlayout(container);
+    tablesGrid.RowHeight = {'1x', '1x', '1x'};
+    tablesGrid.ColumnWidth = {'1x'};
+    tablesGrid.Padding = [0 0 0 0];
+    tablesGrid.RowSpacing = 10;
+    tablesGrid.ColumnSpacing = 0;
+
+    app.UnscheduledCasesPanel = uipanel(tablesGrid);
+    app.UnscheduledCasesPanel.Layout.Row = 1;
+    app.UnscheduledCasesPanel.Layout.Column = 1;
+    app.UnscheduledCasesPanel.BorderType = 'none';
+    app.UnscheduledCasesPanel.BackgroundColor = container.BackgroundColor;
+
+    app.ScheduledCasesPanel = uipanel(tablesGrid);
+    app.ScheduledCasesPanel.Layout.Row = 2;
+    app.ScheduledCasesPanel.Layout.Column = 1;
+    app.ScheduledCasesPanel.BorderType = 'none';
+    app.ScheduledCasesPanel.BackgroundColor = container.BackgroundColor;
+
+    app.CompletedCasesPanel = uipanel(tablesGrid);
+    app.CompletedCasesPanel.Layout.Row = 3;
+    app.CompletedCasesPanel.Layout.Column = 1;
+    app.CompletedCasesPanel.BorderType = 'none';
+    app.CompletedCasesPanel.BackgroundColor = container.BackgroundColor;
 end

@@ -1,12 +1,10 @@
-classdef CaseStore < handle
+classdef CaseStore < conduction.gui.stores.AbstractCaseStore
     %CASESTORE View-model for prospective cases table data and selection state.
     %   Acts as a single source of truth for the cases table representation,
     %   synchronising with the CaseManager and notifying listeners when data,
     %   selection, or sort state changes.
 
     properties (SetAccess = private)
-        Data cell = {}
-        Selection double = double.empty(1, 0)
         SortState struct = struct()
     end
 
@@ -17,8 +15,6 @@ classdef CaseStore < handle
     end
 
     events
-        DataChanged
-        SelectionChanged
         SortChanged
     end
 
@@ -268,45 +264,7 @@ classdef CaseStore < handle
             resourceStore = obj.CaseManager.getResourceStore();
             for i = 1:caseCount
                 caseObj = obj.CaseManager.getCase(i);
-
-                statusIcon = '';
-                if caseObj.IsLocked
-                    statusIcon = '🔒';
-                end
-                if caseObj.isCompleted()
-                    statusIcon = [statusIcon '✓']; %#ok<AGROW>
-                elseif caseObj.isInProgress()
-                    statusIcon = [statusIcon '▶']; %#ok<AGROW>
-                end
-                tableData{i, 1} = statusIcon;
-
-                tableData{i, 2} = caseObj.CaseNumber;
-                tableData{i, 3} = char(caseObj.OperatorName);
-                tableData{i, 4} = char(caseObj.ProcedureName);
-                tableData{i, 5} = round(caseObj.EstimatedDurationMinutes);
-                tableData{i, 6} = char(caseObj.AdmissionStatus);
-
-                if caseObj.SpecificLab == "" || caseObj.SpecificLab == "Any Lab"
-                    tableData{i, 7} = 'Any';
-                else
-                    tableData{i, 7} = char(caseObj.SpecificLab);
-                end
-
-                resourceNames = string.empty(0, 1);
-                if ~isempty(resourceStore) && isa(resourceStore, 'conduction.gui.stores.ResourceStore') && isvalid(resourceStore)
-                    resourceNames = resourceStore.namesForIds(caseObj.RequiredResourceIds);
-                end
-                if isempty(resourceNames)
-                    tableData{i, 8} = '--';
-                else
-                    tableData{i, 8} = char(strjoin(resourceNames, ', '));
-                end
-
-                if caseObj.IsFirstCaseOfDay
-                    tableData{i, 9} = 'Yes';
-                else
-                    tableData{i, 9} = 'No';
-                end
+                tableData(i, :) = conduction.gui.status.buildCaseTableRow(caseObj, resourceStore);
             end
         end
     end

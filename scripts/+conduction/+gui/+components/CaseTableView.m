@@ -8,7 +8,7 @@ classdef CaseTableView < handle
         Table matlab.ui.control.Table = matlab.ui.control.Table.empty
         RemoveButton matlab.ui.control.Button = matlab.ui.control.Button.empty
         ClearButton matlab.ui.control.Button = matlab.ui.control.Button.empty
-        Store conduction.gui.stores.CaseStore = conduction.gui.stores.CaseStore.empty
+        Store = []
         Options struct = struct()
     end
 
@@ -25,9 +25,9 @@ classdef CaseTableView < handle
                 opts = struct();
             end
 
-            if nargin < 2 || ~isa(store, 'conduction.gui.stores.CaseStore')
+            if nargin < 2 || ~isa(store, 'conduction.gui.stores.AbstractCaseStore')
                 error('CaseTableView:InvalidStore', ...
-                    'Second argument must be a conduction.gui.stores.CaseStore instance.');
+                    'Second argument must be a case store implementing the AbstractCaseStore interface.');
             end
 
             obj.Parent = parent;
