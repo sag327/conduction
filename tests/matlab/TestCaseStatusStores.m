@@ -46,12 +46,12 @@ classdef TestCaseStatusStores < matlab.unittest.TestCase
 
             % Remove selected unscheduled case
             unschedStore.removeSelected();
-            testCase.verifyEqual(cm.CaseCount, 2);
+            testCase.verifyEqual(cm.CaseCount, 3);
             testCase.verifyEqual(unschedStore.caseCount(), 1);
 
             % Clear all scheduled cases
             schedStore.clearAll();
-            testCase.verifyEqual(cm.CaseCount, 1);
+            testCase.verifyEqual(cm.CaseCount, 2);
             testCase.verifyEqual(schedStore.caseCount(), 0);
 
             % Completed archive remove by selection
@@ -69,13 +69,13 @@ classdef TestCaseStatusStores < matlab.unittest.TestCase
             newCaseId = string(cm.getCase(cm.CaseCount).CaseId);
 
             cm.setCaseStatus(cm.CaseCount, "completed");
-            testCase.verifyEqual(cm.CaseCount, 3);
+            testCase.verifyEqual(cm.CaseCount, 5);
             testCase.verifyEqual(numel(cm.getCompletedCases()), 2);
 
             completed = cm.getCompletedCases();
             restored = cm.restoreCompletedCases(completed(end));
             testCase.verifyEqual(restored(end), newCaseId);
-            testCase.verifyEqual(cm.CaseCount, 4);
+            testCase.verifyEqual(cm.CaseCount, 5);
         end
 
         function revertActiveCaseToIncomplete(testCase)

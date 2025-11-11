@@ -377,6 +377,13 @@ classdef CaseManager < handle
             % Update status
             caseObj.CaseStatus = newStatus;
 
+            % Maintain completed archive without removing active case
+            if newStatus == "completed"
+                obj.addCaseToCompletedArchive(caseObj);
+            elseif oldStatus == "completed"
+                obj.removeCaseFromCompletedArchive(caseObj.CaseId);
+            end
+
             % Record actual times if provided
             if ~isempty(fieldnames(actualTimes))
                 if isfield(actualTimes, 'ActualStartTime')
@@ -391,12 +398,6 @@ classdef CaseManager < handle
                 if isfield(actualTimes, 'ActualEndTime')
                     caseObj.ActualEndTime = actualTimes.ActualEndTime;
                 end
-            end
-
-            % If marking as completed, move to completed archive
-            if newStatus == "completed"
-                obj.CompletedCases(end+1) = caseObj;
-                obj.Cases(caseIndex) = [];
             end
 
             obj.notifyChange();
@@ -489,7 +490,9 @@ classdef CaseManager < handle
                 end
                 restoredIds(end+1, 1) = string(caseObj.CaseId); %#ok<AGROW>
                 caseObj.CaseStatus = "pending";
-                obj.Cases(end+1) = caseObj; %#ok<AGROW>
+                if isempty(obj.findCaseById(caseObj.CaseId))
+                    obj.Cases(end+1) = caseObj; %#ok<AGROW>
+                end
 
                 removeIdx = find(archivedIds == caseObj.CaseId, 1, 'first');
                 if ~isempty(removeIdx)
@@ -524,8 +527,11 @@ classdef CaseManager < handle
 
             caseObj = obj.CompletedCases(idx);
             obj.CompletedCases(idx) = [];
+            alreadyActive = ~isempty(obj.findCaseById(caseId));
             obj.resetCaseToIncomplete(caseObj);
-            obj.Cases(end+1) = caseObj; %#ok<AGROW>
+            if ~alreadyActive
+                obj.Cases(end+1) = caseObj; %#ok<AGROW>
+            end
             obj.notifyChange();
         end
 
@@ -547,6 +553,7 @@ classdef CaseManager < handle
             end
 
             obj.resetCaseToIncomplete(caseObj);
+            obj.removeCaseFromCompletedArchive(caseId);
             obj.notifyChange();
         end
 
@@ -569,7 +576,7 @@ classdef CaseManager < handle
             end
         end
 
-        function resetCaseToIncomplete(~, caseObj)
+        function resetCaseToIncomplete(obj, caseObj)
             %RESETCASETOINCOMPLETE Clear scheduling, actuals, and lock state.
             if isempty(caseObj)
                 return;
@@ -584,6 +591,41 @@ classdef CaseManager < handle
             caseObj.ActualProcEndTime = NaN;
             caseObj.ActualEndTime = NaN;
             caseObj.IsLocked = false;
+            obj.removeCaseFromCompletedArchive(caseObj.CaseId);
+        end
+
+        function addCaseToCompletedArchive(obj, caseObj)
+            if isempty(caseObj)
+                return;
+            end
+            caseId = string(caseObj.CaseId);
+            if strlength(caseId) == 0
+                return;
+            end
+            if obj.isCaseInCompletedArchive(caseId)
+                return;
+            end
+            obj.CompletedCases(end+1) = caseObj;
+        end
+
+        function removeCaseFromCompletedArchive(obj, caseId)
+            caseId = string(caseId);
+            if isempty(caseId) || strlength(caseId) == 0 || isempty(obj.CompletedCases)
+                return;
+            end
+            mask = strcmp(string({obj.CompletedCases.CaseId}), caseId);
+            if any(mask)
+                obj.CompletedCases(mask) = [];
+            end
+        end
+
+        function tf = isCaseInCompletedArchive(obj, caseId)
+            if isempty(obj.CompletedCases)
+                tf = false;
+                return;
+            end
+            ids = string({obj.CompletedCases.CaseId});
+            tf = any(ids == caseId);
         end
 
         function setCompletedCaseArchive(obj, completedCases)

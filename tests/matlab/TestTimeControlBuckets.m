@@ -64,9 +64,10 @@ classdef TestTimeControlBuckets < matlab.unittest.TestCase
             currentTime = 600; % 10:00 AM
             app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTime);
 
-            % Case statuses update for visualization, but archive should remain empty
+            % Case statuses update for visualization and archive tracking
             testCase.verifyEqual(cm.CaseCount, 2, 'Active case collection should remain intact.');
-            testCase.verifyEmpty(cm.getCompletedCases(), 'Simulated completion must not touch the archive.');
+            testCase.verifyEqual(numel(cm.getCompletedCases()), 1, ...
+                'Completed archive should include the finished case.');
             testCase.verifyEqual(string(cm.getCase(1).CaseStatus), "completed");
             testCase.verifyEqual(string(cm.getCase(2).CaseStatus), "in_progress", ...
                 'Second case should transition to in-progress at the current time mark.');

@@ -1975,6 +1975,51 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function applyCaseStatusToSchedules(app, caseId, newStatus)
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+            newStatus = string(newStatus);
+
+            app.OptimizedSchedule = app.updateScheduleCaseStatus(app.OptimizedSchedule, caseId, newStatus);
+            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule)
+                app.SimulatedSchedule = app.updateScheduleCaseStatus(app.SimulatedSchedule, caseId, newStatus);
+            end
+        end
+
+        function schedule = updateScheduleCaseStatus(~, schedule, caseId, newStatus)
+            if isempty(schedule) || isempty(schedule.labAssignments())
+                return;
+            end
+
+            assignments = schedule.labAssignments();
+            labs = schedule.Labs;
+            updated = false;
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    entry = labCases(caseIdx);
+                    entryId = conduction.utils.conversion.asString(entry.caseID);
+                    if strlength(entryId) == 0
+                        continue;
+                    end
+                    if entryId == caseId
+                        assignments{labIdx}(caseIdx).caseStatus = char(newStatus);
+                        updated = true;
+                    end
+                end
+            end
+
+            if updated
+                schedule = conduction.DailySchedule(schedule.Date, labs, assignments, schedule.metrics());
+            end
+        end
+
         function ensureDrawerSelectionValid(app)
             if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
                 return;
@@ -3099,25 +3144,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CaseManager.setCaseStatus(caseIndex, "completed");
 
             selectedIds = caseId;
-            scheduleWasUpdated = app.removeCaseIdsFromSchedules(selectedIds);
+            if ~ismember(caseId, app.LockedCaseIds)
+                app.LockedCaseIds(end+1) = caseId;
+            end
+
+            app.applyCaseStatusToSchedules(caseId, "completed");
 
             scheduleForRender = [];
             if app.IsTimeControlActive
                 currentTimeMinutes = app.CaseManager.getCurrentTime();
                 scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
                 app.SimulatedSchedule = scheduleForRender;
-            elseif scheduleWasUpdated
-                scheduleForRender = app.OptimizedSchedule;
             end
 
-            if scheduleWasUpdated
-                app.OptimizationController.markOptimizationDirty(app);
-            end
+            app.refreshCaseBuckets('ManualMarkComplete');
+            app.OptimizationController.markOptimizationDirty(app);
 
             if ~isempty(scheduleForRender)
                 app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
-            elseif scheduleWasUpdated
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+            elseif ~isempty(app.OptimizedSchedule)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, app.getScheduleForRendering(), app.OptimizationOutcome);
             end
 
             app.LockedCaseIds = setdiff(app.LockedCaseIds, selectedIds, 'stable');
@@ -3161,6 +3207,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CompletedCaseStore.clearSelection();
             end
 
+            app.applyCaseStatusToSchedules(caseId, "pending");
             app.refreshCaseBuckets('RevertCase');
             app.assignSelectedCaseIds(caseId, "manual");
             app.OptimizationController.markOptimizationDirty(app);

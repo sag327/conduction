@@ -1162,6 +1162,14 @@ classdef ScheduleRenderer < handle
                             end
                             caseObj.CaseStatus = newStatus;
                             caseObj.IsLocked = shouldBeLocked;
+
+                            if hasStatusChange
+                                if newStatus == "completed"
+                                    app.CaseManager.addCaseToCompletedArchive(caseObj);
+                                else
+                                    app.CaseManager.removeCaseFromCompletedArchive(caseIdStr);
+                                end
+                            end
                         end
                     end
                 end

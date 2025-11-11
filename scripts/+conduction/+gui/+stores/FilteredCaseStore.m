@@ -128,6 +128,9 @@ classdef FilteredCaseStore < conduction.gui.stores.AbstractCaseStore
             for idx = 1:count
                 caseObj = obj.CaseManager.getCase(idx);
                 allCases(idx) = caseObj;
+                if conduction.gui.status.isSimulatedCompleted(caseObj)
+                    continue;
+                end
                 bucket = conduction.gui.status.computeBucket(caseObj);
                 mask(idx) = (bucket == obj.Bucket);
             end
