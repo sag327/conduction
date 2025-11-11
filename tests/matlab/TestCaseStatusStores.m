@@ -77,5 +77,35 @@ classdef TestCaseStatusStores < matlab.unittest.TestCase
             testCase.verifyEqual(restored(end), newCaseId);
             testCase.verifyEqual(cm.CaseCount, 4);
         end
+
+        function revertActiveCaseToIncomplete(testCase)
+            cm = testCase.CaseManager;
+            firstCase = cm.getCase(1);
+            firstCase.CaseStatus = "completed";
+            firstCase.ScheduledProcStartTime = 480;
+            firstCase.ScheduledEndTime = 540;
+
+            reverted = cm.revertCaseToIncomplete(firstCase.CaseId);
+            testCase.verifyEqual(string(reverted.CaseStatus), "pending");
+            testCase.verifyTrue(isnan(reverted.ScheduledProcStartTime));
+            testCase.verifyTrue(isnan(reverted.ScheduledEndTime));
+        end
+
+        function restoreArchivedCaseById(testCase)
+            cm = testCase.CaseManager;
+            cm.addCase("OpY", "ProcY", NaN, "", false, "outpatient");
+            newIdx = cm.CaseCount;
+            newId = cm.getCase(newIdx).CaseId;
+            cm.getCase(newIdx).ScheduledProcStartTime = 600;
+            cm.getCase(newIdx).ScheduledEndTime = 660;
+
+            cm.setCaseStatus(newIdx, "completed");
+            testCase.verifyEqual(numel(cm.getCompletedCases()), 2);
+
+            restored = cm.restoreCompletedCaseById(newId);
+            testCase.verifyEqual(string(restored.CaseStatus), "pending");
+            testCase.verifyTrue(isnan(restored.ScheduledProcStartTime));
+            testCase.verifyEqual(numel(cm.getCompletedCases()), 1);
+        end
     end
 end

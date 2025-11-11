@@ -504,6 +504,88 @@ classdef CaseManager < handle
             end
         end
 
+        function caseObj = restoreCompletedCaseById(obj, caseId)
+            %RESTORECOMPLETEDCASEBYID Restore a single archived case by id.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId) || isempty(obj.CompletedCases)
+                return;
+            end
+
+            ids = string({obj.CompletedCases.CaseId});
+            idx = find(ids == caseId, 1, 'first');
+            if isempty(idx)
+                return;
+            end
+
+            caseObj = obj.CompletedCases(idx);
+            obj.CompletedCases(idx) = [];
+            obj.resetCaseToIncomplete(caseObj);
+            obj.Cases(end+1) = caseObj; %#ok<AGROW>
+            obj.notifyChange();
+        end
+
+        function caseObj = revertCaseToIncomplete(obj, caseId)
+            %REVERTCASETOINCOMPLETE Reset an active case to pending/incomplete.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId)
+                return;
+            end
+
+            [caseObj, ~] = obj.findCaseById(caseId);
+            if isempty(caseObj)
+                return;
+            end
+
+            obj.resetCaseToIncomplete(caseObj);
+            obj.notifyChange();
+        end
+
+        function caseObj = getCompletedCaseById(obj, caseId)
+            %GETCOMPLETEDCASEBYID Fetch archived case without mutating collections.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId) || isempty(obj.CompletedCases)
+                return;
+            end
+
+            ids = string({obj.CompletedCases.CaseId});
+            idx = find(ids == caseId, 1, 'first');
+            if ~isempty(idx)
+                caseObj = obj.CompletedCases(idx);
+            end
+        end
+
+        function resetCaseToIncomplete(~, caseObj)
+            %RESETCASETOINCOMPLETE Clear scheduling, actuals, and lock state.
+            if isempty(caseObj)
+                return;
+            end
+            caseObj.CaseStatus = "pending";
+            caseObj.AssignedLab = NaN;
+            caseObj.ScheduledStartTime = NaN;
+            caseObj.ScheduledProcStartTime = NaN;
+            caseObj.ScheduledEndTime = NaN;
+            caseObj.ActualStartTime = NaN;
+            caseObj.ActualProcStartTime = NaN;
+            caseObj.ActualProcEndTime = NaN;
+            caseObj.ActualEndTime = NaN;
+            caseObj.IsLocked = false;
+        end
+
         function setCompletedCaseArchive(obj, completedCases)
             arguments
                 obj

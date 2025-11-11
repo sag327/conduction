@@ -285,6 +285,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 listeners(end+1) = addlistener(app.ScheduledCaseStore, 'SelectionChanged', ...
                     @(~, ~) app.onBucketSelectionChanged(app.ScheduledCaseStore));
             end
+            if ~isempty(app.CompletedCaseStore) && isvalid(app.CompletedCaseStore)
+                listeners(end+1) = addlistener(app.CompletedCaseStore, 'SelectionChanged', ...
+                    @(~, ~) app.onCompletedBucketSelectionChanged());
+            end
 
             app.BucketStoreListeners = listeners;
         end
@@ -312,6 +316,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             selectedIds = sourceStore.getSelectedCaseIds();
             app.assignSelectedCaseIds(selectedIds, "bucket");
+        end
+
+        function onCompletedBucketSelectionChanged(app)
+            if isempty(app.CompletedCaseStore) || ~isvalid(app.CompletedCaseStore)
+                return;
+            end
+            selectedIds = app.CompletedCaseStore.getSelectedCaseIds();
+            if numel(selectedIds) ~= 1
+                return;
+            end
+            caseId = selectedIds(1);
+            app.DrawerController.openDrawer(app, caseId);
         end
 
         function pushSelectionToBucketStores(app)
@@ -2199,7 +2215,36 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
                 return;
             end
-            app.archiveCaseById(app.DrawerCurrentCaseId);
+            caseId = app.DrawerCurrentCaseId;
+            [activeCase, ~] = app.CaseManager.findCaseById(char(caseId));
+            archivedCase = app.CaseManager.getCompletedCaseById(caseId);
+
+            targetCase = activeCase;
+            isArchivedCase = false;
+            if isempty(targetCase) && ~isempty(archivedCase)
+                targetCase = archivedCase;
+                isArchivedCase = true;
+            end
+
+            if isempty(targetCase)
+                return;
+            end
+
+            isCompletedState = strcmpi(string(targetCase.CaseStatus), "completed");
+
+            if isCompletedState
+                if app.IsTimeControlActive
+                    uialert(app.UIFigure, ...
+                        ['Cases cannot be reverted to incomplete while Time Control mode is active. ', ...
+                        'Disable Time Control or move the NOW line before reverting.'], ...
+                        'Revert Not Allowed', 'Icon', 'warning');
+                    return;
+                end
+                app.revertCaseToIncompleteById(caseId, isArchivedCase);
+                app.DrawerController.populateDrawer(app, caseId);
+            else
+                app.archiveCaseById(caseId);
+            end
         end
 
         function DrawerSetupSpinnerChanged(app, event)
@@ -3083,6 +3128,50 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             remainingSelection = setdiff(app.SelectedCaseIds, selectedIds, 'stable');
             app.assignSelectedCaseIds(remainingSelection, "manual");
             app.markDirty();
+        end
+
+        function revertCaseToIncompleteById(app, caseId, isArchivedCase)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+
+            if nargin < 3
+                isArchivedCase = false;
+            end
+
+            if isArchivedCase
+                restoredCase = app.CaseManager.restoreCompletedCaseById(caseId);
+            else
+                restoredCase = app.CaseManager.revertCaseToIncomplete(caseId);
+            end
+
+            if isempty(restoredCase)
+                return;
+            end
+
+            app.LockedCaseIds = setdiff(app.LockedCaseIds, caseId, 'stable');
+            app.syncCaseLocksWithIds();
+
+            if ~isempty(app.CompletedCaseStore) && isvalid(app.CompletedCaseStore)
+                app.CompletedCaseStore.clearSelection();
+            end
+
+            app.refreshCaseBuckets('RevertCase');
+            app.assignSelectedCaseIds(caseId, "manual");
+            app.OptimizationController.markOptimizationDirty(app);
+            app.markDirty();
+
+            if ~isempty(app.OptimizedSchedule)
+                scheduleToRender = app.getScheduleForRendering();
+                if ~isempty(scheduleToRender)
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
+                end
+            end
         end
 
         function ids = normalizeCaseIds(~, ids)
