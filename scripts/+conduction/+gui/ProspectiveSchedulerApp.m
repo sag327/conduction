@@ -322,12 +322,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.CompletedCaseStore) || ~isvalid(app.CompletedCaseStore)
                 return;
             end
-            selectedIds = app.CompletedCaseStore.getSelectedCaseIds();
-            if numel(selectedIds) ~= 1
+            if app.IsSyncingBucketSelection
                 return;
             end
-            caseId = selectedIds(1);
-            app.DrawerController.openDrawer(app, caseId);
+
+            app.IsSyncingBucketSelection = true;
+            cleanup = onCleanup(@() app.clearBucketSelectionSyncGuard()); %#ok<NASGU>
+
+            if ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                app.UnscheduledCaseStore.clearSelection();
+            end
+            if ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
+                app.ScheduledCaseStore.clearSelection();
+            end
+
+            selectedIds = app.CompletedCaseStore.getSelectedCaseIds();
+            app.assignSelectedCaseIds(selectedIds, "bucket");
+
+            if numel(selectedIds) == 1
+                app.DrawerController.openDrawer(app, selectedIds(1));
+            end
         end
 
         function pushSelectionToBucketStores(app)
@@ -345,6 +359,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.ScheduledCaseStore) && isvalid(app.ScheduledCaseStore)
                 schedIds = app.filterIdsByBucket(ids, "scheduled");
                 app.ScheduledCaseStore.setSelectedByIds(schedIds);
+            end
+            if ~isempty(app.CompletedCaseStore) && isvalid(app.CompletedCaseStore)
+                compIds = app.filterIdsByCompleted(ids);
+                app.CompletedCaseStore.setSelectedByIds(compIds);
             end
         end
 
@@ -366,6 +384,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
                 bucketName = conduction.gui.status.computeBucket(caseObj);
                 if bucketName == bucket
+                    subset(end+1, 1) = caseId; %#ok<AGROW>
+                end
+            end
+        end
+
+        function subset = filterIdsByCompleted(app, ids)
+            subset = string.empty(0, 1);
+            if isempty(ids) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+
+            ids = app.normalizeCaseIds(ids);
+            for idx = 1:numel(ids)
+                caseId = ids(idx);
+                if strlength(caseId) == 0
+                    continue;
+                end
+                if app.CaseManager.isCaseInCompletedArchive(caseId)
                     subset(end+1, 1) = caseId; %#ok<AGROW>
                 end
             end
@@ -3169,21 +3205,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.applyCaseStatusToSchedules(caseId, "completed");
 
-            scheduleForRender = [];
-            if app.IsTimeControlActive
-                currentTimeMinutes = app.CaseManager.getCurrentTime();
-                scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
-                app.SimulatedSchedule = scheduleForRender;
-            end
-
             app.refreshCaseBuckets('ManualMarkComplete');
             app.OptimizationController.markOptimizationDirty(app);
-
-            if ~isempty(scheduleForRender)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
-            elseif ~isempty(app.OptimizedSchedule)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.getScheduleForRendering(), app.OptimizationOutcome);
-            end
 
             app.LockedCaseIds = setdiff(app.LockedCaseIds, selectedIds, 'stable');
             if isprop(app, 'TimeControlLockedCaseIds')
@@ -3231,13 +3254,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.assignSelectedCaseIds(caseId, "manual");
             app.OptimizationController.markOptimizationDirty(app);
             app.markDirty();
-
-            if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                if ~isempty(scheduleToRender)
-                    app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
-                end
-            end
         end
 
         function ids = normalizeCaseIds(~, ids)
