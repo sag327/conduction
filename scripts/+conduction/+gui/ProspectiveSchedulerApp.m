@@ -1997,6 +1997,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             labs = schedule.Labs;
             updated = false;
 
+            % Ensure each schedule entry has a caseStatus field to avoid struct mismatch
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                if ~isfield(labCases, 'caseStatus')
+                    [labCases.caseStatus] = deal('');
+                    assignments{labIdx} = labCases;
+                end
+            end
+
             for labIdx = 1:numel(assignments)
                 labCases = assignments{labIdx};
                 if isempty(labCases)
@@ -2288,6 +2300,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.revertCaseToIncompleteById(caseId, isArchivedCase);
                 app.DrawerController.populateDrawer(app, caseId);
             else
+                if app.IsTimeControlActive
+                    uialert(app.UIFigure, ...
+                        ['Manual completion is disabled while Time Control mode is active. ', ...
+                        'Disable Time Control to mark cases complete.'], ...
+                        'Manual Completion Not Allowed', 'Icon', 'warning');
+                    return;
+                end
                 app.archiveCaseById(caseId);
             end
         end
