@@ -2068,6 +2068,39 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function commitTimeControlAdjustments(app)
+            app.syncCompletedArchiveWithActiveCases();
+            if ~isempty(app.TimeControlLockedCaseIds)
+                app.LockedCaseIds = unique([app.LockedCaseIds(:); app.TimeControlLockedCaseIds(:)], 'stable');
+            end
+            app.syncCaseLocksWithIds();
+            app.refreshCaseBuckets('TimeControlCommit');
+            app.OptimizationController.markOptimizationDirty(app);
+            app.markDirty();
+        end
+
+        function syncCompletedArchiveWithActiveCases(app)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                caseId = string(caseObj.CaseId);
+                if strlength(caseId) == 0
+                    continue;
+                end
+                if strcmpi(string(caseObj.CaseStatus), "completed")
+                    app.CaseManager.addCaseToCompletedArchive(caseObj);
+                else
+                    app.CaseManager.removeCaseFromCompletedArchive(caseId);
+                end
+            end
+        end
+
         function ensureDrawerSelectionValid(app)
             if isempty(app.DrawerCurrentCaseId) || strlength(app.DrawerCurrentCaseId) == 0
                 return;
