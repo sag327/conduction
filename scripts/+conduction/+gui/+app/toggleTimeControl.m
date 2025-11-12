@@ -54,30 +54,26 @@ function toggleTimeControl(app)
         keepAdjustments = strcmp(choice, 'Keep Adjustments');
     end
 
+    % Disable time control mode and restore defaults before branching
+    app.IsTimeControlActive = false;
+    app.ScheduleRenderer.disableNowLineDrag(app);
+    app.CaseManager.setCurrentTime(NaN);
+    app.SimulatedSchedule = conduction.DailySchedule.empty;
+
     if keepAdjustments
         app.commitTimeControlAdjustments();
     else
         app.LockedCaseIds = unique(app.TimeControlBaselineLockedIds, 'stable');
         app.restoreTimeControlCaseStates();
+        app.clearScheduleCaseStatuses();
         app.syncCompletedArchiveWithActiveCases();
         app.refreshCaseBuckets('TimeControlRevert');
-        if ~isempty(app.OptimizedSchedule)
-            conduction.gui.app.redrawSchedule(app, app.getScheduleForRendering(), app.OptimizationOutcome);
-        end
+        app.OptimizationController.markOptimizationDirty(app);
     end
 
-    % Disable time control mode and restore defaults
-    app.IsTimeControlActive = false;
-    app.ScheduleRenderer.disableNowLineDrag(app);
-    app.CaseManager.setCurrentTime(NaN);
-    app.SimulatedSchedule = conduction.DailySchedule.empty;
     app.TimeControlLockedCaseIds = string.empty(1, 0);
     app.TimeControlBaselineLockedIds = string.empty(1, 0);
     app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
-
-    if ~keepAdjustments && ~isempty(app.OptimizedSchedule)
-        conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-    end
 
     app.ScheduleRenderer.updateActualTimeIndicator(app);
     app.TimeControlSwitch.Value = 'Off';

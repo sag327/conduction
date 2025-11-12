@@ -2075,6 +2075,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             app.syncCaseLocksWithIds();
             app.refreshCaseBuckets('TimeControlCommit');
+            app.persistCaseStatusesIntoSchedule();
             app.OptimizationController.markOptimizationDirty(app);
             app.markDirty();
         end
@@ -2098,6 +2099,67 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 else
                     app.CaseManager.removeCaseFromCompletedArchive(caseId);
                 end
+            end
+        end
+
+        function persistCaseStatusesIntoSchedule(app)
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+            updated = false;
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                if ~isfield(labCases, 'caseStatus')
+                    [labCases.caseStatus] = deal('');
+                end
+                for caseIdx = 1:numel(labCases)
+                    entry = labCases(caseIdx);
+                    caseId = conduction.utils.conversion.asString(entry.caseID);
+                    if strlength(caseId) == 0
+                        continue;
+                    end
+                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    if isempty(caseObj)
+                        continue;
+                    end
+                    labCases(caseIdx).caseStatus = char(caseObj.CaseStatus);
+                    updated = true;
+                end
+                assignments{labIdx} = labCases;
+            end
+
+            if updated
+                app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, app.OptimizedSchedule.metrics());
+            end
+        end
+
+        function clearScheduleCaseStatuses(app)
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+            assignments = app.OptimizedSchedule.labAssignments();
+            labs = app.OptimizedSchedule.Labs;
+            updated = false;
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases) || ~isfield(labCases, 'caseStatus')
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    labCases(caseIdx).caseStatus = '';
+                end
+                assignments{labIdx} = labCases;
+                updated = true;
+            end
+            if updated
+                app.OptimizedSchedule = conduction.DailySchedule(app.OptimizedSchedule.Date, labs, assignments, app.OptimizedSchedule.metrics());
             end
         end
 
