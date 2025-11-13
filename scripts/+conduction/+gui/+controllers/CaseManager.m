@@ -377,6 +377,13 @@ classdef CaseManager < handle
             % Update status
             caseObj.CaseStatus = newStatus;
 
+            % Maintain completed archive without removing active case
+            if newStatus == "completed"
+                obj.addCaseToCompletedArchive(caseObj);
+            elseif oldStatus == "completed"
+                obj.removeCaseFromCompletedArchive(caseObj.CaseId);
+            end
+
             % Record actual times if provided
             if ~isempty(fieldnames(actualTimes))
                 if isfield(actualTimes, 'ActualStartTime')
@@ -391,12 +398,6 @@ classdef CaseManager < handle
                 if isfield(actualTimes, 'ActualEndTime')
                     caseObj.ActualEndTime = actualTimes.ActualEndTime;
                 end
-            end
-
-            % If marking as completed, move to completed archive
-            if newStatus == "completed"
-                obj.CompletedCases(end+1) = caseObj;
-                obj.Cases(caseIndex) = [];
             end
 
             obj.notifyChange();
@@ -457,6 +458,193 @@ classdef CaseManager < handle
         function allCases = getAllCases(obj)
             %GETALLCASES Return all cases including pending, in-progress, and completed
             allCases = [obj.Cases, obj.CompletedCases];
+        end
+
+        function restoredIds = restoreCompletedCases(obj, casesToRestore)
+            arguments
+                obj
+                casesToRestore
+            end
+
+            restoredIds = string.empty(0, 1);
+
+            if isempty(casesToRestore)
+                return;
+            end
+
+            if ~isa(casesToRestore, 'conduction.gui.models.ProspectiveCase')
+                error('CaseManager:InvalidRestoreInput', ...
+                    'restoreCompletedCases expects ProspectiveCase instances.');
+            end
+
+            if ~isempty(obj.CompletedCases)
+                archivedIds = string({obj.CompletedCases.CaseId});
+            else
+                archivedIds = string.empty(0, 1);
+            end
+
+            for idx = 1:numel(casesToRestore)
+                caseObj = casesToRestore(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                restoredIds(end+1, 1) = string(caseObj.CaseId); %#ok<AGROW>
+                caseObj.CaseStatus = "pending";
+                if isempty(obj.findCaseById(caseObj.CaseId))
+                    obj.Cases(end+1) = caseObj; %#ok<AGROW>
+                end
+
+                removeIdx = find(archivedIds == caseObj.CaseId, 1, 'first');
+                if ~isempty(removeIdx)
+                    obj.CompletedCases(removeIdx) = [];
+                    archivedIds(removeIdx) = [];
+                end
+            end
+
+            if ~isempty(restoredIds)
+                restoredIds = unique(restoredIds, 'stable');
+                obj.notifyChange();
+            end
+        end
+
+        function caseObj = restoreCompletedCaseById(obj, caseId)
+            %RESTORECOMPLETEDCASEBYID Restore a single archived case by id.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId) || isempty(obj.CompletedCases)
+                return;
+            end
+
+            ids = string({obj.CompletedCases.CaseId});
+            idx = find(ids == caseId, 1, 'first');
+            if isempty(idx)
+                return;
+            end
+
+            caseObj = obj.CompletedCases(idx);
+            obj.CompletedCases(idx) = [];
+            alreadyActive = ~isempty(obj.findCaseById(caseId));
+            obj.resetCaseToIncomplete(caseObj);
+            if ~alreadyActive
+                obj.Cases(end+1) = caseObj; %#ok<AGROW>
+            end
+            obj.notifyChange();
+        end
+
+        function caseObj = revertCaseToIncomplete(obj, caseId)
+            %REVERTCASETOINCOMPLETE Reset an active case to pending/incomplete.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId)
+                return;
+            end
+
+            [caseObj, ~] = obj.findCaseById(caseId);
+            if isempty(caseObj)
+                return;
+            end
+
+            obj.resetCaseToIncomplete(caseObj);
+            obj.removeCaseFromCompletedArchive(caseId);
+            obj.notifyChange();
+        end
+
+        function caseObj = getCompletedCaseById(obj, caseId)
+            %GETCOMPLETEDCASEBYID Fetch archived case without mutating collections.
+            arguments
+                obj
+                caseId (1,1) string
+            end
+
+            caseObj = conduction.gui.models.ProspectiveCase.empty;
+            if isempty(caseId) || isempty(obj.CompletedCases)
+                return;
+            end
+
+            ids = string({obj.CompletedCases.CaseId});
+            idx = find(ids == caseId, 1, 'first');
+            if ~isempty(idx)
+                caseObj = obj.CompletedCases(idx);
+            end
+        end
+
+        function resetCaseToIncomplete(obj, caseObj)
+            %RESETCASETOINCOMPLETE Clear scheduling, actuals, and lock state.
+            if isempty(caseObj)
+                return;
+            end
+            caseObj.CaseStatus = "pending";
+            caseObj.AssignedLab = NaN;
+            caseObj.ScheduledStartTime = NaN;
+            caseObj.ScheduledProcStartTime = NaN;
+            caseObj.ScheduledEndTime = NaN;
+            caseObj.ActualStartTime = NaN;
+            caseObj.ActualProcStartTime = NaN;
+            caseObj.ActualProcEndTime = NaN;
+            caseObj.ActualEndTime = NaN;
+            caseObj.IsLocked = false;
+            obj.removeCaseFromCompletedArchive(caseObj.CaseId);
+        end
+
+        function addCaseToCompletedArchive(obj, caseObj)
+            if isempty(caseObj)
+                return;
+            end
+            caseId = string(caseObj.CaseId);
+            if strlength(caseId) == 0
+                return;
+            end
+            if obj.isCaseInCompletedArchive(caseId)
+                return;
+            end
+            obj.CompletedCases(end+1) = caseObj;
+        end
+
+        function removeCaseFromCompletedArchive(obj, caseId)
+            caseId = string(caseId);
+            if isempty(caseId) || strlength(caseId) == 0 || isempty(obj.CompletedCases)
+                return;
+            end
+            mask = strcmp(string({obj.CompletedCases.CaseId}), caseId);
+            if any(mask)
+                obj.CompletedCases(mask) = [];
+            end
+        end
+
+        function tf = isCaseInCompletedArchive(obj, caseId)
+            if isempty(obj.CompletedCases)
+                tf = false;
+                return;
+            end
+            ids = string({obj.CompletedCases.CaseId});
+            tf = any(ids == caseId);
+        end
+
+        function setCompletedCaseArchive(obj, completedCases)
+            arguments
+                obj
+                completedCases
+            end
+
+            if isempty(completedCases)
+                obj.CompletedCases = conduction.gui.models.ProspectiveCase.empty;
+            else
+                if ~isa(completedCases, 'conduction.gui.models.ProspectiveCase')
+                    error('CaseManager:InvalidCompletedCases', ...
+                        'Completed cases must be ProspectiveCase instances.');
+                end
+                obj.CompletedCases = completedCases(:).';
+            end
+
+            obj.notifyChange();
         end
 
         function success = loadClinicalData(obj, filePath)

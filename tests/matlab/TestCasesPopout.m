@@ -4,6 +4,7 @@ classdef TestCasesPopout < matlab.unittest.TestCase
     properties
         CaseManager conduction.gui.controllers.CaseManager
         Store conduction.gui.stores.CaseStore
+        Stores struct
         Popout conduction.gui.windows.CasesPopout
         RedockCount double
     end
@@ -21,9 +22,13 @@ classdef TestCasesPopout < matlab.unittest.TestCase
             targetDate = datetime('2025-01-01');
             testCase.CaseManager = conduction.gui.controllers.CaseManager(targetDate);
             testCase.Store = conduction.gui.stores.CaseStore(testCase.CaseManager);
+            testCase.Stores = struct( ...
+                'unscheduled', conduction.gui.stores.FilteredCaseStore(testCase.CaseManager, "unscheduled"), ...
+                'scheduled', conduction.gui.stores.FilteredCaseStore(testCase.CaseManager, "scheduled"), ...
+                'completed', conduction.gui.stores.CompletedCaseStore(testCase.CaseManager));
             testCase.RedockCount = 0;
 
-            testCase.Popout = conduction.gui.windows.CasesPopout(testCase.Store, ...
+            testCase.Popout = conduction.gui.windows.CasesPopout(testCase.Stores, ...
                 @(src) testCase.incrementRedock(src));
         end
     end
@@ -33,6 +38,14 @@ classdef TestCasesPopout < matlab.unittest.TestCase
             if ~isempty(testCase.Popout) && isvalid(testCase.Popout)
                 delete(testCase.Popout);
             end
+            fields = fieldnames(testCase.Stores);
+            for i = 1:numel(fields)
+                store = testCase.Stores.(fields{i});
+                if ~isempty(store) && isvalid(store)
+                    delete(store);
+                end
+            end
+            testCase.Stores = struct();
         end
     end
 
@@ -44,7 +57,7 @@ classdef TestCasesPopout < matlab.unittest.TestCase
 
             testCase.verifyTrue(testCase.Popout.isOpen());
             testCase.verifyEqual(string(testCase.Popout.UIFigure.Visible), "on");
-            testCase.verifyNotEmpty(testCase.Popout.TableView);
+            testCase.verifyNotEmpty(testCase.Popout.TableViews.unscheduled);
         end
 
         function testShowTwiceFocusesExistingWindow(testCase)

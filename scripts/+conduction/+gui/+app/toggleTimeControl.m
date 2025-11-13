@@ -41,41 +41,39 @@ function toggleTimeControl(app)
         return;
     end
 
-    % Prompt whether time-control locks should persist
-    keepLocks = true;
-    if ~isempty(app.TimeControlLockedCaseIds)
-        confirmMsg = sprintf(['Time control locked %d case(s).\n', ...
-            'Do you want to keep these cases locked after disabling time control?'], ...
-            numel(app.TimeControlLockedCaseIds));
-        choice = uiconfirm(app.UIFigure, confirmMsg, 'Time Control Locks', ...
-            'Options', {'Keep Locks', 'Unlock Cases'}, ...
-            'DefaultOption', 'Keep Locks', ...
-            'CancelOption', 'Keep Locks', ...
+    keepAdjustments = false;
+    hasAdjustments = ~isempty(app.TimeControlStatusBaseline) || ~isempty(app.TimeControlLockedCaseIds);
+    if hasAdjustments
+        confirmMsg = sprintf(['Time Control updated case statuses and locks.\n', ...
+            'Do you want to keep these adjustments after disabling Time Control?']);
+        choice = uiconfirm(app.UIFigure, confirmMsg, 'Time Control Adjustments', ...
+            'Options', {'Keep Adjustments', 'Revert Changes'}, ...
+            'DefaultOption', 'Keep Adjustments', ...
+            'CancelOption', 'Revert Changes', ...
             'Icon', 'question');
-
-        keepLocks = strcmp(choice, 'Keep Locks');
+        keepAdjustments = strcmp(choice, 'Keep Adjustments');
     end
 
-    if ~keepLocks && ~isempty(app.TimeControlLockedCaseIds)
-        remainingLocks = setdiff(app.LockedCaseIds, app.TimeControlLockedCaseIds);
-        app.LockedCaseIds = remainingLocks;
-    end
-
-    % Restore original case states and align final lock flags
-    app.restoreTimeControlCaseStates();
-
-    % Disable time control mode and restore defaults
+    % Disable time control mode and restore defaults before branching
     app.IsTimeControlActive = false;
     app.ScheduleRenderer.disableNowLineDrag(app);
     app.CaseManager.setCurrentTime(NaN);
     app.SimulatedSchedule = conduction.DailySchedule.empty;
-    app.TimeControlLockedCaseIds = string.empty(1, 0);
-    app.TimeControlBaselineLockedIds = string.empty;
-    app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
 
-    if ~isempty(app.OptimizedSchedule)
-        conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
+    if keepAdjustments
+        app.commitTimeControlAdjustments();
+    else
+        app.LockedCaseIds = unique(app.TimeControlBaselineLockedIds, 'stable');
+        app.restoreTimeControlCaseStates();
+        app.clearScheduleCaseStatuses();
+        app.syncCompletedArchiveWithActiveCases();
+        app.refreshCaseBuckets('TimeControlRevert');
+        app.OptimizationController.markOptimizationDirty(app);
     end
+
+    app.TimeControlLockedCaseIds = string.empty(1, 0);
+    app.TimeControlBaselineLockedIds = string.empty(1, 0);
+    app.TimeControlStatusBaseline = struct('caseId', {}, 'status', {}, 'isLocked', {});
 
     app.ScheduleRenderer.updateActualTimeIndicator(app);
     app.TimeControlSwitch.Value = 'Off';

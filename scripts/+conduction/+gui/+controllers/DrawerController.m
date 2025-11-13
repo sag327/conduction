@@ -98,6 +98,15 @@ classdef DrawerController < handle
 
             details = obj.extractCaseDetails(app, caseId);
 
+            isArchived = false;
+            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+            if isempty(caseObj)
+                caseObj = app.CaseManager.getCompletedCaseById(caseId);
+                isArchived = ~isempty(caseObj);
+            end
+
+            details = obj.completeDetailsFromCaseObj(details, caseObj);
+
             obj.setLabelText(app.DrawerCaseValueLabel, details.DisplayCase);
             obj.setLabelText(app.DrawerProcedureValueLabel, details.Procedure);
             obj.setLabelText(app.DrawerOperatorValueLabel, details.Operator);
@@ -105,7 +114,6 @@ classdef DrawerController < handle
             obj.setLabelText(app.DrawerStartValueLabel, details.StartDisplay);
             obj.setLabelText(app.DrawerEndValueLabel, details.EndDisplay);
 
-            [caseObj, ~] = app.CaseManager.findCaseById(caseId);
             if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
                 if isempty(caseObj)
                     app.DrawerResourcesChecklist.setSelection(string.empty(0,1));
@@ -127,7 +135,14 @@ classdef DrawerController < handle
 
             obj.updateHistogram(app, details.Operator, details.Procedure);
 
+            isCompletedState = false;
+            if ~isempty(caseObj)
+                isCompletedState = strcmpi(string(caseObj.CaseStatus), "completed");
+            end
+            obj.updateMarkCompleteButton(app, isCompletedState);
+
             app.DrawerCurrentCaseId = caseId;
+            obj.updateCompletionButtonState(app, caseId);
         end
 
         function showMultiSelectMessage(obj, app)
@@ -136,6 +151,7 @@ classdef DrawerController < handle
             end
 
             obj.setDrawerSectionVisibility(app, false);
+            obj.updateCompletionButtonState(app, "");
             if ~isempty(app.DrawerMultiSelectMessage) && isvalid(app.DrawerMultiSelectMessage)
                 app.DrawerMultiSelectMessage.Visible = 'on';
             end
@@ -168,6 +184,7 @@ classdef DrawerController < handle
             if ~isempty(app.DrawerResourcesChecklist) && isvalid(app.DrawerResourcesChecklist)
                 app.DrawerResourcesChecklist.setSelection(string.empty(0,1));
             end
+            obj.updateCompletionButtonState(app, "");
         end
 
         function updateHistogram(obj, app, operatorName, procedureName)
@@ -314,6 +331,62 @@ classdef DrawerController < handle
                         return;
                     end
                 end
+            end
+        end
+
+        function details = completeDetailsFromCaseObj(obj, details, caseObj)
+            if isempty(caseObj)
+                return;
+            end
+
+            if strlength(caseObj.CaseId) > 0
+                details.CaseId = string(caseObj.CaseId);
+            end
+
+            if ~isnan(caseObj.CaseNumber)
+                details.DisplayCase = sprintf('Case #%d', round(caseObj.CaseNumber));
+            elseif strlength(caseObj.CaseId) > 0
+                details.DisplayCase = string(caseObj.CaseId);
+            end
+
+            if strlength(caseObj.ProcedureName) > 0
+                details.Procedure = string(caseObj.ProcedureName);
+            end
+            if strlength(caseObj.OperatorName) > 0
+                details.Operator = string(caseObj.OperatorName);
+            end
+
+            if ~isnan(caseObj.AssignedLab)
+                details.Lab = sprintf('Lab %d', round(caseObj.AssignedLab));
+            elseif strlength(caseObj.SpecificLab) > 0
+                details.Lab = string(caseObj.SpecificLab);
+            end
+
+            if ~isnan(caseObj.ScheduledProcStartTime)
+                details.StartMinutes = caseObj.ScheduledProcStartTime;
+                details.StartDisplay = obj.formatDrawerTime(details.StartMinutes);
+            end
+            if ~isnan(caseObj.ScheduledEndTime)
+                details.EndMinutes = caseObj.ScheduledEndTime;
+                details.EndDisplay = obj.formatDrawerTime(details.EndMinutes);
+            end
+
+            details.Status = string(caseObj.CaseStatus);
+        end
+
+        function updateMarkCompleteButton(~, app, isCompleted)
+            if isempty(app.DrawerMarkCompleteButton) || ~isvalid(app.DrawerMarkCompleteButton)
+                return;
+            end
+            btn = app.DrawerMarkCompleteButton;
+            if isCompleted
+                btn.Text = 'Mark case incomplete';
+                btn.BackgroundColor = [0.35 0.35 0.6];
+                btn.Tooltip = 'Return this case to the Unscheduled bucket';
+            else
+                btn.Text = 'Mark case complete';
+                btn.BackgroundColor = [0.18 0.5 0.18];
+                btn.Tooltip = 'Archive this case so it will be excluded from re-optimization';
             end
         end
 
@@ -809,6 +882,7 @@ classdef DrawerController < handle
             components = { ...
                 app.DrawerInspectorTitle, ...
                 app.DrawerLockToggle, ...
+                app.DrawerMarkCompleteButton, ...
                 app.DrawerInspectorGrid, ...
                 app.DrawerResourcesTitle, ...
                 app.DrawerResourcesPanel, ...
@@ -822,6 +896,17 @@ classdef DrawerController < handle
                 if ~isempty(comp) && isvalid(comp)
                     comp.Visible = matlab.lang.OnOffSwitchState(isVisible);
                 end
+            end
+        end
+
+        function updateCompletionButtonState(~, app, caseId)
+            if isempty(app.DrawerMarkCompleteButton) || ~isvalid(app.DrawerMarkCompleteButton)
+                return;
+            end
+            if nargin < 3 || strlength(caseId) == 0
+                app.DrawerMarkCompleteButton.Enable = 'off';
+            else
+                app.DrawerMarkCompleteButton.Enable = 'on';
             end
         end
 
