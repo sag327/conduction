@@ -2650,7 +2650,7 @@ classdef ScheduleRenderer < handle
 
                 for caseIdx = 1:numel(labCases)
                     caseId = string(labCases(caseIdx).caseID);
-                    caseObj = app.CaseStore.findById(caseId);
+                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
 
                     if isempty(caseObj)
                         continue;
