@@ -909,6 +909,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerCurrentCaseId string = ""
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty(1, 0)  % CASE-LOCKING: Array of locked case IDs
+        NowPositionMinutes double = 480  % UNIFIED-TIMELINE: NOW line position (default 8:00 AM = 480 minutes from midnight)
         SelectedCaseIds string = string.empty(0, 1)  % Multi-select source of truth (column vector of case IDs)
         SelectedCaseId string = ""  % Currently selected case ID (last member of SelectedCaseIds)
         SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
@@ -2509,6 +2510,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
     % Helper methods
     methods (Access = public)
+
+        % ------------------------------------------------------------------
+        % UNIFIED-TIMELINE: NOW Position Management
+        % ------------------------------------------------------------------
+        function setNowPosition(app, timeMinutes)
+            % Set NOW line position (in minutes from midnight)
+            % Clamps to valid range [0, 1440]
+            if isnan(timeMinutes)
+                timeMinutes = 480;  % Default to 8:00 AM
+            end
+            timeMinutes = max(0, min(1440, timeMinutes));
+            app.NowPositionMinutes = timeMinutes;
+            app.markDirty();  % Session state changed
+        end
+
+        function timeMinutes = getNowPosition(app)
+            % Get current NOW line position
+            timeMinutes = app.NowPositionMinutes;
+        end
 
         % ------------------------------------------------------------------
         % Shared UI Utilities & State Updates
