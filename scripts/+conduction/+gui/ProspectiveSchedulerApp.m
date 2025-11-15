@@ -1011,6 +1011,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.FontColor = [1 1 1];
             app.RunBtn.FontWeight = 'bold';
             app.RunBtn.Tooltip = 'Run optimization to generate schedule (Primary Action)';
+            app.refreshOptimizeButtonLabel();
 
             app.CurrentTimeLabel = uilabel(app.TopBarLayout);
             app.CurrentTimeLabel.Text = 'Current Time';
@@ -2505,11 +2506,67 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             timeMinutes = max(0, min(1440, timeMinutes));
             app.NowPositionMinutes = timeMinutes;
             app.markDirty();  % Session state changed
+            app.refreshOptimizeButtonLabel();
         end
 
         function timeMinutes = getNowPosition(app)
             % Get current NOW line position
             timeMinutes = app.NowPositionMinutes;
+        end
+
+        function label = getOptimizeButtonLabel(app)
+            % Get context-aware optimize button label
+            label = "Optimize Schedule";
+
+            schedule = app.OptimizedSchedule;
+            if isempty(schedule)
+                return;
+            end
+
+            try
+                labs = schedule.labAssignments();
+            catch
+                labs = {};
+            end
+
+            if isempty(labs)
+                return;
+            end
+
+            firstCaseStart = inf;
+            for labIdx = 1:numel(labs)
+                labCases = labs{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    startMinutes = conduction.gui.controllers.ScheduleRenderer.getCaseStartMinutes(labCases(caseIdx));
+                    if ~isnan(startMinutes) && startMinutes < firstCaseStart
+                        firstCaseStart = startMinutes;
+                    end
+                end
+            end
+
+            if isfinite(firstCaseStart)
+                nowMinutes = app.getNowPosition();
+                if nowMinutes > firstCaseStart
+                    label = "Re-optimize Remaining";
+                end
+            end
+        end
+
+        function isReoptMode = isReoptimizationMode(app)
+            % Determine if NOW is past the first scheduled case
+            isReoptMode = (app.getOptimizeButtonLabel() == "Re-optimize Remaining");
+        end
+
+        function refreshOptimizeButtonLabel(app)
+            % Refresh optimize button label text with padding for layout
+            if isempty(app.RunBtn) || ~isvalid(app.RunBtn)
+                return;
+            end
+            label = char(app.getOptimizeButtonLabel());
+            app.RunBtn.Text = sprintf('  %s  ', label);
         end
 
         % ------------------------------------------------------------------

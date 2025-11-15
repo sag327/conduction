@@ -83,6 +83,8 @@ Enable clinicians and coordinators to plan prospective schedules AND manage live
    - **Discard** → keeps current state, closes Proposed tab
    - **Re-run Options** → adjust scope/settings, regenerate proposal
 
+**Important constraint:** Re-optimization never places new work before the NOW line. Completed/in-progress cases become locked “frozen context,” and each lab enforces its own earliest-available start (initially derived from NOW, in the future driven by user-defined lab hours). This ensures even labs that were empty earlier in the day cannot receive new cases in the past.
+
 ---
 
 ## NOW Line Behavior

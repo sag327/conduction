@@ -1048,6 +1048,10 @@ classdef ScheduleRenderer < handle
             % UNIFIED-TIMELINE: Ensure NOW line remains draggable after re-render
             % (renderOptimizedSchedule already enables it, but keep for robustness)
             obj.enableNowLineDrag(app);
+
+            if ismethod(app, 'refreshOptimizeButtonLabel')
+                app.refreshOptimizeButtonLabel();
+            end
         end
 
         function updatedSchedule = updateCaseStatusesByTime(~, app, currentTimeMinutes)

@@ -1183,6 +1183,59 @@ classdef CaseManager < handle
                 casesStruct(idx).requiredResourceIds = filteredRequiredIds;
             end
         end
+
+        function [filteredCases, excludedCount] = filterCasesByNowPosition(obj, casesStruct, nowMinutes)
+            %FILTERCASESBYNOWPOSITION Keep only cases that start after NOW
+            if nargin < 3 || isempty(nowMinutes)
+                nowMinutes = 0;
+            end
+
+            if isempty(casesStruct)
+                filteredCases = casesStruct;
+                excludedCount = 0;
+                return;
+            end
+
+            includeMask = true(size(casesStruct));
+            for idx = 1:numel(casesStruct)
+                startMinutes = NaN;
+
+                caseId = string(conduction.utils.conversion.asString(casesStruct(idx).caseID));
+                if strlength(caseId) > 0
+                    [caseObj, ~] = obj.findCaseById(caseId);
+                    if ~isempty(caseObj)
+                        startMinutes = caseObj.ScheduledProcStartTime;
+                        if isnan(startMinutes)
+                            startMinutes = caseObj.ScheduledStartTime;
+                        end
+                    end
+                end
+
+                if isnan(startMinutes)
+                    % Fall back to fields on the struct if present
+                    candidateFields = {'scheduledStartTime', 'startTime', 'procStartTime'};
+                    for nameIdx = 1:numel(candidateFields)
+                        fieldName = candidateFields{nameIdx};
+                        if isfield(casesStruct(idx), fieldName)
+                            value = casesStruct(idx).(fieldName);
+                            if ~isempty(value) && isnumeric(value)
+                                startMinutes = double(value(1));
+                                if ~isnan(startMinutes)
+                                    break;
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if ~isnan(startMinutes) && startMinutes <= nowMinutes
+                    includeMask(idx) = false;
+                end
+            end
+
+            filteredCases = casesStruct(includeMask);
+            excludedCount = sum(~includeMask);
+        end
     end
 
     methods (Access = private)

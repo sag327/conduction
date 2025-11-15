@@ -40,6 +40,22 @@ classdef OptimizationController < handle
                 return;
             end
 
+            if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
+                nowMinutes = app.getNowPosition();
+                [casesStruct, excludedCount] = app.CaseManager.filterCasesByNowPosition(casesStruct, nowMinutes);
+
+                if excludedCount > 0
+                    fprintf('Re-optimization: Excluded %d case(s) scheduled before NOW (%.0f minutes).\n', excludedCount, nowMinutes);
+                end
+
+                if isempty(casesStruct)
+                    uialert(app.UIFigure, ...
+                        'No cases to re-optimize after the current time.', ...
+                        'Re-optimization Info', 'Icon', 'info');
+                    return;
+                end
+            end
+
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
 
@@ -129,6 +145,9 @@ classdef OptimizationController < handle
 
                 % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
                 app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                if ismethod(app, 'refreshOptimizeButtonLabel')
+                    app.refreshOptimizeButtonLabel();
+                end
 
                 % Check for infeasibility (TwoPhaseStrict mode failure)
                 if isfield(outcome, 'infeasible') && outcome.infeasible
@@ -155,6 +174,9 @@ classdef OptimizationController < handle
                 if ~contains(ME.identifier, 'InvalidLockedConstraint')
                     app.OptimizedSchedule = conduction.DailySchedule.empty;
                     app.OptimizationController.showOptimizationPendingPlaceholder(app);
+                    if ismethod(app, 'refreshOptimizeButtonLabel')
+                        app.refreshOptimizeButtonLabel();
+                    end
                 end
 
                 app.OptimizationOutcome = struct();
