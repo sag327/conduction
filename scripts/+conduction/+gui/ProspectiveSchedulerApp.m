@@ -2848,6 +2848,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.LockedCaseIds = string.empty(1, 0);
             end
 
+            % UNIFIED-TIMELINE: Migrate old lock arrays to per-case flags
+            if ~isempty(app.LockedCaseIds)
+                conduction.gui.utils.LockMigration.migrateLocksToPerCaseFlags(app);
+            end
+
             if isfield(sessionData, 'isOptimizationDirty')
                 app.IsOptimizationDirty = sessionData.isOptimizationDirty;
             end

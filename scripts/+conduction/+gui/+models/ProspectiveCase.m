@@ -26,11 +26,12 @@ classdef ProspectiveCase < handle
         SpecificLab string = ""  % Required lab (empty = any lab)
         IsFirstCaseOfDay logical = false  % Must be first case of the day
         AdmissionStatus string = "outpatient"  % Outpatient or inpatient
-        IsLocked logical = false  % CASE-LOCKING: Lock case in place during re-optimization
+        IsLocked logical = false  % DEPRECATED: Use IsUserLocked + auto-lock computation instead
 
         % REALTIME-SCHEDULING: Case status and actual time tracking
         CaseStatus string = "pending"  % "pending", "in_progress", "completed"
         ManuallyCompleted logical = false  % UNIFIED-TIMELINE: Manual completion override (for marking complete without advancing NOW)
+        IsUserLocked logical = false  % UNIFIED-TIMELINE: Manual user lock (persists across NOW movements)
         AssignedLab double = NaN  % Which lab the case was assigned to (after optimization)
 
         % Actual times (minutes from midnight) - set when case progresses/completes
@@ -143,6 +144,18 @@ classdef ProspectiveCase < handle
 
             status = obj.getComputedStatus(nowMinutes);
             shouldBeLocked = conduction.gui.utils.StatusComputer.computeAutoLock(status);
+        end
+
+        function isLocked = getComputedLock(obj, nowMinutes)
+            % Get effective lock state (user lock OR auto-lock)
+            %
+            % Args:
+            %   nowMinutes (double): Current NOW position
+            %
+            % Returns:
+            %   isLocked (logical): True if user locked OR auto-locked
+
+            isLocked = obj.IsUserLocked || obj.shouldBeAutoLocked(nowMinutes);
         end
 
         function ids = listRequiredResources(obj)
