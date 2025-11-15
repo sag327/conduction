@@ -27,8 +27,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CanvasTabGroup              matlab.ui.container.TabGroup
         CanvasScheduleTab           matlab.ui.container.Tab
         CanvasAnalyzeTab            matlab.ui.container.Tab
+        ProposedTab                 matlab.ui.container.Tab
         CanvasScheduleLayout        matlab.ui.container.GridLayout
         CanvasAnalyzeLayout         matlab.ui.container.GridLayout
+        ProposedAxes                matlab.ui.control.UIAxes
+        ProposedAcceptButton        matlab.ui.control.Button
+        ProposedDiscardButton       matlab.ui.control.Button
+        ProposedRerunButton         matlab.ui.control.Button
+        ProposedSummaryLabel        matlab.ui.control.Label
         
         Drawer                      matlab.ui.container.Panel
         DrawerHandleButton          matlab.ui.control.Button
@@ -893,7 +899,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AvailableLabIds double = double.empty(1, 0)  % Labs open for re-optimization assignments
         Opts struct = struct()
         OptimizedSchedule conduction.DailySchedule
+        ProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         OptimizationOutcome struct = struct()
+        ProposedOutcome struct = struct()
+        ProposedMetadata struct = struct()
+        UndoSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+        UndoProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
@@ -1148,6 +1159,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.IdleAxes.Title.FontSize = 14;
             app.IdleAxes.Visible = 'on';
             app.IdleAxes.Toolbar.Visible = 'off';
+
+            conduction.gui.app.buildProposedTab(app, app.CanvasTabGroup);
+            app.ProposedTab.Parent = [];
 
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
@@ -2558,6 +2572,153 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         function isReoptMode = isReoptimizationMode(app)
             % Determine if NOW is past the first scheduled case
             isReoptMode = (app.getOptimizeButtonLabel() == "Re-optimize Remaining");
+        end
+
+        function showProposedTab(app)
+            % Show Proposed tab with preview of proposed schedule
+
+            if isempty(app.ProposedTab) || ~isvalid(app.ProposedTab)
+                conduction.gui.app.buildProposedTab(app, app.CanvasTabGroup);
+            end
+
+            app.ProposedTab.Parent = app.CanvasTabGroup;
+            app.CanvasTabGroup.SelectedTab = app.ProposedTab;
+
+            app.renderProposedSchedule();
+            app.updateProposedSummary();
+        end
+
+        function hideProposedTab(app, clearState)
+            % Detach Proposed tab (optionally clearing stored proposal)
+            if nargin < 2
+                clearState = false;
+            end
+
+            if clearState
+                app.ProposedSchedule = conduction.DailySchedule.empty;
+                app.ProposedOutcome = struct();
+                app.ProposedMetadata = struct();
+                if ~isempty(app.ProposedAxes) && isvalid(app.ProposedAxes)
+                    cla(app.ProposedAxes);
+                end
+                if ~isempty(app.ProposedSummaryLabel) && isvalid(app.ProposedSummaryLabel)
+                    app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
+                end
+            end
+
+            if ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
+                app.ProposedTab.Parent = [];
+            end
+        end
+
+        function renderProposedSchedule(app)
+            % Render proposed schedule within the Proposed tab axes
+            if isempty(app.ProposedAxes) || ~isvalid(app.ProposedAxes)
+                return;
+            end
+
+            cla(app.ProposedAxes);
+
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+
+            annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule);
+            nowMinutes = app.getNowPosition();
+            conduction.visualizeDailySchedule(annotatedSchedule, ...
+                'ScheduleAxes', app.ProposedAxes, ...
+                'Title', 'Proposed Schedule', ...
+                'ShowLabels', true, ...
+                'CurrentTimeMinutes', nowMinutes, ...
+                'OperatorColors', app.OperatorColors, ...
+                'CaseClickedFcn', @(varargin) [], ...
+                'BackgroundClickedFcn', @(varargin) []);
+
+            nowLine = findobj(app.ProposedAxes, 'Tag', 'NowLine');
+            if ~isempty(nowLine)
+                set(nowLine, 'ButtonDownFcn', []);
+            end
+            handleMarker = findobj(app.ProposedAxes, 'Tag', 'NowHandle');
+            if ~isempty(handleMarker)
+                set(handleMarker, 'ButtonDownFcn', []);
+            end
+        end
+
+        function updateProposedSummary(app)
+            % Update Proposed tab summary placeholder text (real metrics in later phase)
+            if isempty(app.ProposedSummaryLabel) || ~isvalid(app.ProposedSummaryLabel)
+                return;
+            end
+            app.ProposedSummaryLabel.Text = 'Summary: Analyzing changes...';
+        end
+
+        function onProposedAccept(app)
+            % Apply proposed schedule to main schedule
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+
+            app.UndoSchedule = app.OptimizedSchedule;
+
+            app.OptimizedSchedule = app.ProposedSchedule;
+            metadata = app.ProposedMetadata;
+            if isempty(metadata)
+                metadata = struct();
+            end
+            app.OptimizationOutcome = app.ProposedOutcome;
+            app.ProposedSchedule = conduction.DailySchedule.empty;
+            app.ProposedOutcome = struct();
+            app.ProposedMetadata = struct();
+
+            app.IsOptimizationDirty = false;
+            app.OptimizationLastRun = datetime('now');
+            app.markDirty();
+
+            app.hideProposedTab(true);
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+            end
+
+            schedule = app.getScheduleForRendering();
+            app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, metadata);
+
+            app.showUndoToast('Remaining cases rescheduled');
+        end
+
+        function onProposedDiscard(app)
+            % Discard proposal and keep current schedule
+            if isempty(app.ProposedSchedule)
+                app.hideProposedTab(true);
+                if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                    app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+                end
+                return;
+            end
+
+            app.UndoProposedSchedule = app.ProposedSchedule;
+            app.ProposedSchedule = conduction.DailySchedule.empty;
+            app.ProposedOutcome = struct();
+            app.ProposedMetadata = struct();
+
+            app.hideProposedTab(true);
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+            end
+
+            app.showUndoToast('Proposal discarded');
+        end
+
+        function showUndoToast(~, message)
+            % Placeholder toast/undo notification
+            if nargin < 2
+                message = '';
+            end
+            fprintf('[Undo Toast] %s\n', message);
+        end
+
+        function onProposedRerun(app)
+            % Re-run optimization from Proposed tab
+            app.OptimizationController.executeOptimization(app);
         end
 
         function refreshOptimizeButtonLabel(app)

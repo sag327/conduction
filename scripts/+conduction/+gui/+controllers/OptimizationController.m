@@ -40,7 +40,9 @@ classdef OptimizationController < handle
                 return;
             end
 
-            if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
+            isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
+
+            if isReoptMode
                 nowMinutes = app.getNowPosition();
                 [casesStruct, excludedCount] = app.CaseManager.filterCasesByNowPosition(casesStruct, nowMinutes);
 
@@ -137,14 +139,26 @@ classdef OptimizationController < handle
                     % Non-fatal: proceed without annotation if anything goes wrong
                 end
 
-                app.OptimizedSchedule = dailySchedule;
-                app.OptimizationOutcome = outcome;
-                app.IsOptimizationDirty = false;
-                app.OptimizationLastRun = datetime('now');
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
+                if isReoptMode
+                    app.ProposedSchedule = dailySchedule;
+                    app.ProposedOutcome = outcome;
+                    app.ProposedMetadata = metadata;
+                    app.showProposedTab();
+                else
+                    app.hideProposedTab(true);
+                    app.ProposedSchedule = conduction.DailySchedule.empty;
+                    app.ProposedOutcome = struct();
+                    app.ProposedMetadata = struct();
 
-                % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                    app.OptimizedSchedule = dailySchedule;
+                    app.OptimizationOutcome = outcome;
+                    app.IsOptimizationDirty = false;
+                    app.OptimizationLastRun = datetime('now');
+                    app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
+
+                    % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                end
                 if ismethod(app, 'refreshOptimizeButtonLabel')
                     app.refreshOptimizeButtonLabel();
                 end
@@ -171,7 +185,7 @@ classdef OptimizationController < handle
                 end
             catch ME
                 % Don't clear schedule on validation errors - let user see and fix
-                if ~contains(ME.identifier, 'InvalidLockedConstraint')
+                if ~contains(ME.identifier, 'InvalidLockedConstraint') && ~isReoptMode
                     app.OptimizedSchedule = conduction.DailySchedule.empty;
                     app.OptimizationController.showOptimizationPendingPlaceholder(app);
                     if ismethod(app, 'refreshOptimizeButtonLabel')
@@ -179,9 +193,16 @@ classdef OptimizationController < handle
                     end
                 end
 
-                app.OptimizationOutcome = struct();
-                app.IsOptimizationDirty = true;
-                app.OptimizationLastRun = NaT;
+                if ~isReoptMode
+                    app.OptimizationOutcome = struct();
+                    app.IsOptimizationDirty = true;
+                    app.OptimizationLastRun = NaT;
+                else
+                    app.ProposedSchedule = conduction.DailySchedule.empty;
+                    app.ProposedOutcome = struct();
+                    app.ProposedMetadata = struct();
+                    app.hideProposedTab(true);
+                end
 
                 detailedMsg = ME.message;
 
