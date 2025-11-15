@@ -2621,7 +2621,7 @@ classdef ScheduleRenderer < handle
             end
         end
 
-        function annotatedSchedule = annotateScheduleWithDerivedStatus(~, app, schedule)
+        function annotatedSchedule = annotateScheduleWithDerivedStatus(app, schedule)
             % Annotate schedule with status derived from NOW position
             % Replaces updateCaseStatusesByTime pattern
             %
