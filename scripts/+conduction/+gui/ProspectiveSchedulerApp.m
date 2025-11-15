@@ -14,7 +14,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         SessionMenuDropDown         matlab.ui.control.DropDown  % SAVE/LOAD: Session management dropdown menu (includes Test Mode)
         CurrentTimeLabel            matlab.ui.control.Label
         CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
-        TimeControlSwitch           matlab.ui.control.Switch  % REALTIME-SCHEDULING: Toggle time control mode
+        % TimeControlSwitch           matlab.ui.control.Switch  % DEPRECATED: Removed in unified timeline
 
         TabGroup                    matlab.ui.container.TabGroup
         TabAdd                      matlab.ui.container.Tab
@@ -897,7 +897,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
-        IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
+        IsTimeControlActive logical = true  % UNIFIED-TIMELINE: Always true (flag kept for migration compatibility)
         AllowEditInTimeControl logical = true  % REALTIME-SCHEDULING: Gate to allow edits while time control is active
         % SimulatedSchedule REMOVED - UNIFIED-TIMELINE: Single schedule with derived status annotation
         TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
@@ -1024,14 +1024,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
 
 
-            % REALTIME-SCHEDULING: Time Control Switch
-            app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
-            app.TimeControlSwitch.Layout.Column = 5;
-            app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
-            app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
-            app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
-            app.TimeControlSwitch.Orientation = 'horizontal';
-            app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
+            % DEPRECATED: Time Control Switch removed in unified timeline
+            % app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
+            % app.TimeControlSwitch.Layout.Column = 5;
+            % app.TimeControlSwitch.Items = {'Time Control', ''};  % Label on left
+            % app.TimeControlSwitch.ItemsData = {'Off', 'On'};  % Left=Off, Right=On
+            % app.TimeControlSwitch.Value = 'Off';  % Starts on left (off)
+            % app.TimeControlSwitch.Orientation = 'horizontal';
+            % app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             % SAVE/LOAD: Session management dropdown (includes Test Mode, Save/Load, Auto-save)
             conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 6);
