@@ -1,9 +1,9 @@
 # Unified Timeline Framework – Implementation Plan
 
-**Status:** Phase 1 In Progress (3/7 sub-phases complete)
-**Current Phase:** Phase 1.4 - Unify Schedule Objects
+**Status:** Phase 1 In Progress (4/7 sub-phases complete)
+**Current Phase:** Phase 1.5 - Simplify Lock Management
 **Last Updated:** 2025-11-15
-**Commits:** fd3638c (1.1), fd1e232 (1.2), 98afc89 (1.3)
+**Commits:** fd3638c (1.1), fd1e232 (1.2), 98afc89 (1.3), f2cb514 (1.4)
 
 ---
 
