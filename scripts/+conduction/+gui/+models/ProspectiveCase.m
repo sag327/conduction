@@ -30,6 +30,7 @@ classdef ProspectiveCase < handle
 
         % REALTIME-SCHEDULING: Case status and actual time tracking
         CaseStatus string = "pending"  % "pending", "in_progress", "completed"
+        ManuallyCompleted logical = false  % UNIFIED-TIMELINE: Manual completion override (for marking complete without advancing NOW)
         AssignedLab double = NaN  % Which lab the case was assigned to (after optimization)
 
         % Actual times (minutes from midnight) - set when case progresses/completes
@@ -115,6 +116,33 @@ classdef ProspectiveCase < handle
         function tf = isCompleted(obj)
             %ISCOMPLETED Check if case is completed
             tf = strcmpi(obj.CaseStatus, "completed");
+        end
+
+        % UNIFIED-TIMELINE: Computed status and lock methods
+        function status = getComputedStatus(obj, nowMinutes)
+            % Get case status derived from NOW position and schedule times
+            %
+            % Args:
+            %   nowMinutes (double): Current NOW position in minutes
+            %
+            % Returns:
+            %   status (string): "completed", "in_progress", or "pending"
+
+            status = conduction.gui.utils.StatusComputer.computeStatus(...
+                obj.ScheduledStartTime, obj.ScheduledEndTime, nowMinutes, obj.ManuallyCompleted);
+        end
+
+        function shouldBeLocked = shouldBeAutoLocked(obj, nowMinutes)
+            % Determine if case should be auto-locked at given NOW position
+            %
+            % Args:
+            %   nowMinutes (double): Current NOW position
+            %
+            % Returns:
+            %   shouldBeLocked (logical): True if case is in-progress or completed
+
+            status = obj.getComputedStatus(nowMinutes);
+            shouldBeLocked = conduction.gui.utils.StatusComputer.computeAutoLock(status);
         end
 
         function ids = listRequiredResources(obj)
