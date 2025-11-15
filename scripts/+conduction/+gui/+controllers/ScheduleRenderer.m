@@ -51,11 +51,10 @@ classdef ScheduleRenderer < handle
 
             obj.drawClosedLabOverlays(app, []);
 
-            if app.IsTimeControlActive
+            % UNIFIED-TIMELINE: Always enable NOW line drag
             obj.enableNowLineDrag(app);
-        end
 
-        obj.enableCaseDrag(app);
+            obj.enableCaseDrag(app);
         obj.applyMultiSelectionHighlights(app);
 
         conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
@@ -90,11 +89,8 @@ classdef ScheduleRenderer < handle
                 fadeAlpha = 0.35;  % Faded when stale (35% opacity)
             end
 
-            % REALTIME-SCHEDULING: Show draggable time line only when time control active
-            currentTime = NaN;
-            if app.IsTimeControlActive
-                currentTime = app.CaseManager.getCurrentTime();
-            end
+            % UNIFIED-TIMELINE: Always render NOW line (use app.NowPositionMinutes)
+            currentTime = app.getNowPosition();
 
             % Detect and cache overlapping cases before rendering
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
@@ -1027,8 +1023,8 @@ classdef ScheduleRenderer < handle
             % Get final time
             finalTimeMinutes = lineHandle.UserData.timeMinutes;
 
-            % Update CaseManager with new time
-            app.CaseManager.setCurrentTime(finalTimeMinutes);
+            % UNIFIED-TIMELINE: Update NOW position in app state
+            app.setNowPosition(finalTimeMinutes);
 
             % Auto-update case statuses based on new time
             updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
