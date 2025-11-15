@@ -134,9 +134,8 @@ classdef ScheduleRenderer < handle
             % Update optional actual time indicator after schedule renders
             app.ScheduleRenderer.updateActualTimeIndicator(app);
 
-            if app.IsTimeControlActive
-                obj.enableNowLineDrag(app);
-            end
+            % UNIFIED-TIMELINE: Always enable NOW line drag
+            obj.enableNowLineDrag(app);
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
@@ -1046,10 +1045,9 @@ classdef ScheduleRenderer < handle
             % (with fade effect if statusesChanged=true, otherwise normal)
             app.ScheduleRenderer.renderOptimizedSchedule(app, updatedSchedule, app.OptimizationOutcome);
 
-            % Keep NOW line draggable if time control is still active
-            if app.IsTimeControlActive
-                obj.enableNowLineDrag(app);
-            end
+            % UNIFIED-TIMELINE: Ensure NOW line remains draggable after re-render
+            % (renderOptimizedSchedule already enables it, but keep for robustness)
+            obj.enableNowLineDrag(app);
         end
 
         function updatedSchedule = updateCaseStatusesByTime(~, app, currentTimeMinutes)
