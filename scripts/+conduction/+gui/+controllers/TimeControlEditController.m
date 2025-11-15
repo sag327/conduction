@@ -39,10 +39,6 @@ classdef TimeControlEditController < handle
                 return;
             end
 
-            if ~isempty(updatedSchedule)
-                app.SimulatedSchedule = updatedSchedule;
-            end
-
             % Optionally mark the session dirty when requested by the caller.
             if isfield(context, 'markSessionDirty') && logical(context.markSessionDirty)
                 app.markDirty();

@@ -17,7 +17,7 @@ Enable clinicians and coordinators to plan prospective schedules AND manage live
 - NOW line is always present (defaults to start of day for planning)
 - Everything before NOW is frozen history (completed cases)
 - Everything after NOW is flexible future (optimizable cases)
-- No mode switching - the interface adapts to NOW position
+- No mode switching - the interface adapts to NOW position  
 
 ### 2. Progressive Disclosure
 - Basic features visible by default (add cases, optimize)

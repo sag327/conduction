@@ -127,27 +127,8 @@ classdef OptimizationController < handle
                 app.OptimizationLastRun = datetime('now');
                 app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
 
-                if app.IsTimeControlActive
-                    currentTimeMinutes = app.CaseManager.getCurrentTime();
-                    if isnan(currentTimeMinutes)
-                        app.SimulatedSchedule = dailySchedule;
-                        scheduleForRender = dailySchedule;
-                    else
-                        simulated = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
-                        % Ensure simulated schedule retains caseNumber annotations
-                        try
-                            simulated = app.OptimizationController.annotateCaseNumbersOnSchedule(app, simulated);
-                        catch
-                        end
-                        app.SimulatedSchedule = simulated;
-                        scheduleForRender = simulated;
-                    end
-                else
-                    app.SimulatedSchedule = conduction.DailySchedule.empty;
-                    scheduleForRender = dailySchedule;
-                end
-
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, metadata);
+                % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
 
                 % Check for infeasibility (TwoPhaseStrict mode failure)
                 if isfield(outcome, 'infeasible') && outcome.infeasible
@@ -173,7 +154,6 @@ classdef OptimizationController < handle
                 % Don't clear schedule on validation errors - let user see and fix
                 if ~contains(ME.identifier, 'InvalidLockedConstraint')
                     app.OptimizedSchedule = conduction.DailySchedule.empty;
-                    app.SimulatedSchedule = conduction.DailySchedule.empty;
                     app.OptimizationController.showOptimizationPendingPlaceholder(app);
                 end
 

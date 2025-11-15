@@ -1029,9 +1029,6 @@ classdef ScheduleRenderer < handle
             % Auto-update case statuses based on new time
             updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
 
-            % Store simulated schedule for re-rendering (e.g., when drawer opens)
-            app.SimulatedSchedule = updatedSchedule;
-
             % Check if any case statuses actually changed
             statusesChanged = obj.didCaseStatusesChange(app.OptimizedSchedule, updatedSchedule);
 
@@ -2622,6 +2619,56 @@ classdef ScheduleRenderer < handle
             catch
                 minutes = NaN;
             end
+        end
+
+        function annotatedSchedule = annotateScheduleWithDerivedStatus(~, app, schedule)
+            % Annotate schedule with status derived from NOW position
+            % Replaces updateCaseStatusesByTime pattern
+            %
+            % Args:
+            %   app: App instance
+            %   schedule: DailySchedule to annotate
+            %
+            % Returns:
+            %   annotatedSchedule: DailySchedule with caseStatus fields updated
+
+            if isempty(schedule)
+                annotatedSchedule = schedule;
+                return;
+            end
+
+            nowMinutes = app.getNowPosition();
+            labs = schedule.Labs;
+            assignments = schedule.labAssignments();
+
+            % Iterate through all lab assignments
+            for labIdx = 1:numel(labs)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+
+                for caseIdx = 1:numel(labCases)
+                    caseId = string(labCases(caseIdx).caseID);
+                    caseObj = app.CaseStore.findById(caseId);
+
+                    if isempty(caseObj)
+                        continue;
+                    end
+
+                    % Compute status from NOW position
+                    status = caseObj.getComputedStatus(nowMinutes);
+
+                    % Update schedule struct (for visualization only)
+                    labCases(caseIdx).caseStatus = char(status);
+                end
+
+                % Update assignment
+                assignments{labIdx} = labCases;
+            end
+
+            % Create new schedule with updated assignments
+            annotatedSchedule = conduction.DailySchedule(schedule.Date, labs, assignments, schedule.metrics());
         end
 
     end

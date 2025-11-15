@@ -899,7 +899,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = false  % REALTIME-SCHEDULING: Time control mode state
         AllowEditInTimeControl logical = true  % REALTIME-SCHEDULING: Gate to allow edits while time control is active
-        SimulatedSchedule conduction.DailySchedule  % REALTIME-SCHEDULING: Schedule with simulated statuses during time control
+        % SimulatedSchedule REMOVED - UNIFIED-TIMELINE: Single schedule with derived status annotation
         TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
         TimeControlLockedCaseIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks applied by time control mode
         TimeControlStatusBaseline struct = struct('caseId', {}, 'status', {}, 'isLocked', {})  % REALTIME-SCHEDULING: Original status/lock for cases touched by time control
@@ -1458,12 +1458,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function schedule = getScheduleForRendering(app)
-            % REALTIME-SCHEDULING: Get the appropriate schedule for rendering
-            % Returns SimulatedSchedule if time control is active, otherwise OptimizedSchedule
-            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule)
-                schedule = app.SimulatedSchedule;
+            % UNIFIED-TIMELINE: Get schedule for rendering with derived status annotations
+            % Status is computed from NOW position, not stored
+            if isempty(app.OptimizedSchedule)
+                schedule = conduction.DailySchedule.empty;
             else
-                schedule = app.OptimizedSchedule;
+                % Annotate schedule with derived statuses
+                schedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.OptimizedSchedule);
             end
         end
 
@@ -1511,7 +1512,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Clear schedule objects to release conduction class instances
             app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
 
             % Clear CaseDragController app reference to break circular dependency
             if ~isempty(app.CaseDragController) && isvalid(app.CaseDragController)
@@ -1671,15 +1671,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Explicitly pass the updated schedule to ensure new date is used
                 conduction.gui.app.redrawSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
             end
-
-            % Update simulated schedule date if it exists (for time control mode)
-            if ~isempty(app.SimulatedSchedule)
-                app.SimulatedSchedule = conduction.DailySchedule( ...
-                    newDate, ...
-                    app.SimulatedSchedule.Labs, ...
-                    app.SimulatedSchedule.labAssignments(), ...
-                    app.SimulatedSchedule.metrics());
-            end
         end
 
         function OperatorDropDownValueChanged(app, event)
@@ -1795,7 +1786,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if app.IsTimeControlActive
                 currentTimeMinutes = app.CaseManager.getCurrentTime();
                 scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
-                app.SimulatedSchedule = scheduleForRender;
             elseif scheduleWasUpdated
                 scheduleForRender = app.OptimizedSchedule;
             end
@@ -1912,7 +1902,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.OptimizationOutcome = struct();
             app.IsOptimizationDirty = true;
             app.OptimizationLastRun = NaT;
@@ -2006,10 +1995,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.OptimizedSchedule = app.OptimizedSchedule.removeCasesByIds(caseIdsToRemove);
                 scheduleWasUpdated = true;
             end
-
-            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule) && ~isempty(app.SimulatedSchedule.labAssignments())
-                app.SimulatedSchedule = app.SimulatedSchedule.removeCasesByIds(caseIdsToRemove);
-            end
         end
 
         function applyCaseStatusToSchedules(app, caseId, newStatus)
@@ -2020,9 +2005,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             newStatus = string(newStatus);
 
             app.OptimizedSchedule = app.updateScheduleCaseStatus(app.OptimizedSchedule, caseId, newStatus);
-            if app.IsTimeControlActive && ~isempty(app.SimulatedSchedule)
-                app.SimulatedSchedule = app.updateScheduleCaseStatus(app.SimulatedSchedule, caseId, newStatus);
-            end
         end
 
         function schedule = updateScheduleCaseStatus(~, schedule, caseId, newStatus)
@@ -2761,7 +2743,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Clear current state
             app.CaseManager.clearAllCases();
             app.OptimizedSchedule = conduction.DailySchedule.empty;
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
             app.LockedCaseIds = string.empty(1, 0);
             app.IsRestoringSession = true;
             try
@@ -2974,12 +2955,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 sessionData.optimizedSchedule = struct();
             end
 
-            if ~isempty(app.SimulatedSchedule)
-                sessionData.simulatedSchedule = ...
-                    conduction.session.serializeDailySchedule(app.SimulatedSchedule);
-            else
-                sessionData.simulatedSchedule = struct();
-            end
+            % UNIFIED-TIMELINE: SimulatedSchedule removed (status derived from NOW position)
+            sessionData.simulatedSchedule = struct();
 
             % DUAL-ID: Save case numbering counter
             sessionData.nextCaseNumber = app.CaseManager.getNextCaseNumber();

@@ -22,15 +22,12 @@ function toggleTimeControl(app)
         app.CaseManager.setCurrentTime(startTimeMinutes);
 
         if ~isempty(app.OptimizedSchedule)
-            % Build simulated schedule and render with draggable timeline
-            updatedSchedule = app.ScheduleRenderer.updateCaseStatusesByTime(app, startTimeMinutes);
-            app.SimulatedSchedule = updatedSchedule;
+            % Update case statuses and render with draggable timeline
+            app.ScheduleRenderer.updateCaseStatusesByTime(app, startTimeMinutes);
 
             conduction.gui.app.redrawSchedule(app);
             app.ScheduleRenderer.enableNowLineDrag(app);
             app.ScheduleRenderer.updateActualTimeIndicator(app);
-        else
-            app.SimulatedSchedule = conduction.DailySchedule.empty;
         end
 
         return;
@@ -58,7 +55,6 @@ function toggleTimeControl(app)
     app.IsTimeControlActive = false;
     app.ScheduleRenderer.disableNowLineDrag(app);
     app.CaseManager.setCurrentTime(NaN);
-    app.SimulatedSchedule = conduction.DailySchedule.empty;
 
     if keepAdjustments
         app.commitTimeControlAdjustments();
