@@ -901,10 +901,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptimizedSchedule conduction.DailySchedule
         ProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         OptimizationOutcome struct = struct()
+        LastOptimizationMetadata struct = struct()
         ProposedOutcome struct = struct()
         ProposedMetadata struct = struct()
         UndoSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+        UndoMetadata struct = struct()
+        UndoOutcome struct = struct()
         UndoProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+        UndoProposedOutcome struct = struct()
+        UndoProposedMetadata struct = struct()
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
@@ -936,6 +941,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCasesUndocked logical = false
         LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
         IsHandlingTabSelection logical = false
+        IsHandlingCanvasSelection logical = false
 
     end
 
@@ -2460,7 +2466,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            if event.NewValue == app.CanvasAnalyzeTab
+            if app.IsHandlingCanvasSelection
+                return;
+            end
+
+            newTab = event.NewValue;
+            if newTab ~= app.ProposedTab && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
+                app.IsHandlingCanvasSelection = true;
+                app.CanvasTabGroup.SelectedTab = app.ProposedTab;
+                app.IsHandlingCanvasSelection = false;
+                warningMsg = sprintf(['Review or discard the proposed schedule before returning to other views.\n', ...
+                    'Use Accept, Discard, or Re-run to continue.']);
+                uialert(app.UIFigure, warningMsg, 'Finish Reviewing Proposal', 'Icon', 'info');
+                return;
+            end
+
+            if newTab == app.CanvasAnalyzeTab
                 conduction.gui.app.renderAnalyticsTab(app);
             end
         end
@@ -2645,11 +2667,68 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function updateProposedSummary(app)
-            % Update Proposed tab summary placeholder text (real metrics in later phase)
+            % Update Proposed tab summary highlighting moved/unchanged/conflicts
             if isempty(app.ProposedSummaryLabel) || ~isvalid(app.ProposedSummaryLabel)
                 return;
             end
-            app.ProposedSummaryLabel.Text = 'Summary: Analyzing changes...';
+            if isempty(app.ProposedSchedule)
+                app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
+                return;
+            end
+
+            proposedMap = app.buildScheduleCaseMap(app.ProposedSchedule);
+            currentMap = app.buildScheduleCaseMap(app.OptimizedSchedule);
+
+            movedCount = 0;
+            unchangedCount = 0;
+
+            if ~isempty(proposedMap)
+                proposedIds = keys(proposedMap);
+                for idx = 1:numel(proposedIds)
+                    caseId = proposedIds{idx};
+                    proposalEntry = proposedMap(caseId);
+                    if ~isempty(currentMap) && isKey(currentMap, caseId)
+                        currentEntry = currentMap(caseId);
+                        sameLab = strcmpi(string(currentEntry.lab), string(proposalEntry.lab));
+                        sameStart = (isnan(currentEntry.start) && isnan(proposalEntry.start)) || ...
+                            (isfinite(currentEntry.start) && isfinite(proposalEntry.start) && ...
+                            abs(currentEntry.start - proposalEntry.start) < 1e-3);
+                        if sameLab && sameStart
+                            unchangedCount = unchangedCount + 1;
+                        else
+                            movedCount = movedCount + 1;
+                        end
+                    else
+                        movedCount = movedCount + 1;
+                    end
+                end
+            end
+
+            conflictCount = app.computeProposalConflictCount();
+
+            app.ProposedSummaryLabel.Text = sprintf('Summary: %d moved • %d unchanged • %d conflicts', ...
+                movedCount, unchangedCount, conflictCount);
+        end
+
+        function conflictCount = computeProposalConflictCount(app)
+            conflictCount = 0;
+            if isempty(app.ProposedOutcome) || ~isstruct(app.ProposedOutcome)
+                return;
+            end
+
+            outcome = app.ProposedOutcome;
+            if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
+                conflictCount = numel(outcome.ResourceViolations);
+                return;
+            end
+
+            if isfield(outcome, 'Conflicts') && ~isempty(outcome.Conflicts)
+                try
+                    conflictCount = numel(outcome.Conflicts);
+                catch
+                    conflictCount = 0;
+                end
+            end
         end
 
         function onProposedAccept(app)
@@ -2659,6 +2738,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.UndoSchedule = app.OptimizedSchedule;
+            app.UndoMetadata = app.LastOptimizationMetadata;
+            app.UndoOutcome = app.OptimizationOutcome;
 
             app.OptimizedSchedule = app.ProposedSchedule;
             metadata = app.ProposedMetadata;
@@ -2681,6 +2762,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             schedule = app.getScheduleForRendering();
             app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, metadata);
+            app.LastOptimizationMetadata = metadata;
 
             app.showUndoToast('Remaining cases rescheduled');
         end
@@ -2696,6 +2778,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.UndoProposedSchedule = app.ProposedSchedule;
+            app.UndoProposedOutcome = app.ProposedOutcome;
+            app.UndoProposedMetadata = app.ProposedMetadata;
             app.ProposedSchedule = conduction.DailySchedule.empty;
             app.ProposedOutcome = struct();
             app.ProposedMetadata = struct();
@@ -3616,6 +3700,68 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function [store, isValid] = getValidatedResourceStore(app)
             [store, isValid] = app.ResourceController.getValidatedResourceStore(app);
+        end
+
+        function caseMap = buildScheduleCaseMap(app, schedule)
+            caseMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            if isempty(schedule)
+                return;
+            end
+
+            try
+                assignments = schedule.labAssignments();
+            catch
+                assignments = {};
+            end
+            if isempty(assignments)
+                return;
+            end
+
+            labs = [];
+            try
+                labs = schedule.Labs;
+            catch
+                labs = [];
+            end
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    caseStruct = labCases(caseIdx);
+                    rawId = conduction.gui.controllers.ScheduleRenderer.getFieldValue(caseStruct, 'caseID', "");
+                    caseId = string(conduction.utils.conversion.asString(rawId));
+                    if strlength(caseId) == 0
+                        continue;
+                    end
+                    startMinutes = conduction.gui.controllers.ScheduleRenderer.getCaseStartMinutes(caseStruct);
+                    labKey = app.resolveLabKeyForSchedule(labs, labIdx);
+                    caseMap(char(caseId)) = struct('lab', labKey, 'start', startMinutes);
+                end
+            end
+        end
+
+        function labKey = resolveLabKeyForSchedule(~, labs, labIdx)
+            labKey = sprintf('Lab %d', labIdx);
+            if nargin < 2 || isempty(labs)
+                return;
+            end
+            if labIdx < 1 || labIdx > numel(labs)
+                return;
+            end
+            try
+                labEntry = labs(labIdx);
+                if ~isempty(labEntry) && isprop(labEntry, 'Room')
+                    labName = string(labEntry.Room);
+                    if strlength(labName) > 0
+                        labKey = labName;
+                    end
+                end
+            catch
+                % Ignore invalid lab entries
+            end
         end
 
         function executeBatchUpdate(app, operation, skipOptimizationController)

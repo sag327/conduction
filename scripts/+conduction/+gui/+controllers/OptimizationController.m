@@ -158,6 +158,7 @@ classdef OptimizationController < handle
 
                     % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
                     app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                    app.LastOptimizationMetadata = metadata;
                 end
                 if ismethod(app, 'refreshOptimizeButtonLabel')
                     app.refreshOptimizeButtonLabel();
