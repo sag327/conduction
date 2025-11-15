@@ -439,9 +439,12 @@ classdef DrawerController < handle
 
             lockedAssignments = struct([]);
 
-            if isempty(app.LockedCaseIds) || isempty(app.OptimizedSchedule)
+            if isempty(app.OptimizedSchedule)
                 return;
             end
+
+            % UNIFIED-TIMELINE: Get current NOW position for lock computation
+            nowMinutes = app.getNowPosition();
 
             % Get all lab assignments from current schedule
             labAssignments = app.OptimizedSchedule.labAssignments();
@@ -460,8 +463,9 @@ classdef DrawerController < handle
                     caseEntry = labCases(caseIdx);
                     caseId = string(caseEntry.caseID);
 
-                    % Check if this case is locked
-                    if ismember(caseId, app.LockedCaseIds)
+                    % UNIFIED-TIMELINE: Check if this case is locked (user OR auto)
+                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    if ~isempty(caseObj) && caseObj.getComputedLock(nowMinutes)
                         % Add lab assignment to the case entry first
                         caseEntry.assignedLab = labIdx;
 
