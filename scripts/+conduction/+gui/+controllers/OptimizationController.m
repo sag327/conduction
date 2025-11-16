@@ -46,6 +46,9 @@ classdef OptimizationController < handle
 
             isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
 
+            % Track future-locked case ids for internal validation in unscheduled-only mode
+            expectedFutureIds = string.empty(0,1);
+
             includeScheduledFuture = true;
 
             if isReoptMode
@@ -87,6 +90,14 @@ classdef OptimizationController < handle
                     futureLocks = app.OptimizationController.buildFutureLocksFromCaseStore(app, nowForLocks);
                     if isempty(futureLocks)
                         futureLocks = app.OptimizationController.extractFutureScheduledAssignments(app, nowForLocks);
+                    end
+                    % Record ids for downstream presence checks
+                    if ~isempty(futureLocks) && isstruct(futureLocks) && isfield(futureLocks, 'caseID')
+                        try
+                            expectedFutureIds = string({futureLocks.caseID});
+                        catch
+                            expectedFutureIds = string.empty(0,1);
+                        end
                     end
                     if ~isempty(futureLocks)
                         % Normalize schemas before concatenation
@@ -418,6 +429,15 @@ classdef OptimizationController < handle
                 return;
             end
             outIdx = 0;
+            % Snapshot current optimized schedule lab assignments (for enriching visuals)
+            schedLabs = {};
+            if ~isempty(app.OptimizedSchedule)
+                try
+                    schedLabs = app.OptimizedSchedule.labAssignments();
+                catch
+                    schedLabs = {};
+                end
+            end
             for i = 1:app.CaseManager.CaseCount
                 caseObj = app.CaseManager.getCase(i);
                 if isempty(caseObj)
@@ -462,6 +482,35 @@ classdef OptimizationController < handle
                     'postTime', 0, ...
                     'turnoverTime', 0, ...
                     'requiredResourceIds', caseObj.RequiredResourceIds);
+                % If schedule contains this case, enrich with its post/turnover for correct visuals
+                if ~isempty(schedLabs)
+                    try
+                        for labIdx = 1:numel(schedLabs)
+                            labCases = schedLabs{labIdx};
+                            if isempty(labCases), continue; end
+                            for k = 1:numel(labCases)
+                                e = labCases(k);
+                                eId = string(conduction.utils.conversion.asString(e.caseID));
+                                if strlength(eId) == 0, continue; end
+                                if eId == string(caseObj.CaseId)
+                                    postM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                                    turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                                    entry.postTime = double(postM);
+                                    entry.turnoverTime = double(turnM);
+                                    % Prefer schedule-assigned lab if present and valid
+                                    try
+                                        if isfield(e, 'assignedLab') && ~isempty(e.assignedLab)
+                                            entry.assignedLab = double(e.assignedLab);
+                                        end
+                                    catch
+                                    end
+                                    break;
+                                end
+                            end
+                        end
+                    catch
+                    end
+                end
                 if isnan(entry.assignedLab) || entry.assignedLab < 1
                     % If lab index is missing, skip; locked without lab cannot be enforced
                     fprintf('[UNSCH-ONLY] skip future lock (no lab): %s\n', char(caseObj.CaseId));
