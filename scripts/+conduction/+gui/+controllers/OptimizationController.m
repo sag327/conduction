@@ -59,12 +59,6 @@ classdef OptimizationController < handle
                     fprintf('Re-optimization: Excluded %d case(s) scheduled before NOW (%.0f minutes).\n', excludedCount, nowMinutes);
                 end
 
-                try
-                    fprintf('[REOPT-DEBUG] Candidates after filter: %d (unscheduled=%d, scheduledFuture=%d; earliestFuture=%s)\n', ...
-                        numel(casesStruct), stats.unscheduledEligible, stats.scheduledEligible, ...
-                        mat2str(stats.earliestScheduledStart));
-                catch
-                end
 
                 if isempty(casesStruct)
                     uialert(app.UIFigure, ...
@@ -76,29 +70,6 @@ classdef OptimizationController < handle
 
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
-            % DEBUG: classify locks (auto vs user)
-            try
-                nowMinutesDbg = app.getNowPosition();
-                totalLocksDbg = numel(lockedAssignments);
-                autoLocksDbg = 0; userLocksDbg = 0; bothDbg = 0;
-                for di = 1:totalLocksDbg
-                    cid = string(lockedAssignments(di).caseID);
-                    [dbgCase, ~] = app.CaseManager.findCaseById(cid);
-                    if isempty(dbgCase); continue; end
-                    isAuto = dbgCase.shouldBeAutoLocked(nowMinutesDbg);
-                    isUser = logical(dbgCase.IsUserLocked);
-                    if isAuto && isUser
-                        bothDbg = bothDbg + 1;
-                    elseif isAuto
-                        autoLocksDbg = autoLocksDbg + 1;
-                    elseif isUser
-                        userLocksDbg = userLocksDbg + 1;
-                    end
-                end
-                fprintf('[REOPT-DEBUG] NOW=%d | locks: total=%d, auto-only=%d, user-only=%d, both=%d\n', ...
-                    nowMinutesDbg, totalLocksDbg, autoLocksDbg, userLocksDbg, bothDbg);
-            catch
-            end
             if isReoptMode && ~app.ReoptRespectLocks
                 % When the user turns off "Respect user locks", we still must
                 % respect auto-locks (in-progress and completed before NOW).
@@ -127,10 +98,6 @@ classdef OptimizationController < handle
             % CASE-LOCKING: Build locked case constraints for optimizer
             % The optimizer will enforce these as hard constraints during optimization
             lockedConstraints = app.OptimizationController.buildLockedCaseConstraints(lockedAssignments);
-            try
-                fprintf('[REOPT-DEBUG] lockedConstraints=%d\n', numel(lockedConstraints));
-            catch
-            end
 
             % FIRST-CASE: Convert first cases to locked constraints
             % Build lab start times for conversion
@@ -198,48 +165,6 @@ classdef OptimizationController < handle
                     app.ProposedOutcome = outcome;
                     app.ProposedMetadata = metadata;
                     app.ProposedSourceVersion = app.OptimizationChangeCounter;
-                    % DEBUG: verify locked cases stayed fixed in Proposed schedule
-                    try
-                        if ~isempty(lockedConstraints)
-                            asg = app.ProposedSchedule.labAssignments();
-                            fprintf('[REOPT-DEBUG] Verify locks in Proposed: %d to check\n', numel(lockedConstraints));
-                            for ii = 1:numel(lockedConstraints)
-                                lc = lockedConstraints(ii);
-                                cid = string(lc.caseID);
-                                lockedStart = double(lc.startTime);
-                                lockedLab = double(lc.assignedLab);
-                                found = false; gotStart = NaN; gotLab = NaN;
-                                for li = 1:numel(asg)
-                                    labCases = asg{li};
-                                    for ji = 1:numel(labCases)
-                                        if string(labCases(ji).caseID) == cid
-                                            gotLab = li;
-                                            % Prefer procStartTime if present
-                                            if isfield(labCases(ji), 'startTime') && ~isempty(labCases(ji).startTime)
-                                                gotStart = double(labCases(ji).startTime);
-                                            elseif isfield(labCases(ji), 'procStartTime') && ~isempty(labCases(ji).procStartTime)
-                                                gotStart = double(labCases(ji).procStartTime);
-                                            end
-                                            found = true; break;
-                                        end
-                                    end
-                                    if found, break; end
-                                end
-                                if ~found
-                                    fprintf('[REOPT-DEBUG] LOCK MISSING cid=%s expected L%d @ %d\n', char(cid), lockedLab, lockedStart);
-                                else
-                                    sameLab = (gotLab == lockedLab);
-                                    sameTime = (~isnan(gotStart) && abs(gotStart - lockedStart) < 1e-6);
-                                    labFlag = '';
-                                    if ~sameLab, labFlag = ' [LAB-CHANGED]'; end
-                                    timeFlag = '';
-                                    if ~sameTime, timeFlag = ' [TIME-CHANGED]'; end
-                                    fprintf('[REOPT-DEBUG] LOCK %s L%d@%d -> L%d@%s%s%s\n', char(cid), lockedLab, lockedStart, gotLab, mat2str(gotStart), labFlag, timeFlag);
-                                end
-                            end
-                        end
-                    catch
-                    end
                     app.showProposedTab();
                 else
                     app.hideProposedTab(true);
@@ -494,16 +419,6 @@ classdef OptimizationController < handle
                 'LabChangePenalty', labChangePenalty, ...
                 'Verbose', true, ...
                 'OutpatientInpatientMode', outpatientInpatientMode);
-            try
-                if ~isempty(earliest)
-                    fprintf('[REOPT-DEBUG] Earliest per lab:');
-                    for li = 1:numel(earliest)
-                        fprintf(' L%d=%d', li, round(earliest(li)));
-                    end
-                    fprintf('\n');
-                end
-            catch
-            end
         end
 
         function earliest = computeLabEarliestStartsFromSchedule(~, app, numLabs)
