@@ -269,7 +269,32 @@ classdef ResourceOverlayRenderer
             if nargin >= 3 && ~isempty(app)
                 try
                     if isprop(app, 'CaseManager') && ~isempty(app.CaseManager)
+                        % Prefer persistent CaseId lookup
                         [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                        % Fallback: locate by CaseNumber if CaseId doesn’t match schedule structures
+                        if isempty(caseObj)
+                            % Attempt to read caseNumber from the schedule case struct
+                            caseNumber = NaN;
+                            if isstruct(caseStruct)
+                                if isfield(caseStruct, 'caseNumber') && ~isempty(caseStruct.caseNumber)
+                                    caseNumber = double(caseStruct.caseNumber);
+                                elseif isfield(caseStruct, 'CaseNumber') && ~isempty(caseStruct.CaseNumber)
+                                    caseNumber = double(caseStruct.CaseNumber);
+                                end
+                            end
+                            if ~isnan(caseNumber)
+                                try
+                                    for k = 1:app.CaseManager.CaseCount
+                                        c = app.CaseManager.getCase(k);
+                                        if ~isnan(c.CaseNumber) && double(c.CaseNumber) == caseNumber
+                                            caseObj = c; %#ok<AGROW>
+                                            break;
+                                        end
+                                    end
+                                catch
+                                end
+                            end
+                        end
                         if ~isempty(caseObj)
                             caseManagerResources = caseObj.listRequiredResources();
                         end
