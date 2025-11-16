@@ -720,7 +720,10 @@ classdef OptimizationController < handle
                     'outpatientInpatientMode', outpatientInpatientMode);
 
                 app.Opts = newOpts;
-                app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
+                % Default status control removed from Optimization tab; preserve previous value
+                if isprop(app, 'OptDefaultStatusDropDown') && ~isempty(app.OptDefaultStatusDropDown) && isvalid(app.OptDefaultStatusDropDown)
+                    app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
+                end
 
                 app.LabIds = labIds;
                 app.AvailableLabIds = selectedLabs;
