@@ -48,6 +48,12 @@ classdef SchedulingPreprocessor
             prepared.numCases = numel(cases);
             prepared.numLabs = numLabs;
             prepared.labStartMinutes = labStartMinutes;
+            % Earliest permissible start per lab (for mid-day re-optimization)
+            if ~isempty(options.LabEarliestStartMinutes) && numel(options.LabEarliestStartMinutes) == numLabs
+                prepared.earliestStartMinutes = max(0, double(options.LabEarliestStartMinutes(:)'));
+            else
+                prepared.earliestStartMinutes = labStartMinutes;
+            end
             prepared.labStartTimes = options.LabStartTimes;
             prepared.turnoverTime = options.TurnoverTime;
             prepared.maxOperatorTime = options.MaxOperatorTime;

@@ -327,7 +327,7 @@ classdef OptimizationController < handle
             removedCaseIds = unique(removedCaseIds(removedCaseIds ~= ""), 'stable');
         end
 
-        function scheduleOptions = buildSchedulingOptions(~, app, lockedConstraints)
+        function scheduleOptions = buildSchedulingOptions(obj, app, lockedConstraints)
             if nargin < 3
                 lockedConstraints = struct([]);
             end
@@ -343,6 +343,12 @@ classdef OptimizationController < handle
                 end
             end
 
+            % Compute per-lab earliest start minutes (freeze context before NOW)
+            earliest = double.empty(1, 0);
+            if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
+                earliest = obj.computeLabEarliestStartsFromSchedule(app, numLabs);
+            end
+
             % Get OutpatientInpatientMode with fallback to default
             outpatientInpatientMode = "TwoPhaseAutoFallback";
             if isfield(app.Opts, 'outpatientInpatientMode') && ~isempty(app.Opts.outpatientInpatientMode)
@@ -352,6 +358,7 @@ classdef OptimizationController < handle
             scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
                 'NumLabs', numLabs, ...
                 'LabStartTimes', startTimes, ...
+                'LabEarliestStartMinutes', earliest, ...
                 'OptimizationMetric', string(app.Opts.metric), ...
                 'CaseFilter', string(app.Opts.caseFilter), ...
                 'MaxOperatorTime', app.Opts.maxOpMin, ...
@@ -363,6 +370,53 @@ classdef OptimizationController < handle
                 'ResourceTypes', resourceTypes, ...
                 'Verbose', true, ...
                 'OutpatientInpatientMode', outpatientInpatientMode);
+        end
+
+        function earliest = computeLabEarliestStartsFromSchedule(~, app, numLabs)
+            nowMinutes = app.getNowPosition();
+            earliest = repmat(nowMinutes, 1, numLabs);
+            try
+                if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                    return;
+                end
+                labAssignments = app.OptimizedSchedule.labAssignments();
+                for labIdx = 1:min(numLabs, numel(labAssignments))
+                    entries = labAssignments{labIdx};
+                    if isempty(entries)
+                        earliest(labIdx) = nowMinutes;
+                        continue;
+                    end
+                    lastEndBeforeNow = 0;
+                    inProgressEnd = NaN;
+                    for k = 1:numel(entries)
+                        e = entries(k);
+                        start = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procStartTime','startTime'}, NaN);
+                        procEnd = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procEndTime','procedureEndTime'}, NaN);
+                        post = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                        turn = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                        if ~isnan(procEnd)
+                            endT = procEnd + max(0, post) + max(0, turn);
+                        else
+                            endT = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'endTime', NaN);
+                        end
+                        if ~isnan(start) && ~isnan(endT)
+                            if start <= nowMinutes && endT > nowMinutes
+                                inProgressEnd = endT;
+                            elseif endT <= nowMinutes
+                                lastEndBeforeNow = max(lastEndBeforeNow, endT);
+                            end
+                        end
+                    end
+                    if ~isnan(inProgressEnd)
+                        earliest(labIdx) = max(nowMinutes, inProgressEnd);
+                    else
+                        earliest(labIdx) = max(nowMinutes, lastEndBeforeNow);
+                    end
+                end
+            catch
+                % On errors, default to NOW per lab
+                earliest = repmat(nowMinutes, 1, numLabs);
+            end
         end
 
         function showOptimizationOptionsDialog(~, app)

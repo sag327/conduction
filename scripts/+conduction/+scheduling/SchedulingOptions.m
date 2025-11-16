@@ -6,6 +6,7 @@ classdef SchedulingOptions
     properties (SetAccess = immutable)
         NumLabs (1,1) double {mustBePositive, mustBeFinite} = 5
         LabStartTimes cell = {}
+        LabEarliestStartMinutes double = double.empty(1, 0)
         OptimizationMetric (1,1) string = "operatorIdle"
         CaseFilter (1,1) string = "all"
         MaxOperatorTime (1,1) double {mustBePositive, mustBeFinite} = 480
@@ -54,6 +55,7 @@ classdef SchedulingOptions
             addParameter(parser, 'NumLabs', conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS, ...
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
             addParameter(parser, 'LabStartTimes', {}, @(x) iscell(x) || isstring(x) || ischar(x));
+            addParameter(parser, 'LabEarliestStartMinutes', [], @(x) isempty(x) || (isnumeric(x) && isvector(x)));
             addParameter(parser, 'OptimizationMetric', conduction.scheduling.SchedulingOptions.DEFAULT_OPTIMIZATION, ...
                 @(x) any(strcmpi(string(x), conduction.scheduling.SchedulingOptions.VALID_METRICS)));
             addParameter(parser, 'CaseFilter', conduction.scheduling.SchedulingOptions.DEFAULT_CASE_FILTER, ...
@@ -94,14 +96,15 @@ classdef SchedulingOptions
                 results.Verbose, ...
                 results.TimeStep, ...
                 results.ResourceTypes, ...
-                results.OutpatientInpatientMode);
+                results.OutpatientInpatientMode, ...
+                results.LabEarliestStartMinutes);
         end
     end
 
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
                 maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
-                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes, outpatientInpatientMode)
+                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes, outpatientInpatientMode, labEarliestStartMinutes)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -124,6 +127,9 @@ classdef SchedulingOptions
                 outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
             elseif nargin < 15
                 outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
+                labEarliestStartMinutes = [];
+            elseif nargin < 16
+                labEarliestStartMinutes = [];
             end
 
             if isempty(labStartTimes)
@@ -153,6 +159,18 @@ classdef SchedulingOptions
             obj.TimeStep = timeStep;
             obj.ResourceTypes = conduction.scheduling.SchedulingOptions.normalizeResourceTypes(resourceTypes);
             obj.OutpatientInpatientMode = conduction.scheduling.SchedulingOptions.normalizeOutpatientInpatientMode(outpatientInpatientMode);
+
+            % Normalize LabEarliestStartMinutes
+            if isempty(labEarliestStartMinutes)
+                obj.LabEarliestStartMinutes = double.empty(1, 0);
+            else
+                v = double(labEarliestStartMinutes(:)');
+                if numel(v) ~= numLabs
+                    error('SchedulingOptions:InvalidInput', ...
+                        'LabEarliestStartMinutes length (%d) must equal NumLabs (%d).', numel(v), numLabs);
+                end
+                obj.LabEarliestStartMinutes = max(0, v);
+            end
         end
 
         function metric = normalizedMetric(obj)
@@ -184,6 +202,7 @@ classdef SchedulingOptions
             s = struct( ...
                 'NumLabs', obj.NumLabs, ...
                 'LabStartTimes', {obj.LabStartTimes}, ...
+                'LabEarliestStartMinutes', obj.LabEarliestStartMinutes, ...
                 'OptimizationMetric', obj.OptimizationMetric, ...
                 'CaseFilter', obj.CaseFilter, ...
                 'MaxOperatorTime', obj.MaxOperatorTime, ...

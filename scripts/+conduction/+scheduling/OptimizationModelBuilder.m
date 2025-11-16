@@ -83,7 +83,11 @@ classdef OptimizationModelBuilder
             validTimeSlots = cell(numLabs, 1);
             for labIdx = 1:numLabs
                 labStart = labStartMinutes(labIdx);
-                validTimeSlots{labIdx} = find(timeSlots >= labStart);
+                earliest = labStart;
+                if isfield(prepared, 'earliestStartMinutes') && numel(prepared.earliestStartMinutes) >= labIdx
+                    earliest = max(earliest, prepared.earliestStartMinutes(labIdx));
+                end
+                validTimeSlots{labIdx} = find(timeSlots >= earliest);
             end
 
             % --- Constraint counts for preallocation -------------------------------
@@ -91,11 +95,15 @@ classdef OptimizationModelBuilder
             numConstraint2 = numLabs * numTimeSlots;           % lab capacity upper bound
             numConstraint3 = numOperators * numTimeSlots;      % operator capacity upper bound
 
-            % Lab start invalid slots count
+            % Lab start invalid slots count (respect earliest starts)
             numConstraint4 = 0;
             for labIdx = 1:numLabs
                 labStart = labStartMinutes(labIdx);
-                invalidSlots = find(timeSlots < labStart);
+                earliest = labStart;
+                if isfield(prepared, 'earliestStartMinutes') && numel(prepared.earliestStartMinutes) >= labIdx
+                    earliest = max(earliest, prepared.earliestStartMinutes(labIdx));
+                end
+                invalidSlots = find(timeSlots < earliest);
                 numConstraint4 = numConstraint4 + numel(invalidSlots) * sum(labPreferences(:, labIdx));
             end
             numConstraint4 = max(0, numConstraint4);
