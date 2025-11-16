@@ -16,6 +16,7 @@ classdef SchedulingOptions
         OperatorAvailability containers.Map = containers.Map('KeyType','char','ValueType','double')
         LockedCaseConstraints struct = struct([])  % Locked case time windows and assignments
         AvailableLabs double = double.empty(1, 0)
+        LabChangePenalty (1,1) double {mustBeNonnegative, mustBeFinite} = 0
         Verbose (1,1) logical = true
         TimeStep (1,1) double {mustBePositive, mustBeFinite} = 10
         ResourceTypes struct = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {})
@@ -70,6 +71,7 @@ classdef SchedulingOptions
                 @(x) isa(x, 'containers.Map'));
             addParameter(parser, 'LockedCaseConstraints', struct([]), @isstruct);
             addParameter(parser, 'AvailableLabs', [], @(x) isnumeric(x) && isvector(x));
+            addParameter(parser, 'LabChangePenalty', 0, @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'}));
             addParameter(parser, 'Verbose', conduction.scheduling.SchedulingOptions.DEFAULT_VERBOSE, @islogical);
             addParameter(parser, 'TimeStep', conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP, ...
                 @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'}));
@@ -97,14 +99,15 @@ classdef SchedulingOptions
                 results.TimeStep, ...
                 results.ResourceTypes, ...
                 results.OutpatientInpatientMode, ...
-                results.LabEarliestStartMinutes);
+                results.LabEarliestStartMinutes, ...
+                results.LabChangePenalty);
         end
     end
 
     methods
         function obj = SchedulingOptions(numLabs, labStartTimes, optimizationMetric, caseFilter, ...
                 maxOperatorTime, turnoverTime, enforceMidnight, prioritizeOutpatient, operatorAvailability, ...
-                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes, outpatientInpatientMode, labEarliestStartMinutes)
+                lockedCaseConstraints, availableLabs, verbose, timeStep, resourceTypes, outpatientInpatientMode, labEarliestStartMinutes, labChangePenalty)
 
             if nargin == 0
                 numLabs = conduction.scheduling.SchedulingOptions.DEFAULT_NUM_LABS;
@@ -122,6 +125,8 @@ classdef SchedulingOptions
                 timeStep = conduction.scheduling.SchedulingOptions.DEFAULT_TIME_STEP;
                 resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
                 outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
+                labEarliestStartMinutes = [];
+                labChangePenalty = 0;
             elseif nargin < 14
                 resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
                 outpatientInpatientMode = conduction.scheduling.SchedulingOptions.DEFAULT_OUTPATIENT_INPATIENT_MODE;
@@ -130,6 +135,9 @@ classdef SchedulingOptions
                 labEarliestStartMinutes = [];
             elseif nargin < 16
                 labEarliestStartMinutes = [];
+            end
+            if nargin < 17
+                labChangePenalty = 0;
             end
 
             if isempty(labStartTimes)
@@ -171,6 +179,8 @@ classdef SchedulingOptions
                 end
                 obj.LabEarliestStartMinutes = max(0, v);
             end
+
+            obj.LabChangePenalty = max(0, double(labChangePenalty));
         end
 
         function metric = normalizedMetric(obj)

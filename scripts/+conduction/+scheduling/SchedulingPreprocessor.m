@@ -76,6 +76,20 @@ classdef SchedulingPreprocessor
                 availableLabs = intersect(availableLabs(:)', 1:numLabs, 'stable');
             end
 
+            % Track each case's current lab assignment (if any) for prefer-current-lab penalties
+            if isfield(cases, 'currentLabIndex')
+                rawCurrentLabs = double([cases.currentLabIndex]);
+            else
+                rawCurrentLabs = zeros(1, prepared.numCases);
+            end
+            if isempty(rawCurrentLabs)
+                rawCurrentLabs = zeros(1, prepared.numCases);
+            end
+            rawCurrentLabs(~isfinite(rawCurrentLabs)) = 0;
+            unavailableMask = ~ismember(rawCurrentLabs, availableLabs);
+            rawCurrentLabs(unavailableMask) = 0;
+            prepared.currentLabIndices = rawCurrentLabs;
+
             closedLabsMask = true(1, numLabs);
             closedLabsMask(availableLabs) = false;
 

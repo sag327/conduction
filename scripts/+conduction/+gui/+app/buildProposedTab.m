@@ -22,11 +22,12 @@ function buildProposedTab(app, tabGroup)
     headerPanel.BorderType = 'none';
     headerPanel.BackgroundColor = [0.15 0.15 0.15];
 
-    headerGrid = uigridlayout(headerPanel, [1, 4]);
+    headerGrid = uigridlayout(headerPanel, [2, 4]);
     headerGrid.ColumnWidth = {'1x', 'fit', 'fit', 'fit'};
-    headerGrid.RowHeight = {'fit'};
+    headerGrid.RowHeight = {'fit', 'fit'};
     headerGrid.Padding = [10 8 10 8];
     headerGrid.ColumnSpacing = 10;
+    headerGrid.RowSpacing = 6;
 
     app.ProposedSummaryLabel = uilabel(headerGrid);
     app.ProposedSummaryLabel.Layout.Row = 1;
@@ -64,4 +65,32 @@ function buildProposedTab(app, tabGroup)
     app.ProposedAxes.YColor = [1 1 1];
     app.ProposedAxes.Toolbar.Visible = 'off';
     title(app.ProposedAxes, '');
+    app.ProposedStaleBanner = uipanel(headerGrid);
+    app.ProposedStaleBanner.Layout.Row = 2;
+    app.ProposedStaleBanner.Layout.Column = [1 4];
+    app.ProposedStaleBanner.BackgroundColor = [0.4 0.2 0.05];
+    app.ProposedStaleBanner.BorderType = 'none';
+    app.ProposedStaleBanner.Visible = 'off';
+
+    bannerGrid = uigridlayout(app.ProposedStaleBanner, [1, 2]);
+    bannerGrid.ColumnWidth = {'1x', 'fit'};
+    bannerGrid.RowHeight = {'fit'};
+    bannerGrid.Padding = [12 6 12 6];
+    bannerGrid.ColumnSpacing = 12;
+
+    app.ProposedStaleLabel = uilabel(bannerGrid);
+    app.ProposedStaleLabel.Layout.Row = 1;
+    app.ProposedStaleLabel.Layout.Column = 1;
+    app.ProposedStaleLabel.Text = 'Schedule changed since this proposal was generated.';
+    app.ProposedStaleLabel.FontWeight = 'bold';
+    app.ProposedStaleLabel.FontColor = [1 0.9 0.85];
+    app.ProposedStaleLabel.WordWrap = 'on';
+
+    app.ProposedStaleActionButton = uibutton(bannerGrid, 'push');
+    app.ProposedStaleActionButton.Layout.Row = 1;
+    app.ProposedStaleActionButton.Layout.Column = 2;
+    app.ProposedStaleActionButton.Text = 'Re-run with current state';
+    app.ProposedStaleActionButton.ButtonPushedFcn = @(~, ~) app.onProposedRerun();
+    app.ProposedStaleActionButton.FontWeight = 'bold';
+
 end

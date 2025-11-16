@@ -38,7 +38,9 @@ function buildOptimizationTab(app, optimizationGrid)
     availableWrapper = uigridlayout(optimizationGrid);
     availableWrapper.Layout.Row = 4;
     availableWrapper.Layout.Column = 2;
-    availableWrapper.RowHeight = {24, '1x'};
+    % Cap the visual height of the Available Labs area to expose the Scope panel
+    % The inner panel is scrollable, so a fixed pixel height improves layout.
+    availableWrapper.RowHeight = {24, 90};
     availableWrapper.ColumnWidth = {'1x'};
     availableWrapper.RowSpacing = 4;
     availableWrapper.Padding = [0 0 0 0];

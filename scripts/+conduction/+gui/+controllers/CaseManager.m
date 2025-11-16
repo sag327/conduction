@@ -1133,7 +1133,8 @@ classdef CaseManager < handle
                 'admissionStatus', '', ...
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
                 'date', NaT, ...
-                'requiredResourceIds', string.empty(0, 1));
+                'requiredResourceIds', string.empty(0, 1), ...
+                'currentLabIndex', 0);
             casesStruct = repmat(template, obj.CaseCount, 1);
 
             dateValue = obj.TargetDate;
@@ -1181,6 +1182,18 @@ classdef CaseManager < handle
                     end
                 end
                 casesStruct(idx).requiredResourceIds = filteredRequiredIds;
+
+                % Capture the current lab assignment as an index (for prefer-current-lab penalty)
+                currentLabIdx = 0;
+                assignedLabValue = double(caseObj.AssignedLab);
+                if ~isnan(assignedLabValue)
+                    assignedLabValue = round(assignedLabValue);
+                    matchIdx = find(labIds == assignedLabValue, 1, 'first');
+                    if ~isempty(matchIdx)
+                        currentLabIdx = matchIdx;
+                    end
+                end
+                casesStruct(idx).currentLabIndex = currentLabIdx;
             end
         end
 

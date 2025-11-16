@@ -79,8 +79,10 @@ classdef OptimizationModelBuilder
                 (caseIdx - 1) * numLabs * numTimeSlots + ...
                 (labIdx - 1) * numTimeSlots + timeIdx;
 
-            % Valid start slots per lab
+            % Valid start slots per lab (for non-locked cases)
             validTimeSlots = cell(numLabs, 1);
+            % Less restrictive slots for LOCKED cases: respect lab start, ignore per-lab earliest
+            lockTimeSlots = cell(numLabs, 1);
             for labIdx = 1:numLabs
                 labStart = labStartMinutes(labIdx);
                 earliest = labStart;
@@ -88,6 +90,28 @@ classdef OptimizationModelBuilder
                     earliest = max(earliest, prepared.earliestStartMinutes(labIdx));
                 end
                 validTimeSlots{labIdx} = find(timeSlots >= earliest);
+                lockTimeSlots{labIdx} = find(timeSlots >= labStart);
+            end
+
+            % Ensure reconstruction and capacity honor pre-NOW locked starts by
+            % unioning each locked start index into the validTimeSlots of its lab.
+            if ~isempty(lockedLabs)
+                for caseIdx = 1:numCases
+                    ls = NaN; ll = NaN;
+                    if caseIdx <= numel(lockedStartTimes)
+                        ls = lockedStartTimes(caseIdx);
+                    end
+                    if caseIdx <= numel(lockedLabs)
+                        ll = lockedLabs(caseIdx);
+                    end
+                    if ~isnan(ls) && ~isnan(ll) && ll >= 1 && ll <= numLabs
+                        [~, tsIdx] = min(abs(timeSlots - ls));
+                        v = validTimeSlots{ll};
+                        if ~ismember(tsIdx, v)
+                            validTimeSlots{ll} = sort([v(:); tsIdx]);
+                        end
+                    end
+                end
             end
 
             % --- Constraint counts for preallocation -------------------------------
@@ -365,8 +389,8 @@ classdef OptimizationModelBuilder
                 if ~isnan(lockedLab)
                     % Lock to specific lab
                     if labPreferences(caseIdx, lockedLab) == 1
-                        % Check if this time slot is valid for this lab
-                        validSlots = validTimeSlots{lockedLab};
+                        % For locked constraints, ignore per-lab earliest; only require lab not before its start
+                        validSlots = lockTimeSlots{lockedLab};
                         if ~ismember(lockedTimeIdx, validSlots)
                             % Auto-round to nearest valid slot
                             if ~isempty(validSlots)
@@ -392,8 +416,8 @@ classdef OptimizationModelBuilder
                         if labPreferences(caseIdx, labIdx) ~= 1
                             continue;
                         end
-                        % Check if this time slot is valid for this lab
-                        validSlots = validTimeSlots{labIdx};
+                        % For locked constraints without a specific lab, ignore earliest per lab
+                        validSlots = lockTimeSlots{labIdx};
                         if ~ismember(lockedTimeIdx, validSlots) && ~isempty(validSlots)
                             % Auto-round to nearest valid slot
                             validTimes = timeSlots(validSlots);
@@ -534,6 +558,32 @@ classdef OptimizationModelBuilder
                             end
                         end
                     end
+            end
+
+            % Apply soft penalty when cases leave their current labs (if requested)
+            if options.LabChangePenalty > 0 && isfield(prepared, 'currentLabIndices')
+                currentLabs = double(prepared.currentLabIndices);
+                if numel(currentLabs) ~= numCases
+                    currentLabs = zeros(1, numCases);
+                end
+                penaltyWeight = double(options.LabChangePenalty);
+                for caseIdx = 1:numCases
+                    preferredLab = round(currentLabs(caseIdx));
+                    if preferredLab < 1 || preferredLab > numLabs
+                        continue;
+                    end
+                    for labIdx = 1:numLabs
+                        if labPreferences(caseIdx, labIdx) ~= 1 || labIdx == preferredLab
+                            continue;
+                        end
+                        validSlots = validTimeSlots{labIdx};
+                        if isempty(validSlots)
+                            continue;
+                        end
+                        linearIdx = getVarIndex(caseIdx, labIdx, validSlots);
+                        f(linearIdx) = f(linearIdx) + penaltyWeight;
+                    end
+                end
             end
 
             % Compose model struct
