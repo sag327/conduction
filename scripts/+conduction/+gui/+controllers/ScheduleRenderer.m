@@ -232,8 +232,9 @@ classdef ScheduleRenderer < handle
             end
 
             highlightIds = string(app.ResourceHighlightIds);
-            conduction.gui.renderers.ResourceOverlayRenderer.draw(axesHandle, schedule, resourceTypes, highlightIds);
-            conduction.gui.renderers.ResourceOverlayRenderer.updateCaseBlockMetadata(axesHandle, schedule, app);
+            ctx = struct('Axes', axesHandle, 'CaseManager', app.CaseManager);
+            conduction.gui.renderers.ResourceOverlayRenderer.draw(ctx, schedule, resourceTypes, highlightIds);
+            conduction.gui.renderers.ResourceOverlayRenderer.updateCaseBlockMetadata(ctx, schedule);
         end
 
         function resourceTypes = collectResourceTypes(~, app)

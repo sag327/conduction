@@ -4,15 +4,16 @@ classdef ResourceOverlayRenderer
     %   highlight masks based on the current resource selection.
 
     methods (Static)
-        function draw(app, dailySchedule, resourceTypes, highlightIds)
+        function draw(appContext, dailySchedule, resourceTypes, highlightIds)
             arguments
-                app
+                appContext
                 dailySchedule
                 resourceTypes struct = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {})
                 highlightIds string = string.empty(0, 1)
             end
 
-            ax = conduction.gui.renderers.ResourceOverlayRenderer.resolveAxes(app);
+            ctx = conduction.gui.renderers.ResourceOverlayRenderer.buildContext(appContext);
+            ax = ctx.Axes;
             conduction.gui.renderers.ResourceOverlayRenderer.clear(ax);
 
             if isempty(ax) || ~isvalid(ax)
@@ -69,7 +70,7 @@ classdef ResourceOverlayRenderer
                         end
                     end
 
-                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(app, caseStruct, caseId);
+                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(ctx.CaseManager, caseStruct, caseId);
                     conduction.gui.renderers.ResourceOverlayRenderer.attachResourceMetadata(rectHandle, resources);
 
                     caseHasHighlight = false;
@@ -100,7 +101,10 @@ classdef ResourceOverlayRenderer
             delete(findobj(ax, 'Tag', 'ResourceHighlightOutline'));
         end
 
-        function updateCaseBlockMetadata(ax, schedule, app)
+        function updateCaseBlockMetadata(appContext, schedule)
+            ctx = conduction.gui.renderers.ResourceOverlayRenderer.buildContext(appContext);
+            ax = ctx.Axes;
+            caseManager = ctx.CaseManager;
             if isempty(ax) || ~isgraphics(ax)
                 return;
             end
@@ -149,7 +153,7 @@ classdef ResourceOverlayRenderer
                     if strlength(caseId) == 0 || ~blockMap.isKey(char(caseId))
                         continue;
                     end
-                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(app, caseStruct, caseId);
+                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(caseManager, caseStruct, caseId);
                     conduction.gui.renderers.ResourceOverlayRenderer.attachResourceMetadata(blockMap(char(caseId)), resources);
                 end
             end
@@ -158,22 +162,24 @@ classdef ResourceOverlayRenderer
 
     methods (Static, Access = private)
         function ax = resolveAxes(appOrAxes)
-            if isa(appOrAxes, 'matlab.ui.control.UIAxes')
-                ax = appOrAxes;
-                return;
-            end
-
             ax = [];
             if isempty(appOrAxes)
                 return;
             end
 
+            if isa(appOrAxes, 'matlab.ui.control.UIAxes')
+                ax = appOrAxes;
+                return;
+            end
+
             if isstruct(appOrAxes)
-                if isfield(appOrAxes, 'ScheduleAxes')
-                    candidate = appOrAxes.ScheduleAxes;
-                    if ~isempty(candidate)
-                        ax = candidate;
-                    end
+                if isfield(appOrAxes, 'Axes') && ~isempty(appOrAxes.Axes)
+                    ax = appOrAxes.Axes;
+                    return;
+                end
+                if isfield(appOrAxes, 'ScheduleAxes') && ~isempty(appOrAxes.ScheduleAxes)
+                    ax = appOrAxes.ScheduleAxes;
+                    return;
                 end
             elseif isobject(appOrAxes)
                 if isprop(appOrAxes, 'ScheduleAxes')
@@ -181,6 +187,7 @@ classdef ResourceOverlayRenderer
                         candidate = appOrAxes.ScheduleAxes;
                         if ~isempty(candidate)
                             ax = candidate;
+                            return;
                         end
                     catch
                         % Ignore property access issues
@@ -246,7 +253,7 @@ classdef ResourceOverlayRenderer
             end
         end
 
-        function resources = extractResourceIds(app, caseStruct, caseId)
+        function resources = extractResourceIds(caseManager, caseStruct, caseId)
             scheduleResources = string.empty(0, 1);
             candidates = {"requiredResources", "requiredResourceIds", "RequiredResourceIds"};
             for idx = 1:numel(candidates)
@@ -266,11 +273,10 @@ classdef ResourceOverlayRenderer
             end
 
             caseManagerResources = string.empty(0, 1);
-            if nargin >= 3 && ~isempty(app)
+            if nargin >= 3 && ~isempty(caseManager)
                 try
-                    if isprop(app, 'CaseManager') && ~isempty(app.CaseManager)
-                        % Prefer persistent CaseId lookup
-                        [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    % Prefer persistent CaseId lookup
+                    [caseObj, ~] = caseManager.findCaseById(caseId);
                         % Fallback: locate by CaseNumber if CaseId doesn’t match schedule structures
                         if isempty(caseObj)
                             % Attempt to read caseNumber from the schedule case struct
@@ -284,8 +290,8 @@ classdef ResourceOverlayRenderer
                             end
                             if ~isnan(caseNumber)
                                 try
-                                    for k = 1:app.CaseManager.CaseCount
-                                        c = app.CaseManager.getCase(k);
+                                    for k = 1:caseManager.CaseCount
+                                        c = caseManager.getCase(k);
                                         if ~isnan(c.CaseNumber) && double(c.CaseNumber) == caseNumber
                                             caseObj = c; %#ok<AGROW>
                                             break;
@@ -298,7 +304,6 @@ classdef ResourceOverlayRenderer
                         if ~isempty(caseObj)
                             caseManagerResources = caseObj.listRequiredResources();
                         end
-                    end
                 catch
                     % ignore lookup failures
                 end
@@ -320,6 +325,48 @@ classdef ResourceOverlayRenderer
             end
             payload.resourceIds = resources;
             set(rectHandle, 'UserData', payload);
+        end
+
+        function ctx = buildContext(appContext)
+            ctx = struct('Axes', conduction.gui.renderers.ResourceOverlayRenderer.resolveAxes(appContext), ...
+                'CaseManager', conduction.gui.renderers.ResourceOverlayRenderer.extractCaseManager(appContext));
+        end
+
+        function cm = extractCaseManager(appContext)
+            cm = [];
+            if isempty(appContext)
+                return;
+            end
+
+            if isstruct(appContext)
+                if isfield(appContext, 'CaseManager')
+                    cm = appContext.CaseManager;
+                    if isempty(cm)
+                        cm = [];
+                    end
+                    return;
+                end
+            elseif isobject(appContext)
+                if isprop(appContext, 'CaseManager')
+                    try
+                        cm = appContext.CaseManager;
+                    catch
+                        cm = [];
+                    end
+                    return;
+                end
+            end
+
+            if isa(appContext, 'matlab.ui.control.UIAxes')
+                parentFig = ancestor(appContext, 'matlab.ui.Figure');
+                if ~isempty(parentFig) && isprop(parentFig, 'CaseManager')
+                    try
+                        cm = parentFig.CaseManager;
+                    catch
+                        cm = [];
+                    end
+                end
+            end
         end
 
         function drawHighlightMask(ax, caseId, position, highlightActive, caseHasHighlight, outlineColor)
