@@ -132,16 +132,9 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptMaxOperatorSpinner.Layout.Column = 2;
     app.OptMaxOperatorSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
-    app.OptEnforceMidnightCheckBox = uicheckbox(optimizationGrid);
-    app.OptEnforceMidnightCheckBox.Text = 'Enforce midnight cutoff';
-    app.OptEnforceMidnightCheckBox.Value = logical(app.Opts.enforceMidnight);
-    app.OptEnforceMidnightCheckBox.Layout.Row = 10;
-    app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
-    app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
-
     % Create container for label + info button
     labelContainer = uigridlayout(optimizationGrid);
-    labelContainer.Layout.Row = 11;
+    labelContainer.Layout.Row = 10;
     labelContainer.Layout.Column = 1;
     labelContainer.RowHeight = {'1x'};
     labelContainer.ColumnWidth = {'1x', 20};
@@ -169,9 +162,14 @@ function buildOptimizationTab(app, optimizationGrid)
     else
         app.OptOutpatientInpatientModeDropDown.Value = 'TwoPhaseAutoFallback';
     end
-    app.OptOutpatientInpatientModeDropDown.Layout.Row = 11;
+    app.OptOutpatientInpatientModeDropDown.Layout.Row = 10;
     app.OptOutpatientInpatientModeDropDown.Layout.Column = 2;
     app.OptOutpatientInpatientModeDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    scopeSpacer = uilabel(optimizationGrid);
+    scopeSpacer.Text = ' ';
+    scopeSpacer.FontSize = 6;
+    scopeSpacer.Layout.Row = 11;
+    scopeSpacer.Layout.Column = [1 2];
 
     scopePanel = uipanel(optimizationGrid);
     scopePanel.Title = 'Re-optimization Scope';
@@ -180,12 +178,12 @@ function buildOptimizationTab(app, optimizationGrid)
     scopePanel.Visible = 'off';
     scopePanel.BackgroundColor = [0.13 0.13 0.13];
     scopePanel.ForegroundColor = [0.95 0.95 0.95];
+    scopePanel.Padding = [10 12 10 10];
 
     scopeGrid = uigridlayout(scopePanel, [4, 2]);
     scopeGrid.ColumnWidth = {'fit', '1x'};
     scopeGrid.RowHeight = {'fit','fit','fit','fit'};
     scopeGrid.RowSpacing = 4;
-    % Add a touch more space above the scope contents (between Outpt/Inpt and Scope)
     scopeGrid.Padding = [8 10 8 6];  % [left top right bottom]
 
     app.ScopeSummaryLabel = uilabel(scopeGrid);

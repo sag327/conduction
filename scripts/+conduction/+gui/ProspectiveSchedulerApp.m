@@ -144,7 +144,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         OptPostSpinner              matlab.ui.control.Spinner
         OptMaxOperatorLabel         matlab.ui.control.Label
         OptMaxOperatorSpinner       matlab.ui.control.Spinner
-        OptEnforceMidnightCheckBox  matlab.ui.control.CheckBox
         OptOutpatientInpatientModeLabel matlab.ui.control.Label
         OptOutpatientInpatientModeDropDown matlab.ui.control.DropDown
         OptOutpatientInpatientModeInfoButton matlab.ui.control.Button
