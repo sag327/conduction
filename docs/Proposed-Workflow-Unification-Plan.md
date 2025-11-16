@@ -122,6 +122,102 @@ Phase 4 — CLI Tests (MATLAB `-batch`)
    ```
 10. Test: re‑optimization unchanged (existing Proposed path and staleness banner) — smoke as already documented.
 
+---
+
+## Proposed Tab Interactivity (Sandbox)
+
+Enable full interactivity in Proposed so users can test edits before Accept. The Proposed tab should behave like the main Schedule: case highlighting, clicking (drawer), locking/unlocking, and (where supported) dragging/resizing — while all mutations apply only to `app.ProposedSchedule` until Accepted.
+
+### Goals
+- Case selection/highlight and multi‑select overlays work in Proposed.
+- Clicking a case opens the drawer; drawer edits (resources, admission, lock) update the corresponding ProspectiveCase and reflect in Proposed overlays.
+- Lock/unlock via drawer updates proposal visuals and summary.
+- Drag/resize (if supported in main Schedule) act on ProposedSchedule only, not on OptimizedSchedule, until Accept.
+- Resource legends and highlights update in Proposed (already wired); overlays reflect drawer changes immediately.
+
+### Design (DRY/KISS)
+- Parameterize ScheduleRenderer interactions by axes + schedule context:
+  - Add helpers `enableCaseInteractionOnAxes(app, axes, context)` that call existing `enableCaseDrag`, selection overlays, and callbacks but target the provided axes.
+  - Context carries pointers to: target axes (ProposedAxes), get/set schedule (read/write `app.ProposedSchedule`), and callbacks for post‑mutation refresh (refresh Proposed summary + overlays only).
+- CaseDragController registry supports multiple axes:
+  - Register CaseBlock handles from ProposedAxes in the controller (extend registry to index by axes/handle key, already keyed by handle).
+  - Motion/hover uses the hovered handle to resolve position/selection; axes resolved via handle ancestor (already in `resolveSelectionGeometry`).
+- Drawer & locking:
+  - Keep drawer actions writing to ProspectiveCase (unchanged), then refresh Proposed overlays and summary.
+  - Lock/unlock affects auto/user lock visuals and future constraints on Accept.
+- Prevent mutating OptimizedSchedule:
+  - All Proposed interactions must not write to `OptimizedSchedule`.
+  - Accept: promote `ProposedSchedule` → `OptimizedSchedule` (existing path) and re-render main Schedule.
+
+### Touchpoints
+- `ProspectiveSchedulerApp.renderProposedSchedule`
+  - Use same callbacks as Schedule tab:
+    - `CaseClickedFcn`, `BackgroundClickedFcn` pointing to `app.onScheduleBlockClicked` / `app.onScheduleBackgroundClicked`.
+  - After visualize, call `ScheduleRenderer.enableCaseInteractionOnAxes(app, app.ProposedAxes, 'proposed')` to attach drag/selection.
+- `ScheduleRenderer`
+  - Extract interaction enabling code to accept arbitrary axes; reuse for both ScheduleAxes and ProposedAxes.
+  - Add `refreshProposedOnly()` helper: redraw overlays and summary for Proposed without touching main Schedule.
+- `CaseDragController`
+  - Ensure registry and hover/selection logic work with Proposed handles (already handle-based); no OptimizedSchedule mutations.
+- `ResourceOverlayRenderer`
+  - Already supports Proposed via context; keep called after Proposed visualize and after drawer changes.
+
+### Summary & Staleness
+- Proposed summary must recompute moved/unchanged/conflicts against the baseline (OptimizedSchedule) after any Proposed edits.
+- Staleness banner continues to reflect changes to the baseline (OptimizedSchedule) or global options/NOW; edits inside Proposed do not trigger staleness.
+
+### CLI Testing (where feasible)
+Note: GUI drag/resize can’t be simulated easily via CLI; focus on function-level assertions and state transitions.
+
+1) Drawer click → drawer opens and Proposed overlays refresh
+```matlab
+app = conduction.launchSchedulerGUI(); pause(0.5);
+% Seed baseline
+app.OperatorField.Value='A'; app.ProcedureField.Value='P'; app.ProcedureTimeField.Value=60; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton,[]);
+app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton,[]); pause(0.5);
+% Add second case and open Proposed
+app.OperatorField.Value='B'; app.ProcedureField.Value='Q'; app.ProcedureTimeField.Value=45; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton,[]);
+app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton,[]); pause(0.5);
+% Programmatically simulate clicking a known case in Proposed: select by id then call drawer populate
+ids = string({app.ProposedSchedule.cases().caseID}); selId = ids(1);
+app.DrawerController.openDrawer(app, selId); pause(0.1);
+assert(strlength(app.DrawerCurrentCaseId)>0, 'Drawer did not open');
+delete(app);
+```
+
+2) Drawer resource update reflects in Proposed overlays
+```matlab
+app = conduction.launchSchedulerGUI(); pause(0.5);
+store = app.CaseManager.getResourceStore(); store.create('Device A', 1);
+% Baseline + Proposed
+app.OperatorField.Value='A'; app.ProcedureField.Value='P'; app.ProcedureTimeField.Value=60; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton,[]);
+app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton,[]); pause(0.5);
+app.OperatorField.Value='B'; app.ProcedureField.Value='Q'; app.ProcedureTimeField.Value=45; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton,[]);
+app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton,[]); pause(0.5);
+% Assign resource to the selected case
+ids = string({app.ProposedSchedule.cases().caseID}); selId = ids(1);
+[caseObj,~] = app.CaseManager.findCaseById(selId); caseObj.assignResource('device-a');
+% Refresh overlays for Proposed
+app.ScheduleRenderer.refreshProposedResourceHighlights(app);
+% (Manual visual check in GUI)
+delete(app);
+```
+
+3) Lock/unlock in drawer updates Proposed summary and overlays
+```matlab
+% Similar to (2): toggle IsUserLocked on a case, call Summary update and overlay refresh, assert no crash.
+```
+
+4) Accept promotion
+```matlab
+% After (1)/(2): app.onProposedAccept(); assert( ~isempty(app.OptimizedSchedule) );
+```
+
+### Risks
+- Drag/resize semantics: If main Schedule resizing isn’t fully implemented, Proposed should align to the same capabilities (don’t expose partial interactions).
+- Interaction conflicts: Ensure Proposed drag/hover watchers use ProposedAxes, not ScheduleAxes.
+
+
 ## File Touchpoints
 - `scripts/+conduction/+gui/+app/buildOptimizationTab.m`
   - Add “Preview changes (Proposed tab)” checkbox under optimization controls.
