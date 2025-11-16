@@ -21,10 +21,15 @@ So users can preview, accept, or discard changes consistently, with scope contro
 - Introducing new constraints beyond already planned “earliest start”, resource capacity, locks.
 
 ## UX/Behavior
-- Preview option in planning
-  - Add a “Preview changes (Proposed tab)” toggle in the Optimization panel.
-  - Default: OFF in planning (direct apply), ON in re‑optimization.
-  - If ON (or in re‑optimization): run to Proposed, show summary, Accept/Discard/Undo.
+- Unified Proposed workflow in both modes
+  - Always route optimization to the Proposed tab (planning and re‑opt), with one exception below.
+  - Read‑only original Schedule view while a proposal is present (glass‑pane overlay), so users can compare without editing.
+
+- Auto‑apply on first optimize (no baseline)
+  - When no baseline exists (i.e., there is no prior OptimizedSchedule), auto‑apply the computed schedule immediately.
+  - Show an Undo toast: “Initial plan applied” with an Undo action that restores the pre‑opt state.
+  - Optionally keep a Proposed payload for summary/compare; summary should show “Scheduled N cases” (no moved/unchanged).
+  - No user preference for this — behavior is hard‑wired.
 
 - Scope controls in planning
   - Visible and functional before NOW moves.
@@ -45,28 +50,77 @@ So users can preview, accept, or discard changes consistently, with scope contro
 
 ## Implementation Plan (phased)
 
-Phase 1 — Routing + Controls
-1. Add `app.EnablePreviewInPlanning` (logical, default false). Persist in `app.Opts` if desired.
-2. Optimization panel: add a checkbox “Preview changes (Proposed tab)” near scope controls. Show always; tooltips clarify defaults per mode.
-3. Execute routing: in `OptimizationController.executeOptimization` choose Proposed vs direct apply with:
-   - `useProposed = isReoptimizationMode() || app.EnablePreviewInPlanning;`
-   - If `useProposed`: set `app.ProposedSchedule/Outcome/Metadata`, `ProposedSourceVersion`, show Proposed tab; else apply directly.
-4. Scope controls: enable/always functional in planning; ensure unscheduled‑only logic freezes scheduled context (existing code path) also when not in re‑opt.
+Phase 1 — Routing (unified) + Auto‑apply first run
+1. Routing: in `OptimizationController.executeOptimization`
+   - Compute `hasBaseline = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments())`.
+   - Always build Proposed payload; set `app.ProposedSchedule/Outcome/Metadata`, `ProposedSourceVersion = app.OptimizationChangeCounter`.
+   - If `hasBaseline` → show Proposed tab (read‑only overlay active).
+   - If not `hasBaseline` → auto‑apply direct to `OptimizedSchedule`; show Undo toast; keep Proposed optional for summary.
+2. Scope in planning: ensure existing unscheduled‑only logic also runs when NOW is before first case (freeze all scheduled cases as locks).
 
-Phase 2 — Summary + Read‑only
-5. Proposed summary: update `updateProposedSummary` to handle “no baseline” (first run) gracefully — show counts without moved/unchanged.
-6. Read‑only overlay: create a transparent panel over Schedule axes when a proposal exists; remove it on Accept/Discard/hideProposedTab.
+Phase 2 — Summary + Read‑only overlay
+3. Proposed summary: Detect no‑baseline and render “Scheduled N cases” instead of moved/unchanged.
+4. Read‑only overlay: create/remove overlay panel over `ScheduleAxes` while proposal exists; same logic as re‑opt.
 
 Phase 3 — Staleness + Undo polish
-7. Ensure `ProposedSourceVersion` is set in planning preview; staleness banner appears on subsequent context changes.
-8. Undo paths remain unchanged; test Accept/Discard in planning.
+5. Set `ProposedSourceVersion` on proposal generation; staleness banner appears on context changes (NOW move, options, labs/resources).
+6. Undo: keep existing Accept/Discard/Undo actions; validate Undo after auto‑apply on first run restores the pre‑opt state.
 
-Phase 4 — Tests
-9. CLI tests (MATLAB -batch):
-   - Planning + Preview: unscheduled‑only freezes scheduled cases; Accept applies; Discard keeps schedule.
-   - Planning + Direct apply: unchanged behavior when Preview is OFF.
-   - Resource highlights and capacity constraints: future/locked usage reduces capacity; unscheduled cases scheduled in feasible gaps only.
-   - Re‑optimization unaffected.
+Phase 4 — CLI Tests (MATLAB `-batch`)
+7. Test: initial optimize auto‑applies (no extra click)
+   ```matlab
+   app = conduction.launchSchedulerGUI(); pause(0.5);
+   % Add cases
+   for i=1:3
+     app.OperatorField.Value = sprintf('Op%d',i);
+     app.ProcedureField.Value = sprintf('Proc%d',i);
+     app.ProcedureTimeField.Value = 60; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton, []);
+   end
+   % Optimize: should apply directly (no baseline)
+   app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton, []); pause(1);
+   assert(~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments()), 'Initial plan not applied');
+   % Undo toast exists and Undo restores empty schedule
+   app.triggerUndoAction(); pause(0.5);
+   assert(isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments()), 'Undo did not restore empty state');
+   delete(app);
+   ```
+8. Test: planning Proposed preview + scope
+   ```matlab
+   app = conduction.launchSchedulerGUI(); pause(0.5);
+   % Build a baseline plan
+   app.OperatorField.Value='A'; app.ProcedureField.Value='P'; app.ProcedureTimeField.Value=60; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton, []);
+   app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton, []); pause(0.5);
+   % Add unscheduled case and run again; should open Proposed
+   app.OperatorField.Value='B'; app.ProcedureField.Value='P2'; app.ProcedureTimeField.Value=45; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton, []);
+   app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton, []); pause(0.5);
+   assert(~isempty(app.ProposedTab.Parent), 'Proposed should be visible in planning with baseline');
+   % Enable unscheduled-only
+   app.onScopeIncludeChanged("unscheduled"); pause(0.2);
+   app.onProposedRerun(); pause(0.5);
+   % Accept applies
+   app.onProposedAccept(); pause(0.5);
+   assert(~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments()), 'Accept did not apply');
+   delete(app);
+   ```
+9. Test: resource capacity with locked context in planning
+   ```matlab
+   app = conduction.launchSchedulerGUI(); pause(0.5);
+   % Create resource type and assign to baseline case
+   store = app.CaseManager.getResourceStore(); store.create("Device A",1);
+   app.OperatorField.Value='X'; app.ProcedureField.Value='Q'; app.ProcedureTimeField.Value=120; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton, []);
+   % Assign resource via drawer or directly on case
+   [c,~]=app.CaseManager.getCase(1); c.assignResource("device-a");
+   app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton, []); pause(0.5);
+   % Add unscheduled case requiring same resource
+   app.OperatorField.Value='Y'; app.ProcedureField.Value='Q'; app.ProcedureTimeField.Value=60; app.AddCaseButton.ButtonPushedFcn(app.AddCaseButton, []);
+   [c2,~]=app.CaseManager.getCase(2); c2.assignResource("device-a");
+   % Run planning Proposed, unscheduled-only: second case must be placed around baseline resource window
+   app.onScopeIncludeChanged("unscheduled"); app.OptimizationRunButton.ButtonPushedFcn(app.OptimizationRunButton, []); pause(0.5);
+   assert(~isempty(app.ProposedSchedule), 'No proposed result');
+   % Optionally inspect Proposed schedule windows for overlap (manual)
+   delete(app);
+   ```
+10. Test: re‑optimization unchanged (existing Proposed path and staleness banner) — smoke as already documented.
 
 ## File Touchpoints
 - `scripts/+conduction/+gui/+app/buildOptimizationTab.m`
@@ -81,20 +135,19 @@ Phase 4 — Tests
   - Glass‑pane overlay management (create/destroy; z‑order; resize handling).
 
 ## Risks & Mitigations
-- First‑time “preview” feels heavier than direct apply
-  - Default preview OFF in planning preserves current one‑click flow; users opt‑in to preview.
+- First‑time friction
+  - Mitigated: auto‑apply initial optimize with Undo toast (no extra click).
 - Missed mutation paths while read‑only
   - Overlay blocks pointer events; belt‑and‑suspenders: keep drag/resize disabled during proposal.
 - Confusion on summary without baseline
   - Tailor summary text for first runs; keep conflicts and counts clear.
 
 ## Acceptance Criteria
-- With Preview ON in planning, Optimize routes to Proposed, respects scope options, and Accept/Discard works.
-- With Preview OFF in planning, Optimize applies directly; behavior unchanged.
+- First optimize (no baseline): auto‑applies result and shows Undo toast.
+- Subsequent optimizes (planning and re‑opt): route to Proposed, respect scope options; Accept/Discard works.
 - Scope options work identically in both modes; unscheduled‑only freezes scheduled context; resources respected.
 - Staleness banner appears when context changes; “Re‑run with current state” works.
 - Schedule tab is non‑interactive during proposal via overlay.
 
 ## Rollback
 - Remove the preview checkbox and planning‑mode routing; revert to current behavior (Proposed only in re‑optimization).
-
