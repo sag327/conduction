@@ -35,6 +35,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ProposedDiscardButton       matlab.ui.control.Button
         ProposedRerunButton         matlab.ui.control.Button
         ProposedSummaryLabel        matlab.ui.control.Label
+        ScopeControlsPanel          matlab.ui.container.Panel
+        ScopeSummaryLabel           matlab.ui.control.Label
+        ScopeIncludeDropDown        matlab.ui.control.DropDown
+        ScopeRespectLocksCheckBox   matlab.ui.control.CheckBox
+        ScopePreferLabsCheckBox     matlab.ui.control.CheckBox
+        AdvanceNowButton            matlab.ui.control.Button
+        ResetPlanningButton         matlab.ui.control.Button
         
         Drawer                      matlab.ui.container.Panel
         DrawerHandleButton          matlab.ui.control.Button
@@ -516,6 +523,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.refreshCaseBuckets('syncCaseScheduleFields');
+            app.updateScopeSummaryLabel();
 
             % end debug summary removed
 
@@ -910,6 +918,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         UndoProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         UndoProposedOutcome struct = struct()
         UndoProposedMetadata struct = struct()
+        ReoptIncludeScope string = "future"
+        ReoptRespectLocks logical = true
+        ReoptPreferCurrentLabs logical = false
         IsOptimizationDirty logical = true
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
@@ -1015,7 +1026,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-5: time controls, Column 6: 50px dropdown
+            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-6: time controls/actions, Column 7: dropdown
             app.TopBarLayout.ColumnSpacing = 8;  % Reduced spacing for tighter grouping of controls
             app.TopBarLayout.Padding = [0 0 42 0];  % Right padding to align with middle panel edge (avoid drawer overlap)
 
@@ -1041,6 +1052,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CurrentTimeCheckbox.Value = false;
             app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
 
+            app.AdvanceNowButton = uibutton(app.TopBarLayout, 'push');
+            app.AdvanceNowButton.Text = 'Advance NOW to Actual';
+            app.AdvanceNowButton.Layout.Column = 5;
+            app.AdvanceNowButton.Visible = 'off';
+            app.AdvanceNowButton.Tooltip = 'Set the NOW line to match the current clock time.';
+            app.AdvanceNowButton.ButtonPushedFcn = @(~, ~) app.advanceNowToActualTime();
+
+            app.ResetPlanningButton = uibutton(app.TopBarLayout, 'push');
+            app.ResetPlanningButton.Text = 'Reset to Planning';
+            app.ResetPlanningButton.Layout.Column = 6;
+            app.ResetPlanningButton.Visible = 'off';
+            app.ResetPlanningButton.Tooltip = 'Return to start-of-day planning (clears manual completions).';
+            app.ResetPlanningButton.ButtonPushedFcn = @(~, ~) app.onResetToPlanningMode();
 
             % DEPRECATED: Time Control Switch removed in unified timeline
             % app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
@@ -1052,7 +1076,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             % SAVE/LOAD: Session management dropdown (includes Test Mode, Save/Load, Auto-save)
-            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 6);
+            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 7);
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
@@ -1178,6 +1202,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer.BorderType = 'none';
             app.Drawer.Visible = 'on';
             conduction.gui.app.drawer.buildDrawerUI(app);
+
+            app.updateScopeSummaryLabel();
+            app.updateScopeControlsVisibility();
+            app.updateAdvanceNowButton();
+            app.updateResetPlanningButton();
 
             % Add optimization options and status as caption below schedule
 
@@ -2805,6 +2834,205 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.OptimizationController.executeOptimization(app);
         end
 
+        function onScopeIncludeChanged(app, value)
+            if nargin < 2
+                return;
+            end
+            app.ReoptIncludeScope = string(value);
+            app.updateScopeSummaryLabel();
+        end
+
+        function onScopeRespectLocksChanged(app, value)
+            app.ReoptRespectLocks = logical(value);
+        end
+
+        function onScopePreferLabsChanged(app, value)
+            app.ReoptPreferCurrentLabs = logical(value);
+        end
+
+        function updateScopeControlsVisibility(app)
+            if isempty(app.ScopeControlsPanel) || ~isvalid(app.ScopeControlsPanel)
+                return;
+            end
+            shouldShow = app.isReoptimizationMode();
+            if shouldShow
+                app.ScopeControlsPanel.Visible = 'on';
+            else
+                app.ScopeControlsPanel.Visible = 'off';
+            end
+            app.updateScopeSummaryLabel();
+        end
+
+        function stats = computeReoptimizationCandidateStats(app)
+            stats = struct('unscheduledTotal', 0, 'scheduledFutureTotal', 0, ...
+                'unscheduledEligible', 0, 'scheduledEligible', 0, ...
+                'earliestScheduledStart', inf);
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            nowMinutes = app.getNowPosition();
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                startMinutes = caseObj.ScheduledProcStartTime;
+                if isnan(startMinutes)
+                    startMinutes = caseObj.ScheduledStartTime;
+                end
+                if isnan(startMinutes)
+                    stats.unscheduledTotal = stats.unscheduledTotal + 1;
+                    stats.unscheduledEligible = stats.unscheduledEligible + 1;
+                elseif startMinutes > nowMinutes
+                    stats.scheduledFutureTotal = stats.scheduledFutureTotal + 1;
+                    stats.scheduledEligible = stats.scheduledEligible + 1;
+                    stats.earliestScheduledStart = min(stats.earliestScheduledStart, startMinutes);
+                end
+            end
+            if ~isfinite(stats.earliestScheduledStart)
+                stats.earliestScheduledStart = NaN;
+            end
+        end
+
+        function updateScopeSummaryLabel(app)
+            if isempty(app.ScopeSummaryLabel) || ~isvalid(app.ScopeSummaryLabel)
+                return;
+            end
+
+            stats = app.computeReoptimizationCandidateStats();
+            includeScheduled = app.ReoptIncludeScope ~= "unscheduled";
+            eligible = stats.unscheduledEligible;
+            totalPool = stats.unscheduledTotal;
+            if includeScheduled
+                eligible = eligible + stats.scheduledEligible;
+                totalPool = totalPool + stats.scheduledFutureTotal;
+            end
+
+            if totalPool == 0
+                summaryStr = "Summary: No cases remaining after NOW.";
+            else
+                startMinutes = stats.earliestScheduledStart;
+                if ~includeScheduled || isnan(startMinutes)
+                    startMinutes = app.getNowPosition();
+                end
+                summaryStr = sprintf('Rescheduling %d of %d cases starting at %s', ...
+                    eligible, totalPool, app.formatMinutesAsTime(startMinutes));
+            end
+
+            summaryStr = string(summaryStr);
+            if ~includeScheduled
+                summaryStr = summaryStr + " (Unscheduled only)";
+            end
+            app.ScopeSummaryLabel.Text = summaryStr;
+        end
+
+        function onResetToPlanningMode(app)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            selection = uiconfirm(app.UIFigure, ...
+                'Reset NOW to start of day and clear manual completion flags?', ...
+                'Reset to Planning Mode', ...
+                'Options', {'Reset','Cancel'}, ...
+                'DefaultOption', 'Reset', ...
+                'CancelOption', 'Cancel');
+            if selection ~= "Reset"
+                return;
+            end
+            app.hideProposedTab(true);
+            app.clearManualCompletionFlags();
+            app.setNowPosition(app.getPlanningStartMinutes());
+            app.updateScopeSummaryLabel();
+            app.updateScopeControlsVisibility();
+        end
+
+        function clearManualCompletionFlags(app)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                caseObj.ManuallyCompleted = false;
+                caseObj.CaseStatus = "pending";
+            end
+            app.refreshCaseBuckets('ResetPlanning');
+            app.updateResetPlanningButton();
+        end
+
+        function tf = hasManualCompletions(app)
+            tf = false;
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if ~isempty(caseObj) && caseObj.ManuallyCompleted
+                    tf = true;
+                    return;
+                end
+            end
+        end
+
+        function minutes = getPlanningStartMinutes(~)
+            minutes = 480;
+        end
+
+        function advanceNowToActualTime(app)
+            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
+            if isnan(actualMinutes)
+                return;
+            end
+            app.setNowPosition(actualMinutes);
+        end
+
+        function updateAdvanceNowButton(app)
+            if isempty(app.AdvanceNowButton) || ~isvalid(app.AdvanceNowButton)
+                return;
+            end
+            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
+            if isnan(actualMinutes)
+                app.AdvanceNowButton.Visible = 'off';
+                return;
+            end
+            delta = actualMinutes - app.getNowPosition();
+            shouldShow = abs(delta) >= 5;
+            if shouldShow
+                app.AdvanceNowButton.Text = sprintf('Advance NOW to %s', app.formatMinutesAsTime(actualMinutes));
+                app.AdvanceNowButton.Visible = 'on';
+            else
+                app.AdvanceNowButton.Visible = 'off';
+            end
+        end
+
+        function updateResetPlanningButton(app)
+            if isempty(app.ResetPlanningButton) || ~isvalid(app.ResetPlanningButton)
+                return;
+            end
+            showButton = app.getNowPosition() > app.getPlanningStartMinutes() + 1 || app.hasManualCompletions();
+            if showButton
+                app.ResetPlanningButton.Visible = 'on';
+            else
+                app.ResetPlanningButton.Visible = 'off';
+            end
+        end
+
+        function timeStr = formatMinutesAsTime(~, minutes)
+            if nargin < 2 || isnan(minutes)
+                timeStr = '--:--';
+                return;
+            end
+            minutes = max(0, minutes);
+            hours = floor(minutes / 60);
+            mins = round(minutes - hours * 60);
+            timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
+        end
+
         function refreshOptimizeButtonLabel(app)
             % Refresh optimize button label text with padding for layout
             if isempty(app.RunBtn) || ~isvalid(app.RunBtn)
@@ -2812,6 +3040,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             label = char(app.getOptimizeButtonLabel());
             app.RunBtn.Text = sprintf('  %s  ', label);
+            app.updateScopeControlsVisibility();
+            app.updateAdvanceNowButton();
+            app.updateResetPlanningButton();
         end
 
         % ------------------------------------------------------------------
@@ -3615,6 +3846,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             remainingSelection = setdiff(app.SelectedCaseIds, selectedIds, 'stable');
             app.assignSelectedCaseIds(remainingSelection, "manual");
             app.markDirty();
+            app.updateResetPlanningButton();
         end
 
         function revertCaseToIncompleteById(app, caseId, isArchivedCase)
@@ -3653,6 +3885,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.assignSelectedCaseIds(caseId, "manual");
             app.OptimizationController.markOptimizationDirty(app);
             app.markDirty();
+            app.updateResetPlanningButton();
         end
 
         function ids = normalizeCaseIds(~, ids)

@@ -42,9 +42,14 @@ classdef OptimizationController < handle
 
             isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
 
+            includeScheduledFuture = true;
+
             if isReoptMode
                 nowMinutes = app.getNowPosition();
-                [casesStruct, excludedCount] = app.CaseManager.filterCasesByNowPosition(casesStruct, nowMinutes);
+                includeScheduledFuture = ~(app.ReoptIncludeScope == "unscheduled");
+                [casesStruct, excludedCount, ~] = app.CaseManager.filterCasesByNowPosition( ...
+                    casesStruct, nowMinutes, includeScheduledFuture);
+                app.updateScopeSummaryLabel();
 
                 if excludedCount > 0
                     fprintf('Re-optimization: Excluded %d case(s) scheduled before NOW (%.0f minutes).\n', excludedCount, nowMinutes);
@@ -60,6 +65,9 @@ classdef OptimizationController < handle
 
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
+            if isReoptMode && ~app.ReoptRespectLocks
+                lockedAssignments = struct([]);
+            end
 
             % CASE-LOCKING: Ensure locked assignments remain valid for current lab count
             [lockedAssignments, removedLockIds] = app.OptimizationController.sanitizeLockedAssignments(app, lockedAssignments);
@@ -138,6 +146,11 @@ classdef OptimizationController < handle
                 catch
                     % Non-fatal: proceed without annotation if anything goes wrong
                 end
+
+                metadata.ScopePreferences = struct( ...
+                    'IncludeScheduledFuture', includeScheduledFuture, ...
+                    'RespectLocks', app.ReoptRespectLocks, ...
+                    'PreferCurrentLabs', app.ReoptPreferCurrentLabs);
 
                 if isReoptMode
                     app.ProposedSchedule = dailySchedule;

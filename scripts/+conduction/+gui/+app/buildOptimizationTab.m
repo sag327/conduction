@@ -174,4 +174,56 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptOutpatientInpatientModeDropDown.Layout.Row = 12;
     app.OptOutpatientInpatientModeDropDown.Layout.Column = 2;
     app.OptOutpatientInpatientModeDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+
+    scopePanel = uipanel(optimizationGrid);
+    scopePanel.Title = 'Re-optimization Scope';
+    scopePanel.Layout.Row = 13;
+    scopePanel.Layout.Column = [1 2];
+    scopePanel.Visible = 'off';
+    scopePanel.BackgroundColor = [0.13 0.13 0.13];
+    scopePanel.ForegroundColor = [0.95 0.95 0.95];
+
+    scopeGrid = uigridlayout(scopePanel, [4, 2]);
+    scopeGrid.ColumnWidth = {'fit', '1x'};
+    scopeGrid.RowHeight = {'fit','fit','fit','fit'};
+    scopeGrid.RowSpacing = 6;
+    scopeGrid.Padding = [10 8 10 8];
+
+    app.ScopeSummaryLabel = uilabel(scopeGrid);
+    app.ScopeSummaryLabel.Layout.Row = 1;
+    app.ScopeSummaryLabel.Layout.Column = [1 2];
+    app.ScopeSummaryLabel.Text = 'Summary: Awaiting proposal';
+    app.ScopeSummaryLabel.WordWrap = 'on';
+
+    includeLabel = uilabel(scopeGrid);
+    includeLabel.Text = 'Include cases:';
+    includeLabel.Layout.Row = 2;
+    includeLabel.Layout.Column = 1;
+
+    app.ScopeIncludeDropDown = uidropdown(scopeGrid);
+    app.ScopeIncludeDropDown.Items = {'Unscheduled + scheduled future','Unscheduled only'};
+    app.ScopeIncludeDropDown.ItemsData = {'future','unscheduled'};
+    app.ScopeIncludeDropDown.Value = char(app.ReoptIncludeScope);
+    app.ScopeIncludeDropDown.Layout.Row = 2;
+    app.ScopeIncludeDropDown.Layout.Column = 2;
+    app.ScopeIncludeDropDown.Tooltip = 'Choose which cases are eligible when re-optimizing.';
+    app.ScopeIncludeDropDown.ValueChangedFcn = @(src, ~) app.onScopeIncludeChanged(src.Value);
+
+    app.ScopeRespectLocksCheckBox = uicheckbox(scopeGrid);
+    app.ScopeRespectLocksCheckBox.Text = 'Respect user locks';
+    app.ScopeRespectLocksCheckBox.Value = app.ReoptRespectLocks;
+    app.ScopeRespectLocksCheckBox.Layout.Row = 3;
+    app.ScopeRespectLocksCheckBox.Layout.Column = [1 2];
+    app.ScopeRespectLocksCheckBox.Tooltip = 'When unchecked, locked cases may move during re-optimization.';
+    app.ScopeRespectLocksCheckBox.ValueChangedFcn = @(src, ~) app.onScopeRespectLocksChanged(logical(src.Value));
+
+    app.ScopePreferLabsCheckBox = uicheckbox(scopeGrid);
+    app.ScopePreferLabsCheckBox.Text = 'Prefer current labs';
+    app.ScopePreferLabsCheckBox.Value = app.ReoptPreferCurrentLabs;
+    app.ScopePreferLabsCheckBox.Layout.Row = 4;
+    app.ScopePreferLabsCheckBox.Layout.Column = [1 2];
+    app.ScopePreferLabsCheckBox.Tooltip = 'Encourage the optimizer to keep cases in their existing labs when possible.';
+    app.ScopePreferLabsCheckBox.ValueChangedFcn = @(src, ~) app.onScopePreferLabsChanged(logical(src.Value));
+
+    app.ScopeControlsPanel = scopePanel;
 end
