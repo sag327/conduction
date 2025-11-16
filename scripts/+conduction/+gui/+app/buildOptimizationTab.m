@@ -178,7 +178,6 @@ function buildOptimizationTab(app, optimizationGrid)
     scopePanel.Visible = 'off';
     scopePanel.BackgroundColor = [0.13 0.13 0.13];
     scopePanel.ForegroundColor = [0.95 0.95 0.95];
-    scopePanel.Padding = [10 12 10 10];
 
     scopeGrid = uigridlayout(scopePanel, [4, 2]);
     scopeGrid.ColumnWidth = {'fit', '1x'};
