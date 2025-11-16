@@ -42,6 +42,30 @@ Risk: Low–medium. Critical paths already run off per‑case locks; risk is mis
 - Staleness behavior
   - Current banner works; consider live auto‑dismiss if a fresh proposal lands or proactively refresh on key mutations.
 
+### Proposed vs Original Schedule Comparison (new)
+Goal: Let users compare a Proposed schedule against the current (original) schedule while a proposal is pending, without allowing edits to the original until Accept/Discard.
+
+Two implementation options
+- Option A — Glass Pane Overlay (simplest, safest)
+  - When a proposal exists, place a transparent panel above `ScheduleAxes` to swallow pointer events (click/drag/scroll) so the original schedule becomes strictly view‑only.
+  - Add a subtle banner: “Read‑only — pending proposal (Accept/Discard in Proposed).” Optionally dim the schedule slightly.
+  - Pros: Minimal code, hard to bypass, no need to gate every callback.
+  - Cons: Users cannot click through to open the drawer from the original schedule during comparison.
+  - Hooks: Create in `showProposedTab` (or when `HasPendingProposal` becomes true); remove in Accept/Discard and `hideProposedTab(true)`; keep overlay sized with layout/resize.
+
+- Option B — Read‑Only Gating with Click‑to‑Inspect
+  - Allow clicking cases on the original schedule to open the drawer for details, but disable all mutating interactions until Accept/Discard.
+  - Disable: drag/reorder, resize, context menus that mutate; lock/unlock; duration/resource edits; Optimize/Run buttons; keyboard mutations.
+  - Allow: case clicks to inspect; scrolling/zoom; Proposed tab Accept/Discard.
+  - Pros: Better comparison/inspection; preserves proposal integrity.
+  - Cons: Requires gating at multiple layers (renderer, drawer, top‑bar); higher surface to miss a mutation path.
+  - Hooks: A centralized `IsCanvasReadOnly = HasPendingProposal` flag checked by renderer (skip `enableCaseDrag` etc.), drawer (disable editors), and top‑bar (disable mutate actions). Moving NOW should increment `OptimizationChangeCounter` to mark Proposed stale.
+
+Acceptance (either option)
+- With a pending proposal, original schedule cannot be modified; Accept/Discard restores normal editing.
+- Moving NOW while pending marks Proposed stale and shows the banner.
+- Optional: linked selection/diff cues can be added later for richer comparison.
+
 ## Performance & Accessibility
 - Large schedules
   - Validate rendering performance with many labs/cases; consider list/axes virtualization if needed.
@@ -56,4 +80,3 @@ Risk: Low–medium. Critical paths already run off per‑case locks; risk is mis
 - Proposed tab summary and staleness banner behave as expected.
 - No cases scheduled before per‑lab earliest starts in re‑opt.
 - Visual post/turnover preserved for all future‑locked cases.
-
