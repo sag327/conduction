@@ -20,6 +20,21 @@ conduction.launchSchedulerGUI(datetime('2025-01-15'), 'clinicalData/exampleDatas
 /Applications/MATLAB_R2025a.app/bin/matlab -batch "cd('<repo_root>'); addpath(genpath('tests')); results = runtests('tests/save_load'); disp(results); exit(~all([results.Passed]));"
 ```
 
+### Re‑optimization Preview (GUI Smoke)
+```bash
+/Applications/MATLAB_R2025a.app/bin/matlab -batch "\
+cd('$(pwd)'); clear classes;\
+app = conduction.launchSchedulerGUI(); pause(2);\
+app.OptLabsSpinner.Value = 2; app.OptimizationController.updateOptimizationOptionsFromTab(app);\
+for i=1:4, app.CaseManager.addCase(string('Op')+i, string('Proc')+i, 30); end;\
+app.OptimizationRunButtonPushed(app.RunBtn); pause(2);\
+labs = app.OptimizedSchedule.labAssignments();\
+firstEnd = labs{1}(1).procEndTime + labs{1}(1).postTime + labs{1}(1).turnoverTime;\
+app.setNowPosition(firstEnd + 5); app.OptimizationRunButtonPushed(app.RunBtn); pause(2);\
+assert(~isempty(app.ProposedSchedule), 'Proposed schedule missing');\
+delete(app); disp('✅ Re-optimize preview smoke PASS');"
+```
+
 ## Common Tasks
 
 ### Add a UI Control to Add/Edit Tab
@@ -76,6 +91,13 @@ conduction.visualizeDailySchedule(schedule, ...
 - `executeOptimization(app)` – Run ILP solver
 - `updateOptimizationStatus(app)` – Update status label
 - `updateOptimizationActionAvailability(app)` – Enable/disable optimize button
+
+Re‑optimization routing (NOW > first case):
+- Proposed tab preview via `app.showProposedTab()` with frozen context before NOW
+- Per‑lab earliest start enforcement threaded through:
+  - `SchedulingOptions.LabEarliestStartMinutes` (scheduling layer)
+  - `SchedulingPreprocessor` → `prepared.earliestStartMinutes`
+  - `OptimizationModelBuilder` → valid time slots per lab
 
 ### Drawer Inspector
 **Files**:
@@ -176,6 +198,15 @@ app.importAppState(state);
 ```matlab
 app.AnalyticsRenderer.drawOperatorUtilizationCharts(app, dailySchedule);
 ```
+
+## Tips: Unified Timeline & Scope Controls
+- NOW is always visible; moving NOW recomputes case status.
+- Smart Optimize button label updates automatically via `app.refreshOptimizeButtonLabel()`.
+- Scope controls (Optimization tab) appear when NOW > first case:
+  - Include: Unscheduled only vs Unscheduled + scheduled future
+  - Respect user locks (on/off)
+  - Prefer current labs (soft preference)
+- “Advance NOW to Actual” shows if NOW differs from clock by ≥ 5 minutes; “Reset to Planning” rewinds to start and clears manual completions.
 
 ## Patterns & Conventions
 
