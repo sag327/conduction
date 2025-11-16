@@ -11,7 +11,12 @@ Conduction is a MATLAB toolbox for scheduling and analyzing electrophysiology (E
 - **Resource management** – Define custom resource types (e.g., Anesthesia, Equipment) with capacity limits and assign to cases
 - **Right-hand case inspector** – Click any schedule block to view detailed timing, lab assignment, resource usage, and solver diagnostics in a slide-in drawer
 - **Dual canvas tabs** – Switch between Schedule view (Gantt chart) and Analyze view (operator utilization bar charts)
-- **Configurable optimization** – Tune lab counts, turnover/setup/post durations, objective metrics (operator idle, lab idle, makespan, operator overtime), admission defaults, and first-case constraints directly in the UI
+- **Configurable optimization** – Tune lab counts, turnover/setup/post durations, objective metrics (operator idle, lab idle, makespan, operator overtime), admission defaults, and first‑case constraints directly in the UI
+- **Unified timeline (NOW always visible)** – Case status is derived from the NOW position; no separate time‑control mode.
+- **Smart Optimize button** – Context‑aware: “Optimize Schedule” (applies directly) when NOW is before first case; “Re‑optimize Remaining” (opens preview) when NOW is after first case.
+- **Proposed tab (preview)** – Mid‑day re‑optimization shows a Proposed tab with frozen context before NOW. Accept, Discard, or Re‑run with scope options.
+- **Re‑optimization scope controls** – Collapsible panel appears when NOW > first case (include unscheduled only vs future, respect locks, prefer current labs).
+- **Per‑lab earliest‑start enforcement** – The optimizer cannot place new work before each lab’s earliest available minute (computed from NOW and frozen context). Future lab open/close times will feed this directly.
 - **Session save/load** – Export and import complete sessions including cases, schedules, optimization results, and resource definitions
 - **Testing mode** – Load historical clinical data to pre-populate operators, procedures, and statistics
 
@@ -63,6 +68,7 @@ conduction.launchSchedulerGUI(datetime('2025-01-15'), 'clinicalData/exampleDatas
   - **Optimization** – Configure labs, turnover times, objective metric, admission defaults, first-case constraints
   - **Resources** – Define resource types, set capacities, mark defaults for new cases
 - **Top bar** – Date picker, Save/Load Session buttons, optimization trigger, Testing Mode toggle
+  - “Advance NOW to Actual” appears when NOW lags the clock; “Reset to Planning” appears when NOW advanced or manual completions exist.
 - **Center canvas (2 tabs)**:
   - **Schedule** – Gantt chart rendered by `visualizeDailySchedule`, drag cases to reorder
   - **Analyze** – Operator utilization bar charts (procedure, idle, overtime hours)
@@ -74,11 +80,13 @@ conduction.launchSchedulerGUI(datetime('2025-01-15'), 'clinicalData/exampleDatas
 2. **Add prospective cases** – Use Add tab to define cases with operators, procedures, durations, constraints
 3. **Assign resources** – Select required resources (e.g., Anesthesia) for each case or set defaults in Resources tab
 4. **Configure optimization** – Adjust labs available, turnover times, objective metric (operator idle, makespan, etc.)
-5. **Click Optimize Schedule** – Run ILP solver
-6. **Review Schedule tab** – Click blocks to inspect details, drag cases to reorder if needed
-7. **Switch to Analyze tab** – Compare operator utilization
-8. **Save session** – Export complete state for later resumption
-9. **Iterate** – Modify cases, resources, or options as needed
+5. **Click Optimize Schedule** – Run ILP solver (applies directly when NOW is before first case)
+6. **Advance NOW during the day** – Drag NOW or click “Advance NOW to Actual”
+7. **Click Re‑optimize Remaining** – Opens the Proposed tab (preview) when NOW is after first case; review summary chips and layout
+8. **Accept / Discard / Re‑run** – Apply proposed changes, keep current schedule, or re‑run with adjusted scope
+9. **Switch to Analyze tab** – Compare operator utilization
+10. **Save session** – Export complete state for later resumption
+11. **Iterate** – Modify cases, resources, or options as needed
 
 ### Drawer Inspector
 - Opens automatically on schedule block click

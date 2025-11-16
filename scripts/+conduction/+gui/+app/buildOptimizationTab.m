@@ -1,6 +1,13 @@
 function buildOptimizationTab(app, optimizationGrid)
 %BUILDOPTIMIZATIONTAB Populate the Optimization tab controls.
 
+    % Tighten overall grid spacing to make room for scope controls
+    try
+        optimizationGrid.RowSpacing = 1;  % compress vertical gaps between rows
+        optimizationGrid.ColumnSpacing = 6;
+        optimizationGrid.Padding = [4 4 4 4];
+    catch
+    end
     if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
         app.initializeOptimizationDefaults();
     end
@@ -38,9 +45,12 @@ function buildOptimizationTab(app, optimizationGrid)
     availableWrapper = uigridlayout(optimizationGrid);
     availableWrapper.Layout.Row = 4;
     availableWrapper.Layout.Column = 2;
-    availableWrapper.RowHeight = {24, '1x'};
+    % Cap the visual height of the Available Labs area to expose the Scope panel
+    % The inner panel is scrollable, so a fixed pixel height improves layout.
+    % Make room for three rows of lab checkboxes
+    availableWrapper.RowHeight = {24, 72};
     availableWrapper.ColumnWidth = {'1x'};
-    availableWrapper.RowSpacing = 4;
+    availableWrapper.RowSpacing = 2;
     availableWrapper.Padding = [0 0 0 0];
 
     app.OptAvailableSelectAll = uicheckbox(availableWrapper);
@@ -70,80 +80,68 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptFilterDropDown.Layout.Column = 2;
     app.OptFilterDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
-    app.OptDefaultStatusLabel = uilabel(optimizationGrid);
-    app.OptDefaultStatusLabel.Text = sprintf('Default status\n(if unassigned)');
-    app.OptDefaultStatusLabel.Layout.Row = 6;
-    app.OptDefaultStatusLabel.Layout.Column = 1;
-
-    app.OptDefaultStatusDropDown = uidropdown(optimizationGrid);
-    app.OptDefaultStatusDropDown.Items = {'outpatient', 'inpatient'};
-    app.OptDefaultStatusDropDown.Value = char(app.TestingAdmissionDefault);
-    app.OptDefaultStatusDropDown.Layout.Row = 6;
-    app.OptDefaultStatusDropDown.Layout.Column = 2;
-    app.OptDefaultStatusDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
-
     app.OptTurnoverLabel = uilabel(optimizationGrid);
     app.OptTurnoverLabel.Text = 'Turnover (minutes):';
-    app.OptTurnoverLabel.Layout.Row = 7;
+    app.OptTurnoverLabel.Layout.Row = 6;
     app.OptTurnoverLabel.Layout.Column = 1;
 
     app.OptTurnoverSpinner = uispinner(optimizationGrid);
     app.OptTurnoverSpinner.Limits = [0 240];
     app.OptTurnoverSpinner.Step = 5;
     app.OptTurnoverSpinner.Value = app.Opts.turnover;
-    app.OptTurnoverSpinner.Layout.Row = 7;
+    app.OptTurnoverSpinner.Layout.Row = 6;
     app.OptTurnoverSpinner.Layout.Column = 2;
     app.OptTurnoverSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptSetupLabel = uilabel(optimizationGrid);
     app.OptSetupLabel.Text = 'Setup (minutes):';
-    app.OptSetupLabel.Layout.Row = 8;
+    app.OptSetupLabel.Layout.Row = 7;
     app.OptSetupLabel.Layout.Column = 1;
 
     app.OptSetupSpinner = uispinner(optimizationGrid);
     app.OptSetupSpinner.Limits = [0 120];
     app.OptSetupSpinner.Step = 5;
     app.OptSetupSpinner.Value = app.Opts.setup;
-    app.OptSetupSpinner.Layout.Row = 8;
+    app.OptSetupSpinner.Layout.Row = 7;
     app.OptSetupSpinner.Layout.Column = 2;
     app.OptSetupSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptPostLabel = uilabel(optimizationGrid);
     app.OptPostLabel.Text = 'Post-procedure (min):';
-    app.OptPostLabel.Layout.Row = 9;
+    app.OptPostLabel.Layout.Row = 8;
     app.OptPostLabel.Layout.Column = 1;
 
     app.OptPostSpinner = uispinner(optimizationGrid);
     app.OptPostSpinner.Limits = [0 120];
     app.OptPostSpinner.Step = 5;
     app.OptPostSpinner.Value = app.Opts.post;
-    app.OptPostSpinner.Layout.Row = 9;
+    app.OptPostSpinner.Layout.Row = 8;
     app.OptPostSpinner.Layout.Column = 2;
     app.OptPostSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptMaxOperatorLabel = uilabel(optimizationGrid);
     app.OptMaxOperatorLabel.Text = 'Max operator (min):';
-    app.OptMaxOperatorLabel.Layout.Row = 10;
+    app.OptMaxOperatorLabel.Layout.Row = 9;
     app.OptMaxOperatorLabel.Layout.Column = 1;
 
     app.OptMaxOperatorSpinner = uispinner(optimizationGrid);
     app.OptMaxOperatorSpinner.Limits = [60 1440];
     app.OptMaxOperatorSpinner.Step = 15;
     app.OptMaxOperatorSpinner.Value = app.Opts.maxOpMin;
-    app.OptMaxOperatorSpinner.Layout.Row = 10;
+    app.OptMaxOperatorSpinner.Layout.Row = 9;
     app.OptMaxOperatorSpinner.Layout.Column = 2;
     app.OptMaxOperatorSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     app.OptEnforceMidnightCheckBox = uicheckbox(optimizationGrid);
     app.OptEnforceMidnightCheckBox.Text = 'Enforce midnight cutoff';
     app.OptEnforceMidnightCheckBox.Value = logical(app.Opts.enforceMidnight);
-    app.OptEnforceMidnightCheckBox.Layout.Row = 11;
+    app.OptEnforceMidnightCheckBox.Layout.Row = 10;
     app.OptEnforceMidnightCheckBox.Layout.Column = [1 2];
     app.OptEnforceMidnightCheckBox.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
 
     % Create container for label + info button
     labelContainer = uigridlayout(optimizationGrid);
-    labelContainer.Layout.Row = 12;
+    labelContainer.Layout.Row = 11;
     labelContainer.Layout.Column = 1;
     labelContainer.RowHeight = {'1x'};
     labelContainer.ColumnWidth = {'1x', 20};
@@ -171,7 +169,79 @@ function buildOptimizationTab(app, optimizationGrid)
     else
         app.OptOutpatientInpatientModeDropDown.Value = 'TwoPhaseAutoFallback';
     end
-    app.OptOutpatientInpatientModeDropDown.Layout.Row = 12;
+    app.OptOutpatientInpatientModeDropDown.Layout.Row = 11;
     app.OptOutpatientInpatientModeDropDown.Layout.Column = 2;
     app.OptOutpatientInpatientModeDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+
+    scopePanel = uipanel(optimizationGrid);
+    scopePanel.Title = 'Re-optimization Scope';
+    scopePanel.Layout.Row = 12;
+    scopePanel.Layout.Column = [1 2];
+    scopePanel.Visible = 'off';
+    scopePanel.BackgroundColor = [0.13 0.13 0.13];
+    scopePanel.ForegroundColor = [0.95 0.95 0.95];
+
+    scopeGrid = uigridlayout(scopePanel, [4, 2]);
+    scopeGrid.ColumnWidth = {'fit', '1x'};
+    scopeGrid.RowHeight = {'fit','fit','fit','fit'};
+    scopeGrid.RowSpacing = 4;
+    % Add a touch more space above the scope contents (between Outpt/Inpt and Scope)
+    scopeGrid.Padding = [8 10 8 6];  % [left top right bottom]
+
+    app.ScopeSummaryLabel = uilabel(scopeGrid);
+    app.ScopeSummaryLabel.Layout.Row = 1;
+    app.ScopeSummaryLabel.Layout.Column = [1 2];
+    app.ScopeSummaryLabel.Text = 'Summary: Awaiting proposal';
+    app.ScopeSummaryLabel.WordWrap = 'on';
+
+    includeLabel = uilabel(scopeGrid);
+    includeLabel.Text = 'Include cases:';
+    includeLabel.Layout.Row = 2;
+    includeLabel.Layout.Column = 1;
+
+    app.ScopeIncludeDropDown = uidropdown(scopeGrid);
+    app.ScopeIncludeDropDown.Items = {'Unscheduled + scheduled future','Unscheduled only'};
+    app.ScopeIncludeDropDown.ItemsData = {'future','unscheduled'};
+    app.ScopeIncludeDropDown.Value = char(app.ReoptIncludeScope);
+    app.ScopeIncludeDropDown.Layout.Row = 2;
+    app.ScopeIncludeDropDown.Layout.Column = 2;
+    app.ScopeIncludeDropDown.Tooltip = 'Choose which cases are eligible when re-optimizing.';
+    app.ScopeIncludeDropDown.ValueChangedFcn = @(src, ~) app.onScopeIncludeChanged(src.Value);
+
+    app.ScopeRespectLocksCheckBox = uicheckbox(scopeGrid);
+    app.ScopeRespectLocksCheckBox.Text = 'Respect user locks';
+    app.ScopeRespectLocksCheckBox.Value = app.ReoptRespectLocks;
+    app.ScopeRespectLocksCheckBox.Layout.Row = 3;
+    app.ScopeRespectLocksCheckBox.Layout.Column = [1 2];
+    app.ScopeRespectLocksCheckBox.Tooltip = 'When unchecked, locked cases may move during re-optimization.';
+    app.ScopeRespectLocksCheckBox.ValueChangedFcn = @(src, ~) app.onScopeRespectLocksChanged(logical(src.Value));
+
+    app.ScopePreferLabsCheckBox = uicheckbox(scopeGrid);
+    app.ScopePreferLabsCheckBox.Text = 'Prefer current labs';
+    app.ScopePreferLabsCheckBox.Value = app.ReoptPreferCurrentLabs;
+    app.ScopePreferLabsCheckBox.Layout.Row = 4;
+    app.ScopePreferLabsCheckBox.Layout.Column = [1 2];
+    app.ScopePreferLabsCheckBox.Tooltip = 'Encourage the optimizer to keep cases in their existing labs when possible.';
+    app.ScopePreferLabsCheckBox.ValueChangedFcn = @(src, ~) app.onScopePreferLabsChanged(logical(src.Value));
+
+    app.ScopeControlsPanel = scopePanel;
+
+    % Give the bottom scope row more breathing room; compress others
+    try
+        optimizationGrid.RowHeight = {
+            'fit', ...   % 1 metric
+            'fit', ...   % 2 labs
+            'fit', ...   % 3 available label
+            72,    ...   % 4 available list (scrolls) — 3 rows of checkboxes
+            'fit', ...   % 5 case filter
+            'fit', ...   % 6 turnover
+            'fit', ...   % 7 setup
+            'fit', ...   % 8 post
+            'fit', ...   % 9 max operator
+            'fit', ...   % 10 enforce midnight
+            'fit', ...   % 11 Outpt/Inpt handling
+            150     ...  % 12 Re-optimization Scope (slightly taller)
+        };
+    catch
+    end
 end

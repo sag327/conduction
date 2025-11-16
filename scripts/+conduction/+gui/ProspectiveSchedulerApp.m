@@ -27,8 +27,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         CanvasTabGroup              matlab.ui.container.TabGroup
         CanvasScheduleTab           matlab.ui.container.Tab
         CanvasAnalyzeTab            matlab.ui.container.Tab
+        ProposedTab                 matlab.ui.container.Tab
         CanvasScheduleLayout        matlab.ui.container.GridLayout
         CanvasAnalyzeLayout         matlab.ui.container.GridLayout
+        ProposedAxes                matlab.ui.control.UIAxes
+        ProposedAcceptButton        matlab.ui.control.Button
+        ProposedDiscardButton       matlab.ui.control.Button
+        ProposedRerunButton         matlab.ui.control.Button
+        ProposedSummaryLabel        matlab.ui.control.Label
+        ProposedStaleBanner         matlab.ui.container.Panel
+        ProposedStaleLabel          matlab.ui.control.Label
+        ProposedStaleActionButton   matlab.ui.control.Button
+        UndoToastPanel              matlab.ui.container.Panel
+        UndoToastLabel              matlab.ui.control.Label
+        UndoToastUndoButton         matlab.ui.control.Button
+        ScopeControlsPanel          matlab.ui.container.Panel
+        ScopeSummaryLabel           matlab.ui.control.Label
+        ScopeIncludeDropDown        matlab.ui.control.DropDown
+        ScopeRespectLocksCheckBox   matlab.ui.control.CheckBox
+        ScopePreferLabsCheckBox     matlab.ui.control.CheckBox
+        AdvanceNowButton            matlab.ui.control.Button
+        ResetPlanningButton         matlab.ui.control.Button
         
         Drawer                      matlab.ui.container.Panel
         DrawerHandleButton          matlab.ui.control.Button
@@ -151,6 +170,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
+    end
+
+    properties (Constant, Access = private)
+        UndoToastTimeoutSeconds double = 5
     end
 
     methods (Access = public, Hidden = true)
@@ -510,6 +533,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             app.refreshCaseBuckets('syncCaseScheduleFields');
+            app.updateScopeSummaryLabel();
 
             % end debug summary removed
 
@@ -654,8 +678,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.handleCasesUndockRequest();
             elseif key == "escape" && app.IsCasesUndocked
                 app.redockCases();
+            elseif key == "z" && hasAccel
+                app.triggerUndoAction();
             end
         end
+
 
         % ------------------------------------------------------------------
         % Case Table & Checklist Setup
@@ -893,8 +920,25 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         AvailableLabIds double = double.empty(1, 0)  % Labs open for re-optimization assignments
         Opts struct = struct()
         OptimizedSchedule conduction.DailySchedule
+        ProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         OptimizationOutcome struct = struct()
+        LastOptimizationMetadata struct = struct()
+        ProposedOutcome struct = struct()
+        ProposedMetadata struct = struct()
+        ProposedSourceVersion double = 0
+        UndoSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+        UndoMetadata struct = struct()
+        UndoOutcome struct = struct()
+        UndoProposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+        UndoProposedOutcome struct = struct()
+        UndoProposedMetadata struct = struct()
+        UndoToastTimer timer = timer.empty
+        PendingUndo struct = struct('Type', "", 'Message', "")
+        ReoptIncludeScope string = "future"
+        ReoptRespectLocks logical = true
+        ReoptPreferCurrentLabs logical = false
         IsOptimizationDirty logical = true
+        OptimizationChangeCounter double = 0
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
         IsTimeControlActive logical = true  % UNIFIED-TIMELINE: Always true (flag kept for migration compatibility)
@@ -909,7 +953,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DrawerCurrentCaseId string = ""
         DrawerAutoOpenOnSelect logical = false  % ⚠️ IMPORTANT: Keep false - drawer should only open via toggle button
         LockedCaseIds string = string.empty(1, 0)  % CASE-LOCKING: Array of locked case IDs
-        NowPositionMinutes double = 480  % UNIFIED-TIMELINE: NOW line position (default 8:00 AM = 480 minutes from midnight)
+        NowPositionMinutes double = 475  % UNIFIED-TIMELINE: NOW line default (07:55 = 475 minutes)
         SelectedCaseIds string = string.empty(0, 1)  % Multi-select source of truth (column vector of case IDs)
         SelectedCaseId string = ""  % Currently selected case ID (last member of SelectedCaseIds)
         SelectedResourceId string = ""  % Currently selected resource ID in Resources tab
@@ -925,6 +969,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         IsCasesUndocked logical = false
         LastActiveMainTab matlab.ui.container.Tab = matlab.ui.container.Tab.empty
         IsHandlingTabSelection logical = false
+        IsHandlingCanvasSelection logical = false
 
     end
 
@@ -998,7 +1043,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-5: time controls, Column 6: 50px dropdown
+            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-6: time controls/actions, Column 7: dropdown
             app.TopBarLayout.ColumnSpacing = 8;  % Reduced spacing for tighter grouping of controls
             app.TopBarLayout.Padding = [0 0 42 0];  % Right padding to align with middle panel edge (avoid drawer overlap)
 
@@ -1024,6 +1069,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CurrentTimeCheckbox.Value = false;
             app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
 
+            app.AdvanceNowButton = uibutton(app.TopBarLayout, 'push');
+            app.AdvanceNowButton.Text = 'Advance NOW to Actual';
+            app.AdvanceNowButton.Layout.Column = 5;
+            app.AdvanceNowButton.Visible = 'off';
+            app.AdvanceNowButton.Tooltip = 'Set the NOW line to match the current clock time.';
+            app.AdvanceNowButton.ButtonPushedFcn = @(~, ~) app.advanceNowToActualTime();
+
+            app.ResetPlanningButton = uibutton(app.TopBarLayout, 'push');
+            app.ResetPlanningButton.Text = 'Reset to Planning';
+            app.ResetPlanningButton.Layout.Column = 6;
+            app.ResetPlanningButton.Visible = 'off';
+            app.ResetPlanningButton.Tooltip = 'Return to start-of-day planning (clears manual completions).';
+            app.ResetPlanningButton.ButtonPushedFcn = @(~, ~) app.onResetToPlanningMode();
 
             % DEPRECATED: Time Control Switch removed in unified timeline
             % app.TimeControlSwitch = uiswitch(app.TopBarLayout, 'slider');
@@ -1035,7 +1093,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             % SAVE/LOAD: Session management dropdown (includes Test Mode, Save/Load, Auto-save)
-            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 6);
+            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 7);
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
@@ -1149,6 +1207,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.IdleAxes.Visible = 'on';
             app.IdleAxes.Toolbar.Visible = 'off';
 
+            conduction.gui.app.buildProposedTab(app, app.CanvasTabGroup);
+            app.ProposedTab.Parent = [];
+
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
             app.Drawer = uipanel(app.MiddleLayout);
@@ -1158,6 +1219,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer.BorderType = 'none';
             app.Drawer.Visible = 'on';
             conduction.gui.app.drawer.buildDrawerUI(app);
+
+            app.updateScopeSummaryLabel();
+            app.updateScopeControlsVisibility();
+            app.updateAdvanceNowButton();
+            app.updateResetPlanningButton();
 
             % Add optimization options and status as caption below schedule
 
@@ -1477,6 +1543,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CaseStatusController.stopCurrentTimeTimer();
                 app.CaseStatusController.cleanupCurrentTimeTimer();
             end
+            app.dismissUndoToast();
             app.stopAutoSaveTimerInternal();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
 
@@ -1817,10 +1884,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Count locked cases
+            % Count locked cases (user-locked)
             lockedCount = 0;
             for i = 1:caseCount
-                if app.CaseManager.getCase(i).IsLocked
+                if app.CaseManager.getCase(i).IsUserLocked
                     lockedCount = lockedCount + 1;
                 end
             end
@@ -1865,16 +1932,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            % Gather locked IDs from both case objects and app-level lock list
+            % Gather locked IDs from case objects only (user-locked)
             lockedCaseIds = string.empty(0, 1);
             for i = 1:caseCount
                 caseObj = app.CaseManager.getCase(i);
-                if caseObj.IsLocked
+                if caseObj.IsUserLocked
                     lockedCaseIds(end+1, 1) = caseObj.CaseId; %#ok<AGROW>
                 end
-            end
-            if ~isempty(app.LockedCaseIds)
-                lockedCaseIds = unique([lockedCaseIds; string(app.LockedCaseIds)], 'stable');
             end
 
             % Remove unlocked cases from manager using a single filtered update
@@ -2446,7 +2510,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            if event.NewValue == app.CanvasAnalyzeTab
+            if app.IsHandlingCanvasSelection
+                return;
+            end
+
+            newTab = event.NewValue;
+            if newTab ~= app.ProposedTab && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
+                app.IsHandlingCanvasSelection = true;
+                app.CanvasTabGroup.SelectedTab = app.ProposedTab;
+                app.IsHandlingCanvasSelection = false;
+                warningMsg = sprintf(['Review or discard the proposed schedule before returning to other views.\n', ...
+                    'Use Accept, Discard, or Re-run to continue.']);
+                uialert(app.UIFigure, warningMsg, 'Finish Reviewing Proposal', 'Icon', 'info');
+                return;
+            end
+
+            if newTab == app.CanvasAnalyzeTab
                 conduction.gui.app.renderAnalyticsTab(app);
             end
         end
@@ -2501,7 +2581,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Set NOW line position (in minutes from midnight)
             % Clamps to valid range [0, 1440]
             if isnan(timeMinutes)
-                timeMinutes = 480;  % Default to 8:00 AM
+                timeMinutes = 475;  % Default to 07:55 AM
             end
             timeMinutes = max(0, min(1440, timeMinutes));
             app.NowPositionMinutes = timeMinutes;
@@ -2560,6 +2640,663 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             isReoptMode = (app.getOptimizeButtonLabel() == "Re-optimize Remaining");
         end
 
+        function showProposedTab(app)
+            % Show Proposed tab with preview of proposed schedule
+
+            if isempty(app.ProposedTab) || ~isvalid(app.ProposedTab)
+                conduction.gui.app.buildProposedTab(app, app.CanvasTabGroup);
+            end
+
+            app.ProposedTab.Parent = app.CanvasTabGroup;
+            app.CanvasTabGroup.SelectedTab = app.ProposedTab;
+
+            app.renderProposedSchedule();
+            app.updateProposedSummary();
+            app.refreshProposedStalenessBanner();
+        end
+
+        function hideProposedTab(app, clearState)
+            % Detach Proposed tab (optionally clearing stored proposal)
+            if nargin < 2
+                clearState = false;
+            end
+
+            if clearState
+                app.ProposedSchedule = conduction.DailySchedule.empty;
+                app.ProposedOutcome = struct();
+                app.ProposedMetadata = struct();
+                app.ProposedSourceVersion = 0;
+                if ~isempty(app.ProposedAxes) && isvalid(app.ProposedAxes)
+                    cla(app.ProposedAxes);
+                end
+                if ~isempty(app.ProposedSummaryLabel) && isvalid(app.ProposedSummaryLabel)
+                    app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
+                end
+            end
+            app.refreshProposedStalenessBanner();
+
+            if ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
+                app.ProposedTab.Parent = [];
+            end
+        end
+
+        function renderProposedSchedule(app)
+            % Render proposed schedule within the Proposed tab axes
+            if isempty(app.ProposedAxes) || ~isvalid(app.ProposedAxes)
+                return;
+            end
+
+            cla(app.ProposedAxes);
+
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+
+            annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule);
+            nowMinutes = app.getNowPosition();
+            conduction.visualizeDailySchedule(annotatedSchedule, ...
+                'ScheduleAxes', app.ProposedAxes, ...
+                'Title', 'Proposed Schedule', ...
+                'ShowLabels', true, ...
+                'CurrentTimeMinutes', nowMinutes, ...
+                'OperatorColors', app.OperatorColors, ...
+                'CaseClickedFcn', @(varargin) [], ...
+                'BackgroundClickedFcn', @(varargin) []);
+
+            nowLine = findobj(app.ProposedAxes, 'Tag', 'NowLine');
+            if ~isempty(nowLine)
+                set(nowLine, 'ButtonDownFcn', []);
+            end
+            handleMarker = findobj(app.ProposedAxes, 'Tag', 'NowHandle');
+            if ~isempty(handleMarker)
+                set(handleMarker, 'ButtonDownFcn', []);
+            end
+
+            app.refreshProposedStalenessBanner();
+        end
+
+        function refreshProposedStalenessBanner(app)
+            if isempty(app.ProposedStaleBanner) || ~isvalid(app.ProposedStaleBanner)
+                return;
+            end
+            if isempty(app.ProposedSchedule)
+                app.ProposedStaleBanner.Visible = 'off';
+                return;
+            end
+
+            if app.isProposedScheduleStale()
+                app.ProposedStaleBanner.Visible = 'on';
+            else
+                app.ProposedStaleBanner.Visible = 'off';
+            end
+        end
+
+        function tf = isProposedScheduleStale(app)
+            tf = false;
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+            if app.ProposedSourceVersion <= 0
+                return;
+            end
+            tf = app.OptimizationChangeCounter > app.ProposedSourceVersion;
+        end
+
+        function updateProposedSummary(app)
+            % Update Proposed tab summary highlighting moved/unchanged/conflicts
+            if isempty(app.ProposedSummaryLabel) || ~isvalid(app.ProposedSummaryLabel)
+                return;
+            end
+            if isempty(app.ProposedSchedule)
+                app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
+                return;
+            end
+
+            proposedMap = app.buildScheduleCaseMap(app.ProposedSchedule);
+            currentMap = app.buildScheduleCaseMap(app.OptimizedSchedule);
+
+            movedCount = 0;
+            unchangedCount = 0;
+
+            if ~isempty(proposedMap)
+                proposedIds = keys(proposedMap);
+                for idx = 1:numel(proposedIds)
+                    caseId = proposedIds{idx};
+                    proposalEntry = proposedMap(caseId);
+                    if ~isempty(currentMap) && isKey(currentMap, caseId)
+                        currentEntry = currentMap(caseId);
+                        sameLab = strcmpi(string(currentEntry.lab), string(proposalEntry.lab));
+                        sameStart = (isnan(currentEntry.start) && isnan(proposalEntry.start)) || ...
+                            (isfinite(currentEntry.start) && isfinite(proposalEntry.start) && ...
+                            abs(currentEntry.start - proposalEntry.start) < 1e-3);
+                        if sameLab && sameStart
+                            unchangedCount = unchangedCount + 1;
+                        else
+                            movedCount = movedCount + 1;
+                        end
+                    else
+                        movedCount = movedCount + 1;
+                    end
+                end
+            end
+
+            conflictCount = app.computeProposalConflictCount();
+
+            app.ProposedSummaryLabel.Text = sprintf('Summary: %d moved • %d unchanged • %d conflicts', ...
+                movedCount, unchangedCount, conflictCount);
+        end
+
+        function conflictCount = computeProposalConflictCount(app)
+            conflictCount = 0;
+            if isempty(app.ProposedOutcome) || ~isstruct(app.ProposedOutcome)
+                return;
+            end
+
+            outcome = app.ProposedOutcome;
+            if isfield(outcome, 'ResourceViolations') && ~isempty(outcome.ResourceViolations)
+                conflictCount = numel(outcome.ResourceViolations);
+                return;
+            end
+
+            if isfield(outcome, 'Conflicts') && ~isempty(outcome.Conflicts)
+                try
+                    conflictCount = numel(outcome.Conflicts);
+                catch
+                    conflictCount = 0;
+                end
+            end
+        end
+
+        function onProposedAccept(app)
+            % Apply proposed schedule to main schedule
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+
+            app.UndoSchedule = app.OptimizedSchedule;
+            app.UndoMetadata = app.LastOptimizationMetadata;
+            app.UndoOutcome = app.OptimizationOutcome;
+
+            acceptedSchedule = app.ProposedSchedule;
+            acceptedOutcome = app.ProposedOutcome;
+            metadata = app.ProposedMetadata;
+            if isempty(metadata)
+                metadata = struct();
+            end
+            acceptedSourceVersion = app.ProposedSourceVersion;
+            previousDirty = app.IsOptimizationDirty;
+            previousLastRun = app.OptimizationLastRun;
+
+            app.OptimizedSchedule = acceptedSchedule;
+            app.OptimizationOutcome = acceptedOutcome;
+            app.ProposedSchedule = conduction.DailySchedule.empty;
+            app.ProposedOutcome = struct();
+            app.ProposedMetadata = struct();
+
+            app.IsOptimizationDirty = false;
+            app.OptimizationLastRun = datetime('now');
+            app.markDirty();
+
+            app.hideProposedTab(true);
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+            end
+
+            schedule = app.getScheduleForRendering();
+            app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, metadata);
+            app.LastOptimizationMetadata = metadata;
+
+            context = struct( ...
+                'Type', "accept", ...
+                'PreviousSchedule', app.UndoSchedule, ...
+                'PreviousOutcome', app.UndoOutcome, ...
+                'PreviousMetadata', app.UndoMetadata, ...
+                'PreviousDirty', previousDirty, ...
+                'PreviousLastRun', previousLastRun, ...
+                'AcceptedSchedule', acceptedSchedule, ...
+                'AcceptedOutcome', acceptedOutcome, ...
+                'AcceptedMetadata', metadata, ...
+                'AcceptedSourceVersion', acceptedSourceVersion);
+            app.showUndoToast('Remaining cases rescheduled', context);
+        end
+
+        function onProposedDiscard(app)
+            % Discard proposal and keep current schedule
+            if isempty(app.ProposedSchedule)
+                app.hideProposedTab(true);
+                if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                    app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+                end
+                return;
+            end
+
+            app.UndoProposedSchedule = app.ProposedSchedule;
+            app.UndoProposedOutcome = app.ProposedOutcome;
+            app.UndoProposedMetadata = app.ProposedMetadata;
+            discardedSourceVersion = app.ProposedSourceVersion;
+            app.ProposedSchedule = conduction.DailySchedule.empty;
+            app.ProposedOutcome = struct();
+            app.ProposedMetadata = struct();
+
+            app.hideProposedTab(true);
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+            end
+
+            % Discarding should not leave the schedule dimmed; clear dirty flag
+            app.IsOptimizationDirty = false;
+            try
+                schedule = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, app.LastOptimizationMetadata);
+                if ismethod(app, 'refreshOptimizeButtonLabel')
+                    app.refreshOptimizeButtonLabel();
+                end
+            catch
+            end
+
+            context = struct( ...
+                'Type', "discard", ...
+                'DiscardedSchedule', app.UndoProposedSchedule, ...
+                'DiscardedOutcome', app.UndoProposedOutcome, ...
+                'DiscardedMetadata', app.UndoProposedMetadata, ...
+                'DiscardedSourceVersion', discardedSourceVersion);
+            app.showUndoToast('Proposal discarded', context);
+        end
+
+        function showUndoToast(app, message, context)
+            if nargin < 2 || strlength(message) == 0
+                message = "Action completed";
+            end
+            if nargin < 3 || ~isstruct(context)
+                context = struct('Type', "", 'Message', string(message));
+            end
+            context.Message = string(message);
+            app.PendingUndo = context;
+
+            app.dismissUndoToast();
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+
+            app.UndoToastPanel = uipanel(app.UIFigure, ...
+                'BackgroundColor', [0.15 0.15 0.15], ...
+                'BorderType', 'line', ...
+                'BorderWidth', 1, ...
+                'Visible', 'off');
+            app.UndoToastPanel.AutoResizeChildren = 'off';
+
+            layout = uigridlayout(app.UndoToastPanel, [1, 2]);
+            layout.ColumnWidth = {'1x', 'fit'};
+            layout.RowHeight = {'fit'};
+            layout.Padding = [14 10 14 10];
+            layout.ColumnSpacing = 12;
+
+            app.UndoToastLabel = uilabel(layout);
+            app.UndoToastLabel.Layout.Row = 1;
+            app.UndoToastLabel.Layout.Column = 1;
+            app.UndoToastLabel.Text = char(message);
+            app.UndoToastLabel.FontColor = [1 1 1];
+            app.UndoToastLabel.WordWrap = 'on';
+
+            app.UndoToastUndoButton = uibutton(layout, 'push');
+            app.UndoToastUndoButton.Layout.Row = 1;
+            app.UndoToastUndoButton.Layout.Column = 2;
+            app.UndoToastUndoButton.Text = 'Undo';
+            app.UndoToastUndoButton.FontWeight = 'bold';
+            app.UndoToastUndoButton.ButtonPushedFcn = @(~, ~) app.triggerUndoAction();
+            if strlength(context.Type) == 0
+                app.UndoToastUndoButton.Enable = 'off';
+            end
+
+            app.layoutUndoToast();
+            app.UndoToastPanel.Visible = 'on';
+
+            if ~isempty(app.UndoToastTimer)
+                try
+                    stop(app.UndoToastTimer);
+                catch
+                end
+                try
+                    delete(app.UndoToastTimer);
+                catch
+                end
+            end
+            app.UndoToastTimer = timer('ExecutionMode', 'singleShot', ...
+                'StartDelay', app.UndoToastTimeoutSeconds, ...
+                'TimerFcn', @(~, ~) app.onUndoToastTimerFired());
+            start(app.UndoToastTimer);
+        end
+
+        function dismissUndoToast(app)
+            if ~isempty(app.UndoToastTimer)
+                try
+                    stop(app.UndoToastTimer);
+                catch
+                end
+                try
+                    delete(app.UndoToastTimer);
+                catch
+                end
+                app.UndoToastTimer = timer.empty;
+            end
+
+            if ~isempty(app.UndoToastPanel) && isvalid(app.UndoToastPanel)
+                delete(app.UndoToastPanel);
+            end
+            app.UndoToastPanel = matlab.ui.container.Panel.empty;
+            app.UndoToastLabel = matlab.ui.control.Label.empty;
+            app.UndoToastUndoButton = matlab.ui.control.Button.empty;
+        end
+
+        function layoutUndoToast(app)
+            if isempty(app.UndoToastPanel) || ~isvalid(app.UndoToastPanel)
+                return;
+            end
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            figPos = app.UIFigure.Position;
+            availableWidth = max(200, figPos(3) - 24);
+            toastWidth = min(420, max(300, figPos(3) * 0.4));
+            toastWidth = min(toastWidth, availableWidth);
+            toastHeight = 64;
+            x = max(12, (figPos(3) - toastWidth) / 2);
+            y = 24;
+            app.UndoToastPanel.Position = [x, y, toastWidth, toastHeight];
+        end
+
+        function onUndoToastTimerFired(app)
+            if isempty(app) || ~isvalid(app)
+                return;
+            end
+            app.clearPendingUndo();
+            app.dismissUndoToast();
+        end
+
+        function triggerUndoAction(app)
+            if isempty(app.PendingUndo) || ~isfield(app.PendingUndo, 'Type') || strlength(app.PendingUndo.Type) == 0
+                return;
+            end
+            context = app.PendingUndo;
+            app.clearPendingUndo();
+            app.dismissUndoToast();
+
+            switch lower(string(context.Type))
+                case "accept"
+                    app.undoAcceptedProposal(context);
+                case "discard"
+                    app.undoDiscardedProposal(context);
+            end
+        end
+
+        function undoAcceptedProposal(app, context)
+            if ~isfield(context, 'PreviousSchedule') || isempty(context.PreviousSchedule)
+                return;
+            end
+
+            app.OptimizedSchedule = context.PreviousSchedule;
+            if isfield(context, 'PreviousOutcome')
+                app.OptimizationOutcome = context.PreviousOutcome;
+            end
+            if isfield(context, 'PreviousMetadata')
+                app.LastOptimizationMetadata = context.PreviousMetadata;
+            end
+            if isfield(context, 'PreviousDirty')
+                app.IsOptimizationDirty = logical(context.PreviousDirty);
+            end
+            if isfield(context, 'PreviousLastRun')
+                app.OptimizationLastRun = context.PreviousLastRun;
+            end
+
+            schedule = app.getScheduleForRendering();
+            app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, app.LastOptimizationMetadata);
+            if ismethod(app, 'refreshOptimizeButtonLabel')
+                app.refreshOptimizeButtonLabel();
+            end
+            app.markDirty();
+
+            if isfield(context, 'AcceptedSchedule') && ~isempty(context.AcceptedSchedule)
+                app.ProposedSchedule = context.AcceptedSchedule;
+                if isfield(context, 'AcceptedOutcome')
+                    app.ProposedOutcome = context.AcceptedOutcome;
+                end
+                if isfield(context, 'AcceptedMetadata')
+                    app.ProposedMetadata = context.AcceptedMetadata;
+                end
+                if isfield(context, 'AcceptedSourceVersion')
+                    app.ProposedSourceVersion = context.AcceptedSourceVersion;
+                end
+                app.showProposedTab();
+            end
+        end
+
+        function undoDiscardedProposal(app, context)
+            if ~isfield(context, 'DiscardedSchedule') || isempty(context.DiscardedSchedule)
+                return;
+            end
+
+            app.ProposedSchedule = context.DiscardedSchedule;
+            if isfield(context, 'DiscardedOutcome')
+                app.ProposedOutcome = context.DiscardedOutcome;
+            end
+            if isfield(context, 'DiscardedMetadata')
+                app.ProposedMetadata = context.DiscardedMetadata;
+            end
+            if isfield(context, 'DiscardedSourceVersion')
+                app.ProposedSourceVersion = context.DiscardedSourceVersion;
+            end
+
+            app.showProposedTab();
+        end
+
+        function clearPendingUndo(app)
+            app.PendingUndo = struct('Type', "", 'Message', "");
+        end
+
+        function onProposedRerun(app)
+            % Re-run optimization from Proposed tab
+            app.OptimizationController.executeOptimization(app);
+        end
+
+        function onScopeIncludeChanged(app, value)
+            if nargin < 2
+                return;
+            end
+            app.ReoptIncludeScope = string(value);
+            app.updateScopeSummaryLabel();
+        end
+
+        function onScopeRespectLocksChanged(app, value)
+            app.ReoptRespectLocks = logical(value);
+        end
+
+        function onScopePreferLabsChanged(app, value)
+            app.ReoptPreferCurrentLabs = logical(value);
+        end
+
+        function updateScopeControlsVisibility(app)
+            if isempty(app.ScopeControlsPanel) || ~isvalid(app.ScopeControlsPanel)
+                return;
+            end
+            shouldShow = app.isReoptimizationMode();
+            if shouldShow
+                app.ScopeControlsPanel.Visible = 'on';
+            else
+                app.ScopeControlsPanel.Visible = 'off';
+            end
+            app.updateScopeSummaryLabel();
+        end
+
+        function stats = computeReoptimizationCandidateStats(app)
+            stats = struct('unscheduledTotal', 0, 'scheduledFutureTotal', 0, ...
+                'unscheduledEligible', 0, 'scheduledEligible', 0, ...
+                'earliestScheduledStart', inf);
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            nowMinutes = app.getNowPosition();
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                startMinutes = caseObj.ScheduledProcStartTime;
+                if isnan(startMinutes)
+                    startMinutes = caseObj.ScheduledStartTime;
+                end
+                if isnan(startMinutes)
+                    stats.unscheduledTotal = stats.unscheduledTotal + 1;
+                    stats.unscheduledEligible = stats.unscheduledEligible + 1;
+                elseif startMinutes > nowMinutes
+                    stats.scheduledFutureTotal = stats.scheduledFutureTotal + 1;
+                    stats.scheduledEligible = stats.scheduledEligible + 1;
+                    stats.earliestScheduledStart = min(stats.earliestScheduledStart, startMinutes);
+                end
+            end
+            if ~isfinite(stats.earliestScheduledStart)
+                stats.earliestScheduledStart = NaN;
+            end
+        end
+
+        function updateScopeSummaryLabel(app)
+            if isempty(app.ScopeSummaryLabel) || ~isvalid(app.ScopeSummaryLabel)
+                return;
+            end
+
+            stats = app.computeReoptimizationCandidateStats();
+            includeScheduled = app.ReoptIncludeScope ~= "unscheduled";
+            eligible = stats.unscheduledEligible;
+            totalPool = stats.unscheduledTotal;
+            if includeScheduled
+                eligible = eligible + stats.scheduledEligible;
+                totalPool = totalPool + stats.scheduledFutureTotal;
+            end
+
+            if totalPool == 0
+                summaryStr = "Summary: No cases remaining after NOW.";
+            else
+                startMinutes = stats.earliestScheduledStart;
+                if ~includeScheduled || isnan(startMinutes)
+                    startMinutes = app.getNowPosition();
+                end
+                summaryStr = sprintf('Rescheduling %d of %d cases starting at %s', ...
+                    eligible, totalPool, app.formatMinutesAsTime(startMinutes));
+            end
+
+            summaryStr = string(summaryStr);
+            if ~includeScheduled
+                summaryStr = summaryStr + " (Unscheduled only)";
+            end
+            app.ScopeSummaryLabel.Text = summaryStr;
+        end
+
+        function onResetToPlanningMode(app)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            selection = uiconfirm(app.UIFigure, ...
+                'Reset NOW to start of day and clear manual completion flags?', ...
+                'Reset to Planning Mode', ...
+                'Options', {'Reset','Cancel'}, ...
+                'DefaultOption', 'Reset', ...
+                'CancelOption', 'Cancel');
+            if selection ~= "Reset"
+                return;
+            end
+            app.hideProposedTab(true);
+            app.clearManualCompletionFlags();
+            app.setNowPosition(app.getPlanningStartMinutes());
+            app.updateScopeSummaryLabel();
+            app.updateScopeControlsVisibility();
+        end
+
+        function clearManualCompletionFlags(app)
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if isempty(caseObj)
+                    continue;
+                end
+                caseObj.ManuallyCompleted = false;
+                caseObj.CaseStatus = "pending";
+            end
+            app.refreshCaseBuckets('ResetPlanning');
+            app.updateResetPlanningButton();
+        end
+
+        function tf = hasManualCompletions(app)
+            tf = false;
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            totalCases = app.CaseManager.CaseCount;
+            for idx = 1:totalCases
+                caseObj = app.CaseManager.getCase(idx);
+                if ~isempty(caseObj) && caseObj.ManuallyCompleted
+                    tf = true;
+                    return;
+                end
+            end
+        end
+
+        function minutes = getPlanningStartMinutes(~)
+            minutes = 475;
+        end
+
+        function advanceNowToActualTime(app)
+            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
+            if isnan(actualMinutes)
+                return;
+            end
+            app.setNowPosition(actualMinutes);
+        end
+
+        function updateAdvanceNowButton(app)
+            if isempty(app.AdvanceNowButton) || ~isvalid(app.AdvanceNowButton)
+                return;
+            end
+            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
+            if isnan(actualMinutes)
+                app.AdvanceNowButton.Visible = 'off';
+                return;
+            end
+            delta = actualMinutes - app.getNowPosition();
+            shouldShow = abs(delta) >= 5;
+            if shouldShow
+                app.AdvanceNowButton.Text = sprintf('Advance NOW to %s', app.formatMinutesAsTime(actualMinutes));
+                app.AdvanceNowButton.Visible = 'on';
+            else
+                app.AdvanceNowButton.Visible = 'off';
+            end
+        end
+
+        function updateResetPlanningButton(app)
+            if isempty(app.ResetPlanningButton) || ~isvalid(app.ResetPlanningButton)
+                return;
+            end
+            showButton = app.getNowPosition() > app.getPlanningStartMinutes() + 1 || app.hasManualCompletions();
+            if showButton
+                app.ResetPlanningButton.Visible = 'on';
+            else
+                app.ResetPlanningButton.Visible = 'off';
+            end
+        end
+
+        function timeStr = formatMinutesAsTime(~, minutes)
+            if nargin < 2 || isnan(minutes)
+                timeStr = '--:--';
+                return;
+            end
+            minutes = max(0, minutes);
+            hours = floor(minutes / 60);
+            mins = round(minutes - hours * 60);
+            timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
+        end
+
         function refreshOptimizeButtonLabel(app)
             % Refresh optimize button label text with padding for layout
             if isempty(app.RunBtn) || ~isvalid(app.RunBtn)
@@ -2567,6 +3304,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             label = char(app.getOptimizeButtonLabel());
             app.RunBtn.Text = sprintf('  %s  ', label);
+            app.updateScopeControlsVisibility();
+            app.updateAdvanceNowButton();
+            app.updateResetPlanningButton();
         end
 
         % ------------------------------------------------------------------
@@ -3370,6 +4110,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             remainingSelection = setdiff(app.SelectedCaseIds, selectedIds, 'stable');
             app.assignSelectedCaseIds(remainingSelection, "manual");
             app.markDirty();
+            app.updateResetPlanningButton();
         end
 
         function revertCaseToIncompleteById(app, caseId, isArchivedCase)
@@ -3408,6 +4149,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.assignSelectedCaseIds(caseId, "manual");
             app.OptimizationController.markOptimizationDirty(app);
             app.markDirty();
+            app.updateResetPlanningButton();
         end
 
         function ids = normalizeCaseIds(~, ids)
@@ -3455,6 +4197,68 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function [store, isValid] = getValidatedResourceStore(app)
             [store, isValid] = app.ResourceController.getValidatedResourceStore(app);
+        end
+
+        function caseMap = buildScheduleCaseMap(app, schedule)
+            caseMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            if isempty(schedule)
+                return;
+            end
+
+            try
+                assignments = schedule.labAssignments();
+            catch
+                assignments = {};
+            end
+            if isempty(assignments)
+                return;
+            end
+
+            labs = [];
+            try
+                labs = schedule.Labs;
+            catch
+                labs = [];
+            end
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                for caseIdx = 1:numel(labCases)
+                    caseStruct = labCases(caseIdx);
+                    rawId = conduction.gui.controllers.ScheduleRenderer.getFieldValue(caseStruct, 'caseID', "");
+                    caseId = string(conduction.utils.conversion.asString(rawId));
+                    if strlength(caseId) == 0
+                        continue;
+                    end
+                    startMinutes = conduction.gui.controllers.ScheduleRenderer.getCaseStartMinutes(caseStruct);
+                    labKey = app.resolveLabKeyForSchedule(labs, labIdx);
+                    caseMap(char(caseId)) = struct('lab', labKey, 'start', startMinutes);
+                end
+            end
+        end
+
+        function labKey = resolveLabKeyForSchedule(~, labs, labIdx)
+            labKey = sprintf('Lab %d', labIdx);
+            if nargin < 2 || isempty(labs)
+                return;
+            end
+            if labIdx < 1 || labIdx > numel(labs)
+                return;
+            end
+            try
+                labEntry = labs(labIdx);
+                if ~isempty(labEntry) && isprop(labEntry, 'Room')
+                    labName = string(labEntry.Room);
+                    if strlength(labName) > 0
+                        labKey = labName;
+                    end
+                end
+            catch
+                % Ignore invalid lab entries
+            end
         end
 
         function executeBatchUpdate(app, operation, skipOptimizationController)

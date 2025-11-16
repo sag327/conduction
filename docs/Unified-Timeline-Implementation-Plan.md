@@ -1,9 +1,9 @@
 # Unified Timeline Framework – Implementation Plan
 
-**Status:** Phase 1 In Progress (4/7 sub-phases complete)
-**Current Phase:** Phase 1.5 - Simplify Lock Management
-**Last Updated:** 2025-11-15
-**Commits:** fd3638c (1.1), fd1e232 (1.2), 98afc89 (1.3), f2cb514 (1.4)
+**Status:** Phases 1–4 COMPLETE; Phase 5 IN PROGRESS
+**Current Focus:** Phase 5 – Polish & Testing (staleness banner + undo toast complete; conflict details + tests pending)
+**Last Updated:** 2025-11-16
+**Recent Commits:** 3061b1f (unscheduled-only overlay preserves post/turnover), 3b86c93 (per‑lab earliest start), 86ed8c4 (docs updates)
 
 ---
 
@@ -76,7 +76,7 @@
 
 **Estimated Duration:** 3-5 days
 **Risk Level:** HIGH (fundamental state management changes)
-**Status:** Not Started
+**Status:** COMPLETE
 
 ### Sub-Phase 1.1: Add NOW Position to App State
 
@@ -1023,7 +1023,7 @@ disp('✅ Sub-task 1.7.1-1.7.2 PASSED');
 
 **Estimated Duration:** 1-2 days
 **Risk Level:** MEDIUM (UI changes, routing logic)
-**Status:** Not Started
+**Status:** COMPLETE
 
 ### Sub-Phase 2.1: Add Button Label Logic
 
@@ -1359,7 +1359,7 @@ disp('✅ Sub-task 2.3.1-2.3.2 PASSED');
 
 **Estimated Duration:** 3-4 days
 **Risk Level:** MEDIUM (new UI component, state management)
-**Status:** Not Started
+**Status:** COMPLETE
 
 ### Sub-Phase 3.1: Create Proposed Tab Structure
 
@@ -1614,7 +1614,7 @@ end
 ```matlab
 function updateProposedSummary(app)
     % Update summary label in Proposed tab
-    % TODO: Compute moved/unchanged/conflicts (Phase 3.3)
+    % IMPLEMENTED: moved/unchanged/conflicts computed in ProspectiveSchedulerApp.updateProposedSummary
 
     app.ProposedSummaryLabel.Text = 'Summary: Analyzing changes...';
 end
@@ -1769,7 +1769,7 @@ UndoProposedSchedule conduction.DailySchedule  % Discarded proposal (for undo af
 ```matlab
 function showUndoToast(app, message)
     % Show toast notification with undo button
-    % TODO: Implement toast UI and undo logic (Phase 5)
+    % IMPLEMENTED: see ProspectiveSchedulerApp.showUndoToast + triggerUndoAction
 
     fprintf('[Undo Toast] %s\n', message);
 end
@@ -1847,7 +1847,7 @@ disp('✅ Sub-task 3.3.1-3.3.4 PASSED');
 ```matlab
 function onProposedRerun(app)
     % Re-run optimization with adjusted scope/options
-    % TODO: Implement scope controls UI (Phase 4)
+    % IMPLEMENTED: scope controls available; see onScopeIncludeChanged/RespectLocks/PreferLabs
 
     % For now, just re-run optimization
     app.OptimizationController.executeOptimization(app);
@@ -1924,7 +1924,7 @@ disp('✅ Sub-task 3.4.1 PASSED');
 
 **Estimated Duration:** 2-3 days
 **Risk Level:** LOW (mostly UI visibility logic)
-**Status:** Not Started
+**Status:** COMPLETE
 
 ### Tasks
 
@@ -1944,16 +1944,25 @@ disp('✅ Sub-task 3.4.1 PASSED');
 
 **Estimated Duration:** 3-5 days
 **Risk Level:** LOW
-**Status:** Not Started
+**Status:** IN PROGRESS
 
 ### Tasks
 
-**5.1 Implement undo toast UI**
-**5.2 Add staleness detection for Proposed tab**
-**5.3 Add summary computation (moved/unchanged/conflicts)**
+**5.1 Implement undo toast UI** — COMPLETE (ProspectiveSchedulerApp.showUndoToast + undo actions)
+**5.2 Add staleness detection for Proposed tab** — COMPLETE (ProposedStaleBanner + refreshProposedStalenessBanner)
+**5.3 Add summary computation (moved/unchanged/conflicts)** — COMPLETE (updateProposedSummary)
 **5.4 Comprehensive edge case testing**
 **5.5 Performance optimization (large schedules, frequent NOW drags)**
 **5.6 Accessibility audit (keyboard navigation, screen readers)**
+
+---
+
+## Future Work
+
+See `docs/Future-Work.md` for post‑preview features and cleanup tasks, including:
+- Locking model cleanup to remove legacy arrays and finalize per‑case locks only.
+- Regression tests for re‑opt flows, earliest‑start enforcement, and Proposed UX polish.
+- Prefer‑current‑labs tunables, per‑lab open/close windows, and operator availability.
 **5.7 Session save/load migration**
 **5.8 Documentation and help content**
 

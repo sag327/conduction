@@ -405,16 +405,8 @@ classdef DrawerController < handle
                 return;
             end
 
-            % Toggle in LockedCaseIds array
-            if ismember(caseId, app.LockedCaseIds)
-                % Unlock: remove from array
-                app.LockedCaseIds(app.LockedCaseIds == caseId) = [];
-                caseObj.IsLocked = false;
-            else
-                % Lock: add to array
-                app.LockedCaseIds(end+1) = caseId;
-                caseObj.IsLocked = true;
-            end
+            % Toggle persistent user lock flag (single source of truth)
+            caseObj.IsUserLocked = ~logical(caseObj.IsUserLocked);
 
             % Update cases table to reflect lock status
             app.updateCasesTable();
@@ -422,7 +414,7 @@ classdef DrawerController < handle
             % Update drawer toggle if drawer is showing this case
             if ~isempty(app.DrawerCurrentCaseId) && app.DrawerCurrentCaseId == caseId
                 if ~isempty(app.DrawerLockToggle) && isvalid(app.DrawerLockToggle)
-                    app.DrawerLockToggle.Value = caseObj.IsLocked;
+                    app.DrawerLockToggle.Value = logical(caseObj.IsUserLocked);
                 end
             end
 

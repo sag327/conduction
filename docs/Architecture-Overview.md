@@ -50,6 +50,8 @@ Provide a concise map of the GUI codebase so contributors can navigate quickly a
 - Handle drag-and-drop case reordering
 - Manage NOW line (Time Control)
 - Update case statuses by time
+- Compute and render NOW line; keep drag active at all times (unified timeline)
+- Render Proposed schedule preview read-only in the Proposed tab
 - Refresh resource highlights
 
 **Key Methods**:
@@ -66,6 +68,8 @@ Provide a concise map of the GUI codebase so contributors can navigate quickly a
 - Update optimization status and action availability
 - Coordinate batch updates with CaseStore
 - Handle locked case constraints
+- Route re-optimization to Proposed tab preview when NOW > first case
+- Build SchedulingOptions with LabEarliestStartMinutes (per-lab earliest available time) during re-optimization
 
 **Key Methods**:
 - `executeOptimization(app)`
@@ -118,6 +122,13 @@ Provide a concise map of the GUI codebase so contributors can navigate quickly a
 - `onDragEnd(app, caseId, newStartMinutes)`
 - `detectOverlaps(app, caseId, proposedStart, proposedEnd)`
 
+### Proposed Tab (Preview)
+Implemented within `ProspectiveSchedulerApp` plus a small builder:
+- UI builder: `scripts/+conduction/+gui/+app/buildProposedTab.m`
+- App properties: `ProposedTab`, `ProposedAxes`, `ProposedSchedule`, `ProposedOutcome`, `ProposedMetadata`
+- Actions: `onProposedAccept`, `onProposedDiscard`, `onProposedRerun`
+- Summary: `updateProposedSummary` computes “moved/unchanged/conflicts”
+
 ## Key Data Structures
 
 ### Stores
@@ -164,6 +175,18 @@ Provide a concise map of the GUI codebase so contributors can navigate quickly a
 - Used by optimizer and visualization
 - Supports resource constraints
 
+### SchedulingOptions (scheduling layer)
+Path: `scripts/+conduction/+scheduling/SchedulingOptions.m`
+- `LabEarliestStartMinutes` (double[]) – Optional per‑lab earliest start lower bounds. During mid‑day re‑optimization, the controller fills this from NOW and frozen context so the solver cannot place new work before the past.
+
+### OptimizationModelBuilder
+Path: `scripts/+conduction/+scheduling/OptimizationModelBuilder.m`
+- Respects `prepared.earliestStartMinutes` when constructing per‑lab valid time slots, enforcing earliest‑start bounds directly in the ILP grid.
+
+### SchedulingPreprocessor
+Path: `scripts/+conduction/+scheduling/SchedulingPreprocessor.m`
+- Carries `options.LabEarliestStartMinutes` through as `prepared.earliestStartMinutes` for model assembly.
+
 ## Rendering Flow
 
 1. **Optimization Triggered**
@@ -197,25 +220,22 @@ Provide a concise map of the GUI codebase so contributors can navigate quickly a
    - Resource legend updated with highlights
    - Time Control NOW line re-attached if active
 
-## Time Control System
+## Unified Timeline & Re‑Optimization
 
-### Activation
-- **ON**: `app.IsTimeControlActive = true`
-- `CaseManager.setCurrentTime(startMinutes)` initializes timeline
-- NOW line appears on schedule
+### NOW Line & Status
+- NOW line is always visible. Dragging recomputes status (pending, in_progress, completed) relative to NOW.
+- Manual completion (drawer) adds a persistent override for archival, independent of NOW.
 
-### NOW Line Drag
-- `ScheduleRenderer.enableNowLineDrag(app)` attaches drag listeners
-- `startDragNowLine(app)` → `updateNowLinePosition(app, newMinutes)` → `endDragNowLine(app)`
-- On drop: `ScheduleRenderer.updateCaseStatusesByTime(app, currentMinutes)`
-  - Updates `ProspectiveCase.CaseStatus` based on timeline position
-  - Builds `app.SimulatedSchedule` with updated statuses
-  - Re-renders using simulated schedule
+### Smart Optimize Button
+- Before first case: “Optimize Schedule” applies directly to `OptimizedSchedule`.
+- After first case: “Re‑optimize Remaining” opens Proposed tab preview; shows summary and frozen context before NOW.
 
-### Status Tracking
-- **Persistent archive**: `CaseManager.getCompletedCases()` stores truly completed cases
-- **Simulated status**: Reflected in `ProspectiveCase.CaseStatus` during Time Control
-- Simulated cases are NOT archived until Time Control is turned off and user confirms
+### Earliest‑Start Enforcement (per lab)
+- During re‑optimization, the controller computes each lab’s earliest available minute from NOW and frozen context:
+  - In‑progress case: earliest = its end time (including post + turnover)
+  - Completed cases: earliest = last end at/before NOW
+  - Otherwise: earliest = NOW
+- These earliest start bounds are threaded via `SchedulingOptions.LabEarliestStartMinutes` → `SchedulingPreprocessor` → `OptimizationModelBuilder` and enforced as hard lower bounds in the model’s valid time slots.
 
 ## Event-Driven Updates
 

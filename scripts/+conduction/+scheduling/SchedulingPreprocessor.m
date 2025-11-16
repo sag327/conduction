@@ -48,6 +48,12 @@ classdef SchedulingPreprocessor
             prepared.numCases = numel(cases);
             prepared.numLabs = numLabs;
             prepared.labStartMinutes = labStartMinutes;
+            % Earliest permissible start per lab (for mid-day re-optimization)
+            if ~isempty(options.LabEarliestStartMinutes) && numel(options.LabEarliestStartMinutes) == numLabs
+                prepared.earliestStartMinutes = max(0, double(options.LabEarliestStartMinutes(:)'));
+            else
+                prepared.earliestStartMinutes = labStartMinutes;
+            end
             prepared.labStartTimes = options.LabStartTimes;
             prepared.turnoverTime = options.TurnoverTime;
             prepared.maxOperatorTime = options.MaxOperatorTime;
@@ -69,6 +75,20 @@ classdef SchedulingPreprocessor
             else
                 availableLabs = intersect(availableLabs(:)', 1:numLabs, 'stable');
             end
+
+            % Track each case's current lab assignment (if any) for prefer-current-lab penalties
+            if isfield(cases, 'currentLabIndex')
+                rawCurrentLabs = double([cases.currentLabIndex]);
+            else
+                rawCurrentLabs = zeros(1, prepared.numCases);
+            end
+            if isempty(rawCurrentLabs)
+                rawCurrentLabs = zeros(1, prepared.numCases);
+            end
+            rawCurrentLabs(~isfinite(rawCurrentLabs)) = 0;
+            unavailableMask = ~ismember(rawCurrentLabs, availableLabs);
+            rawCurrentLabs(unavailableMask) = 0;
+            prepared.currentLabIndices = rawCurrentLabs;
 
             closedLabsMask = true(1, numLabs);
             closedLabsMask(availableLabs) = false;

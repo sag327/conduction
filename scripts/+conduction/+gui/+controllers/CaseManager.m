@@ -1133,7 +1133,8 @@ classdef CaseManager < handle
                 'admissionStatus', '', ...
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
                 'date', NaT, ...
-                'requiredResourceIds', string.empty(0, 1));
+                'requiredResourceIds', string.empty(0, 1), ...
+                'currentLabIndex', 0);
             casesStruct = repmat(template, obj.CaseCount, 1);
 
             dateValue = obj.TargetDate;
@@ -1181,14 +1182,33 @@ classdef CaseManager < handle
                     end
                 end
                 casesStruct(idx).requiredResourceIds = filteredRequiredIds;
+
+                % Capture the current lab assignment as an index (for prefer-current-lab penalty)
+                currentLabIdx = 0;
+                assignedLabValue = double(caseObj.AssignedLab);
+                if ~isnan(assignedLabValue)
+                    assignedLabValue = round(assignedLabValue);
+                    matchIdx = find(labIds == assignedLabValue, 1, 'first');
+                    if ~isempty(matchIdx)
+                        currentLabIdx = matchIdx;
+                    end
+                end
+                casesStruct(idx).currentLabIndex = currentLabIdx;
             end
         end
 
-        function [filteredCases, excludedCount] = filterCasesByNowPosition(obj, casesStruct, nowMinutes)
+        function [filteredCases, excludedCount, stats] = filterCasesByNowPosition(obj, casesStruct, nowMinutes, includeScheduledFuture)
             %FILTERCASESBYNOWPOSITION Keep only cases that start after NOW
             if nargin < 3 || isempty(nowMinutes)
                 nowMinutes = 0;
             end
+            if nargin < 4
+                includeScheduledFuture = true;
+            end
+
+            stats = struct('unscheduledTotal', 0, 'scheduledFutureTotal', 0, ...
+                'scheduledBeforeNow', 0, 'unscheduledEligible', 0, 'scheduledEligible', 0, ...
+                'earliestScheduledStart', inf);
 
             if isempty(casesStruct)
                 filteredCases = casesStruct;
@@ -1196,9 +1216,10 @@ classdef CaseManager < handle
                 return;
             end
 
-            includeMask = true(size(casesStruct));
+            includeMask = false(size(casesStruct));
             for idx = 1:numel(casesStruct)
                 startMinutes = NaN;
+                isUnscheduled = true;
 
                 caseId = string(conduction.utils.conversion.asString(casesStruct(idx).caseID));
                 if strlength(caseId) > 0
@@ -1207,12 +1228,13 @@ classdef CaseManager < handle
                         startMinutes = caseObj.ScheduledProcStartTime;
                         if isnan(startMinutes)
                             startMinutes = caseObj.ScheduledStartTime;
+                        else
+                            isUnscheduled = false;
                         end
                     end
                 end
 
                 if isnan(startMinutes)
-                    % Fall back to fields on the struct if present
                     candidateFields = {'scheduledStartTime', 'startTime', 'procStartTime'};
                     for nameIdx = 1:numel(candidateFields)
                         fieldName = candidateFields{nameIdx};
@@ -1221,6 +1243,7 @@ classdef CaseManager < handle
                             if ~isempty(value) && isnumeric(value)
                                 startMinutes = double(value(1));
                                 if ~isnan(startMinutes)
+                                    isUnscheduled = false;
                                     break;
                                 end
                             end
@@ -1228,13 +1251,39 @@ classdef CaseManager < handle
                     end
                 end
 
-                if ~isnan(startMinutes) && startMinutes <= nowMinutes
+                if isUnscheduled
+                    stats.unscheduledTotal = stats.unscheduledTotal + 1;
+                    includeMask(idx) = true;
+                    stats.unscheduledEligible = stats.unscheduledEligible + 1;
+                    continue;
+                end
+
+                if isnan(startMinutes) || startMinutes <= nowMinutes
+                    includeMask(idx) = false;
+                    if ~isnan(startMinutes) && startMinutes <= nowMinutes
+                        stats.scheduledBeforeNow = stats.scheduledBeforeNow + 1;
+                    end
+                    continue;
+                end
+
+                stats.scheduledFutureTotal = stats.scheduledFutureTotal + 1;
+                stats.earliestScheduledStart = min(stats.earliestScheduledStart, startMinutes);
+                if includeScheduledFuture
+                    includeMask(idx) = true;
+                    stats.scheduledEligible = stats.scheduledEligible + 1;
+                else
                     includeMask(idx) = false;
                 end
             end
 
             filteredCases = casesStruct(includeMask);
             excludedCount = sum(~includeMask);
+
+            if ~isfinite(stats.earliestScheduledStart)
+                stats.earliestScheduledStart = NaN;
+            end
+
+            % Suppress console filter summary in release
         end
     end
 

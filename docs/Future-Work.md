@@ -1,0 +1,59 @@
+# Future Work and Post-Preview Roadmap
+
+This document tracks follow‑ups and enhancements planned after the Phase 1–4 unified‑timeline milestones. Items are grouped by theme and prioritized by impact/risk.
+
+## Locking Model Cleanup (pre‑release)
+- Single source of truth: finalize cutover to per‑case `IsUserLocked` + auto‑lock (derived from NOW).
+- Remove legacy artifacts:
+  - Delete `app.LockedCaseIds`, `app.TimeControlLockedCaseIds`, `app.TimeControlBaselineLockedIds` usage and definitions.
+  - Remove writes/reads of `ProspectiveCase.IsLocked` (retain property only if needed for temporary compatibility; otherwise remove).
+  - Drop session serialization/deserialization of legacy `isLocked` fields.
+  - Remove `scripts/+conduction/+gui/+utils/LockMigration.m` and call sites.
+- Renderer hygiene:
+  - Eliminate any remaining code paths that push legacy lock state from renderer into models.
+  - Keep on‑demand computation of locked IDs from `CaseManager` using `getComputedLock(now)`.
+
+Risk: Low–medium. Critical paths already run off per‑case locks; risk is missed references. Add a short CLI smoke (see Testing) when executing this cleanup.
+
+## Testing & CI
+- CLI regression tests (MATLAB `-batch`) for re‑optimization flows:
+  - Unscheduled‑only overlay preserves post/turnover for future‑locked cases.
+  - Per‑lab earliest‑start enforcement (multi‑lab, in‑progress, midnight on/off, varied `TimeStep`).
+  - Scope controls: include unscheduled only vs future; “respect locks = off” yields feasible runs.
+  - Proposed summary: moved/unchanged under time change, lab change, and reorder.
+- Add a minimal test harness entry (e.g., `tests/matlab/ReoptSmoke.m`) to run on local automation.
+- Optional: wire a lightweight CI job (local script) to run the above on demand.
+
+## Scheduling Enhancements
+- Prefer current labs tuning
+  - Expose a UI slider or preset for `LabChangePenalty`; document expected range and side effects.
+  - Consider operator‑specific or case‑class‑specific weights.
+- Per‑lab open/close windows (future feature)
+  - Extend `SchedulingOptions` with per‑lab day boundaries.
+  - Use these with earliest‑start lower bounds to disallow scheduling outside lab hours.
+- Operator availability calendars (future feature)
+  - Parameterize per‑operator availability windows; integrate into model constraints.
+
+## Proposed Tab & UX Polish
+- Conflict detail expansion
+  - Enrich conflict reporting beyond resource violations (e.g., feasibility breakdown, operator windows).
+- Undo UX
+  - Keyboard shortcut for Undo toast; make duration configurable in settings.
+- Staleness behavior
+  - Current banner works; consider live auto‑dismiss if a fresh proposal lands or proactively refresh on key mutations.
+
+## Performance & Accessibility
+- Large schedules
+  - Validate rendering performance with many labs/cases; consider list/axes virtualization if needed.
+- Accessibility
+  - Keyboard navigation across tabs and controls; high‑contrast theme audit.
+
+## Packaging & Logging
+- Follow the open TODOs in `docs/Executable-Packaging-Preflight-Plan.md` for runtime logging, entry wrapper, and artifact metadata.
+
+## Quick Acceptance Checklist (for each release cut)
+- Re‑optimization (future + unscheduled‑only) respects user locks and pre‑NOW frozen context.
+- Proposed tab summary and staleness banner behave as expected.
+- No cases scheduled before per‑lab earliest starts in re‑opt.
+- Visual post/turnover preserved for all future‑locked cases.
+

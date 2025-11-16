@@ -5,6 +5,10 @@ classdef OptimizationController < handle
         SuppressDirtyMarking logical = false  % Suppress markOptimizationDirty during batch operations
     end
 
+    properties (Constant, Access = private)
+        PreferLabPenaltyWeight double = 5  % Objective penalty for moving a case to a different lab
+    end
+
     methods (Access = public)
 
         function executeOptimization(~, app)
@@ -40,13 +44,22 @@ classdef OptimizationController < handle
                 return;
             end
 
-            if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
-                nowMinutes = app.getNowPosition();
-                [casesStruct, excludedCount] = app.CaseManager.filterCasesByNowPosition(casesStruct, nowMinutes);
+            isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
 
-                if excludedCount > 0
-                    fprintf('Re-optimization: Excluded %d case(s) scheduled before NOW (%.0f minutes).\n', excludedCount, nowMinutes);
-                end
+            % Track future-locked case ids for internal validation in unscheduled-only mode
+            expectedFutureIds = string.empty(0,1);
+
+            includeScheduledFuture = true;
+
+            if isReoptMode
+                nowMinutes = app.getNowPosition();
+                includeScheduledFuture = ~(app.ReoptIncludeScope == "unscheduled");
+                [casesStruct, excludedCount, stats] = app.CaseManager.filterCasesByNowPosition( ...
+                    casesStruct, nowMinutes, includeScheduledFuture);
+                app.updateScopeSummaryLabel();
+
+                % Suppress console logs in release build
+
 
                 if isempty(casesStruct)
                     uialert(app.UIFigure, ...
@@ -58,6 +71,50 @@ classdef OptimizationController < handle
 
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
+            lockedAssignments = app.OptimizationController.normalizeLockAssignments(lockedAssignments);
+            if isReoptMode && ~app.ReoptRespectLocks
+                % When the user turns off "Respect user locks", we still must
+                % respect auto-locks (in-progress and completed before NOW).
+                % Filter out user-only locks but keep auto-locked cases.
+                lockedAssignments = app.OptimizationController.retainAutoLocksOnly(app, lockedAssignments);
+            end
+
+            % SCOPE: If user selected "Unscheduled only", treat all currently
+            % scheduled FUTURE cases as frozen context (add them as locks) so we
+            % schedule only the unscheduled pool AROUND the existing plan.
+            if isReoptMode && ~includeScheduledFuture
+                try
+                    nowForLocks = app.getNowPosition();
+                    % Build future locks from authoritative case store (more robust than
+                    % schedule parsing) and fall back to parsing schedule entries if needed.
+                    futureLocks = app.OptimizationController.buildFutureLocksFromCaseStore(app, nowForLocks);
+                    if isempty(futureLocks)
+                        futureLocks = app.OptimizationController.extractFutureScheduledAssignments(app, nowForLocks);
+                    end
+                    % Record ids for downstream presence checks
+                    if ~isempty(futureLocks) && isstruct(futureLocks) && isfield(futureLocks, 'caseID')
+                        try
+                            expectedFutureIds = string({futureLocks.caseID});
+                        catch
+                            expectedFutureIds = string.empty(0,1);
+                        end
+                    end
+                    if ~isempty(futureLocks)
+                        % Normalize schemas before concatenation
+                        futureLocks = app.OptimizationController.normalizeLockAssignments(futureLocks);
+                        if ~isempty(lockedAssignments)
+                            lockedAssignments = app.OptimizationController.normalizeLockAssignments(lockedAssignments);
+                        end
+                        if isempty(lockedAssignments)
+                            lockedAssignments = futureLocks;
+                        else
+                            lockedAssignments = [lockedAssignments(:); futureLocks(:)]; %#ok<AGROW>
+                        end
+                    end
+                catch
+                    % Ignore future-lock build errors in release; continue with existing locks
+                end
+            end
 
             % CASE-LOCKING: Ensure locked assignments remain valid for current lab count
             [lockedAssignments, removedLockIds] = app.OptimizationController.sanitizeLockedAssignments(app, lockedAssignments);
@@ -120,6 +177,27 @@ classdef OptimizationController < handle
             if ~isempty(lockedAssignments)
                 casesStruct = app.OptimizationController.mergeLockedCasesIntoInput(...
                     casesStruct, lockedAssignments, defaults);
+                % DEBUG (unscheduled-only): verify that future scheduled locks were merged
+                if isReoptMode && ~includeScheduledFuture && ~isempty(expectedFutureIds)
+                    present = false(size(expectedFutureIds));
+                    try
+                        if ~isempty(casesStruct)
+                            ids = string({casesStruct.caseID});
+                            for di = 1:numel(expectedFutureIds)
+                                present(di) = any(ids == expectedFutureIds(di));
+                            end
+                        end
+                    catch
+                    end
+                    missing = expectedFutureIds(~present);
+                    fprintf('[UNSCH-ONLY] merged future locks: %d present, %d missing\n', ...
+                        sum(present), numel(missing));
+                    if ~isempty(missing)
+                        for mi = 1:numel(missing)
+                            fprintf('  missing future lock: %s\n', char(missing(mi)));
+                        end
+                    end
+                end
             end
 
             app.IsOptimizationRunning = true;
@@ -130,6 +208,18 @@ classdef OptimizationController < handle
             try
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
 
+                % VISUAL-SAFETY NET: In Unscheduled-only mode, ensure all future
+                % scheduled locks are visible in the Proposed preview by
+                % overlaying them back into the returned schedule. This guards
+                % against any upstream omission due to incomplete fields.
+                if isReoptMode && ~includeScheduledFuture && ~isempty(lockedAssignments)
+                    try
+                        dailySchedule = app.DrawerController.mergeLockedCases(app, dailySchedule, lockedAssignments);
+                    catch
+                        % Non-fatal: continue with solver output as-is
+                    end
+                end
+
                 % DUAL-ID: Re-annotate caseNumber on schedule cases using persistent CaseIds
                 try
                     dailySchedule = app.OptimizationController.annotateCaseNumbersOnSchedule(app, dailySchedule);
@@ -137,14 +227,34 @@ classdef OptimizationController < handle
                     % Non-fatal: proceed without annotation if anything goes wrong
                 end
 
-                app.OptimizedSchedule = dailySchedule;
-                app.OptimizationOutcome = outcome;
-                app.IsOptimizationDirty = false;
-                app.OptimizationLastRun = datetime('now');
-                app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
+                metadata.ScopePreferences = struct( ...
+                    'IncludeScheduledFuture', includeScheduledFuture, ...
+                    'RespectLocks', app.ReoptRespectLocks, ...
+                    'PreferCurrentLabs', app.ReoptPreferCurrentLabs);
 
-                % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                if isReoptMode
+                    app.ProposedSchedule = dailySchedule;
+                    app.ProposedOutcome = outcome;
+                    app.ProposedMetadata = metadata;
+                    app.ProposedSourceVersion = app.OptimizationChangeCounter;
+                    % Suppress debug logs in release
+                    app.showProposedTab();
+                else
+                    app.hideProposedTab(true);
+                    app.ProposedSchedule = conduction.DailySchedule.empty;
+                    app.ProposedOutcome = struct();
+                    app.ProposedMetadata = struct();
+
+                    app.OptimizedSchedule = dailySchedule;
+                    app.OptimizationOutcome = outcome;
+                    app.IsOptimizationDirty = false;
+                    app.OptimizationLastRun = datetime('now');
+                    app.markDirty();  % SAVE/LOAD: Mark as dirty when optimization runs (Stage 7)
+
+                    % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
+                    app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
+                    app.LastOptimizationMetadata = metadata;
+                end
                 if ismethod(app, 'refreshOptimizeButtonLabel')
                     app.refreshOptimizeButtonLabel();
                 end
@@ -171,7 +281,7 @@ classdef OptimizationController < handle
                 end
             catch ME
                 % Don't clear schedule on validation errors - let user see and fix
-                if ~contains(ME.identifier, 'InvalidLockedConstraint')
+                if ~contains(ME.identifier, 'InvalidLockedConstraint') && ~isReoptMode
                     app.OptimizedSchedule = conduction.DailySchedule.empty;
                     app.OptimizationController.showOptimizationPendingPlaceholder(app);
                     if ismethod(app, 'refreshOptimizeButtonLabel')
@@ -179,9 +289,16 @@ classdef OptimizationController < handle
                     end
                 end
 
-                app.OptimizationOutcome = struct();
-                app.IsOptimizationDirty = true;
-                app.OptimizationLastRun = NaT;
+                if ~isReoptMode
+                    app.OptimizationOutcome = struct();
+                    app.IsOptimizationDirty = true;
+                    app.OptimizationLastRun = NaT;
+                else
+                    app.ProposedSchedule = conduction.DailySchedule.empty;
+                    app.ProposedOutcome = struct();
+                    app.ProposedMetadata = struct();
+                    app.hideProposedTab(true);
+                end
 
                 detailedMsg = ME.message;
 
@@ -191,6 +308,266 @@ classdef OptimizationController < handle
             app.IsOptimizationRunning = false;
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
+        end
+
+        function filtered = retainAutoLocksOnly(~, app, assignments)
+            filtered = struct([]);
+            if isempty(assignments)
+                return;
+            end
+
+            nowMinutes = app.getNowPosition();
+            outIdx = 0;
+            for i = 1:numel(assignments)
+                entry = assignments(i);
+                if ~isfield(entry, 'caseID') || isempty(entry.caseID)
+                    continue;
+                end
+                caseId = string(entry.caseID);
+                [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                if isempty(caseObj)
+                    continue;
+                end
+                % Retain if the case is auto-locked by timeline status
+                if caseObj.shouldBeAutoLocked(nowMinutes)
+                    outIdx = outIdx + 1;
+                    filtered(outIdx) = entry; %#ok<AGROW>
+                end
+            end
+        end
+
+        function assignments = extractFutureScheduledAssignments(~, app, nowMinutes)
+            %EXTRACTFUTURESCHEDULEDASSIGNMENTS Return schedule entries after NOW as locks
+            entries = {};
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+            labAssignments = app.OptimizedSchedule.labAssignments();
+            outIdx = 0;
+            for labIdx = 1:numel(labAssignments)
+                labCases = labAssignments{labIdx};
+                if isempty(labCases), continue; end
+                for k = 1:numel(labCases)
+                    e = labCases(k);
+                    caseId = string(conduction.utils.conversion.asString(e.caseID));
+                    if strlength(caseId) == 0, continue; end
+
+                    % Determine start/proc/end times
+                    startM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'startTime','procStartTime'}, NaN);
+                    procStartM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'procStartTime', startM);
+                    procEndM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procEndTime','endTime'}, NaN);
+                    postM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                    turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                    procDurM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procTime','procedureMinutes'}, NaN);
+
+                    % Use procedure start when available to decide "future"
+                    candidateStart = procStartM;
+                    if isnan(candidateStart)
+                        candidateStart = startM;
+                    end
+                    if isnan(candidateStart) || ~(candidateStart > nowMinutes)
+                        continue; % only future scheduled (after NOW)
+                    end
+
+                    % If procEndTime is missing, compute from procStart + procTime (fallback)
+                    if isnan(procEndM) && ~isnan(procStartM) && ~isnan(procDurM)
+                        procEndM = procStartM + double(procDurM);
+                    end
+
+                    % Build lock entry with consistent schema (single struct ctor)
+                    outIdx = outIdx + 1;
+                    entry = struct( ...
+                        'caseID', char(caseId), ...
+                        'operator', char(conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'operator','Operator','operatorName'}, "")), ...
+                        'procedure', char(conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procedure','Procedure','procedureName'}, "")), ...
+                        'assignedLab', double(labIdx), ...
+                        'startTime', double(startM), ...
+                        'procStartTime', double(procStartM), ...
+                        'procEndTime', double(procEndM), ...
+                        'postTime', double(postM), ...
+                        'turnoverTime', double(turnM), ...
+                        'requiredResourceIds', {});
+
+                    % Pull required resources from CaseStore
+                    try
+                        [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                        if ~isempty(caseObj)
+                            entry.requiredResourceIds = caseObj.RequiredResourceIds;
+                            % Fill any missing operator/procedure from the caseObj
+                            if strlength(string(entry.operator)) == 0
+                                entry.operator = char(caseObj.OperatorName);
+                            end
+                            if strlength(string(entry.procedure)) == 0
+                                entry.procedure = char(caseObj.ProcedureName);
+                            end
+                            % Fill missing timing
+                            if isnan(procEndM) && ~isnan(caseObj.ScheduledProcStartTime) && ~isnan(caseObj.EstimatedDurationMinutes)
+                                entry.procStartTime = double(caseObj.ScheduledProcStartTime);
+                                entry.procEndTime = entry.procStartTime + double(caseObj.EstimatedDurationMinutes);
+                            end
+                        end
+                    catch
+                    end
+                    entries{end+1,1} = entry; %#ok<AGROW>
+                end
+            end
+            % Suppress debug print in release
+            if isempty(entries)
+                assignments = struct('caseID', {}, 'operator', {}, 'procedure', {}, 'assignedLab', {}, ...
+                                      'startTime', {}, 'procStartTime', {}, 'procEndTime', {}, ...
+                                      'postTime', {}, 'turnoverTime', {}, 'requiredResourceIds', {});
+            else
+                assignments = vertcat(entries{:});
+            end
+        end
+
+        function assignments = buildFutureLocksFromCaseStore(~, app, nowMinutes)
+            %BUILDFUTURELOCKSFROMCASESTORE Build future locks using CaseStore/CaseManager
+            entries = {};
+            if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
+                fprintf('[UNSCH-ONLY] case store has no cases; cannot build future locks\n');
+                return;
+            end
+            outIdx = 0;
+            % Snapshot current optimized schedule lab assignments (for enriching visuals)
+            schedLabs = {};
+            if ~isempty(app.OptimizedSchedule)
+                try
+                    schedLabs = app.OptimizedSchedule.labAssignments();
+                catch
+                    schedLabs = {};
+                end
+            end
+            for i = 1:app.CaseManager.CaseCount
+                caseObj = app.CaseManager.getCase(i);
+                if isempty(caseObj)
+                    continue;
+                end
+                % Use scheduled procedure start; fall back to scheduled start
+                procStart = caseObj.ScheduledProcStartTime;
+                if isnan(procStart)
+                    procStart = caseObj.ScheduledStartTime;
+                end
+                if isnan(procStart) || ~(procStart > nowMinutes)
+                    continue; % not a future scheduled case
+                end
+
+                % Use pure procedure window for operator conflict checks:
+                procEnd = NaN;
+                if ~isnan(procStart) && ~isnan(caseObj.EstimatedDurationMinutes)
+                    procEnd = procStart + double(caseObj.EstimatedDurationMinutes);
+                end
+
+                if isnan(procEnd)
+                    % Skip only if we cannot infer an end; log once
+                    fprintf('[UNSCH-ONLY] skip future lock (no end): %s\n', char(caseObj.CaseId));
+                    continue;
+                end
+
+                % Build entry compatible with buildLockedCaseConstraints
+                outIdx = outIdx + 1;
+                % Compute start time with fallback first
+                startTime = caseObj.ScheduledStartTime;
+                if isnan(startTime)
+                    startTime = procStart;
+                end
+                entry = struct( ...
+                    'caseID', char(caseObj.CaseId), ...
+                    'operator', char(caseObj.OperatorName), ...
+                    'procedure', char(caseObj.ProcedureName), ...
+                    'assignedLab', double(caseObj.AssignedLab), ...
+                    'startTime', double(startTime), ...
+                    'procStartTime', double(procStart), ...
+                    'procEndTime', double(procEnd), ...
+                    'postTime', 0, ...
+                    'turnoverTime', 0, ...
+                    'requiredResourceIds', caseObj.RequiredResourceIds);
+                % If schedule contains this case, enrich with its post/turnover for correct visuals
+                if ~isempty(schedLabs)
+                    try
+                        for labIdx = 1:numel(schedLabs)
+                            labCases = schedLabs{labIdx};
+                            if isempty(labCases), continue; end
+                            for k = 1:numel(labCases)
+                                e = labCases(k);
+                                eId = string(conduction.utils.conversion.asString(e.caseID));
+                                if strlength(eId) == 0, continue; end
+                                if eId == string(caseObj.CaseId)
+                                    postM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                                    turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                                    entry.postTime = double(postM);
+                                    entry.turnoverTime = double(turnM);
+                                    % Prefer schedule-assigned lab if present and valid
+                                    try
+                                        if isfield(e, 'assignedLab') && ~isempty(e.assignedLab)
+                                            entry.assignedLab = double(e.assignedLab);
+                                        end
+                                    catch
+                                    end
+                                    break;
+                                end
+                            end
+                        end
+                    catch
+                    end
+                end
+                if isnan(entry.assignedLab) || entry.assignedLab < 1
+                    % If lab index is missing, skip; locked without lab cannot be enforced
+                    fprintf('[UNSCH-ONLY] skip future lock (no lab): %s\n', char(caseObj.CaseId));
+                    outIdx = outIdx - 1; %#ok<FXSET>
+                    continue;
+                end
+                entries{end+1,1} = entry; %#ok<AGROW>
+            end
+            if isempty(entries)
+                assignments = struct('caseID', {}, 'operator', {}, 'procedure', {}, 'assignedLab', {}, ...
+                                      'startTime', {}, 'procStartTime', {}, 'procEndTime', {}, ...
+                                      'postTime', {}, 'turnoverTime', {}, 'requiredResourceIds', {});
+            else
+                assignments = vertcat(entries{:});
+            end
+            % Suppress debug print in release
+        end
+
+        function locks = normalizeLockAssignments(obj, locks)
+            %NORMALIZELOCKASSIGNMENTS Ensure lock structs share a common schema
+            if isempty(locks)
+                return;
+            end
+            tmpl = struct( ...
+                'caseID', '', ...
+                'operator', '', ...
+                'procedure', '', ...
+                'caseNumber', NaN, ...
+                'assignedLab', [], ...
+                'startTime', NaN, ...
+                'procStartTime', NaN, ...
+                'procEndTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'requiredResourceIds', {});
+
+            locks = obj.addMissingFieldsToStruct(locks, fieldnames(tmpl), tmpl);
+            % Reorder fields to a canonical order to allow concatenation
+            try
+                locks = orderfields(locks, tmpl);
+            catch
+                % If orderfields with template fails, at least ensure stable order
+                locks = orderfields(locks);
+            end
+
+            % Strip any non-canonical fields so arrays can concatenate safely
+            try
+                templateFields = fieldnames(tmpl);
+                currentFields = fieldnames(locks);
+                extraFields = setdiff(currentFields, templateFields);
+                if ~isempty(extraFields)
+                    locks = rmfield(locks, extraFields);
+                end
+                % Ensure final order again
+                locks = orderfields(locks, tmpl);
+            catch
+            end
         end
 
         function markOptimizationDirty(obj, app, markSessionDirty, skipRender)
@@ -211,6 +588,13 @@ classdef OptimizationController < handle
             end
 
             app.IsOptimizationDirty = true;
+
+            if markSessionDirty
+                app.OptimizationChangeCounter = app.OptimizationChangeCounter + 1;
+            end
+            if ismethod(app, 'refreshProposedStalenessBanner')
+                app.refreshProposedStalenessBanner();
+            end
 
             % Don't clear the schedule - keep it visible with fade effect
             % app.OptimizedSchedule is preserved
@@ -292,12 +676,13 @@ classdef OptimizationController < handle
             removedCaseIds = unique(removedCaseIds(removedCaseIds ~= ""), 'stable');
         end
 
-        function scheduleOptions = buildSchedulingOptions(~, app, lockedConstraints)
+        function scheduleOptions = buildSchedulingOptions(obj, app, lockedConstraints)
             if nargin < 3
                 lockedConstraints = struct([]);
             end
 
             numLabs = max(1, round(app.Opts.labs));
+            isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
             startTimes = repmat({'08:00'}, 1, numLabs);
 
             resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {});
@@ -308,15 +693,27 @@ classdef OptimizationController < handle
                 end
             end
 
+            % Compute per-lab earliest start minutes (freeze context before NOW)
+            earliest = double.empty(1, 0);
+            if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
+                earliest = obj.computeLabEarliestStartsFromSchedule(app, numLabs);
+            end
+
             % Get OutpatientInpatientMode with fallback to default
             outpatientInpatientMode = "TwoPhaseAutoFallback";
             if isfield(app.Opts, 'outpatientInpatientMode') && ~isempty(app.Opts.outpatientInpatientMode)
                 outpatientInpatientMode = string(app.Opts.outpatientInpatientMode);
             end
 
+            labChangePenalty = 0;
+            if isReoptMode && app.ReoptPreferCurrentLabs
+                labChangePenalty = obj.PreferLabPenaltyWeight;
+            end
+
             scheduleOptions = conduction.scheduling.SchedulingOptions.fromArgs( ...
                 'NumLabs', numLabs, ...
                 'LabStartTimes', startTimes, ...
+                'LabEarliestStartMinutes', earliest, ...
                 'OptimizationMetric', string(app.Opts.metric), ...
                 'CaseFilter', string(app.Opts.caseFilter), ...
                 'MaxOperatorTime', app.Opts.maxOpMin, ...
@@ -326,8 +723,56 @@ classdef OptimizationController < handle
                 'AvailableLabs', app.AvailableLabIds, ...
                 'LockedCaseConstraints', lockedConstraints, ...
                 'ResourceTypes', resourceTypes, ...
+                'LabChangePenalty', labChangePenalty, ...
                 'Verbose', true, ...
                 'OutpatientInpatientMode', outpatientInpatientMode);
+        end
+
+        function earliest = computeLabEarliestStartsFromSchedule(~, app, numLabs)
+            nowMinutes = app.getNowPosition();
+            earliest = repmat(nowMinutes, 1, numLabs);
+            try
+                if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                    return;
+                end
+                labAssignments = app.OptimizedSchedule.labAssignments();
+                for labIdx = 1:min(numLabs, numel(labAssignments))
+                    entries = labAssignments{labIdx};
+                    if isempty(entries)
+                        earliest(labIdx) = nowMinutes;
+                        continue;
+                    end
+                    lastEndBeforeNow = 0;
+                    inProgressEnd = NaN;
+                    for k = 1:numel(entries)
+                        e = entries(k);
+                        start = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procStartTime','startTime'}, NaN);
+                        procEnd = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procEndTime','procedureEndTime'}, NaN);
+                        post = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                        turn = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                        if ~isnan(procEnd)
+                            endT = procEnd + max(0, post) + max(0, turn);
+                        else
+                            endT = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'endTime', NaN);
+                        end
+                        if ~isnan(start) && ~isnan(endT)
+                            if start <= nowMinutes && endT > nowMinutes
+                                inProgressEnd = endT;
+                            elseif endT <= nowMinutes
+                                lastEndBeforeNow = max(lastEndBeforeNow, endT);
+                            end
+                        end
+                    end
+                    if ~isnan(inProgressEnd)
+                        earliest(labIdx) = max(nowMinutes, inProgressEnd);
+                    else
+                        earliest(labIdx) = max(nowMinutes, lastEndBeforeNow);
+                    end
+                end
+            catch
+                % On errors, default to NOW per lab
+                earliest = repmat(nowMinutes, 1, numLabs);
+            end
         end
 
         function showOptimizationOptionsDialog(~, app)
@@ -582,7 +1027,10 @@ classdef OptimizationController < handle
                     'outpatientInpatientMode', outpatientInpatientMode);
 
                 app.Opts = newOpts;
-                app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
+                % Default status control removed from Optimization tab; preserve previous value
+                if isprop(app, 'OptDefaultStatusDropDown') && ~isempty(app.OptDefaultStatusDropDown) && isvalid(app.OptDefaultStatusDropDown)
+                    app.TestingAdmissionDefault = string(app.OptDefaultStatusDropDown.Value);
+                end
 
                 app.LabIds = labIds;
                 app.AvailableLabIds = selectedLabs;
@@ -647,10 +1095,26 @@ classdef OptimizationController < handle
                 return;
             end
 
+            % Compute locked ids from per-case flags and NOW-derived auto-lock
+            lockedIds = string.empty(0,1);
+            try
+                nowM = app.getNowPosition();
+                if ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0
+                    for i = 1:app.CaseManager.CaseCount
+                        c = app.CaseManager.getCase(i);
+                        if c.getComputedLock(nowM)
+                            lockedIds(end+1,1) = c.CaseId; %#ok<AGROW>
+                        end
+                    end
+                end
+            catch
+                lockedIds = string.empty(0,1);
+            end
+
             conduction.visualizeDailySchedule(app.OptimizedSchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
-                'LockedCaseIds', app.LockedCaseIds, ...  % CASE-LOCKING: Pass locked case IDs
+                'LockedCaseIds', lockedIds, ...  % CASE-LOCKING: computed from per-case flags
                 'OperatorColors', app.OperatorColors);  % Pass persistent operator colors
         end
 
@@ -1119,7 +1583,8 @@ classdef OptimizationController < handle
                 'caseStatus', '', ...  % REALTIME-SCHEDULING
                 'date', NaT, ...
                 'assignedLab', [], ...
-                'startTime', NaN);
+                'startTime', NaN, ...
+                'currentLabIndex', 0);
 
             % Ensure existing cases share the template fields
             if isempty(casesStruct)
@@ -1224,8 +1689,12 @@ classdef OptimizationController < handle
                 fieldName = fieldNames{i};
                 if ~isfield(structArray, fieldName)
                     defaultValue = [];
-                    if isfield(template, fieldName)
-                        defaultValue = template.(fieldName);
+                    if ~isempty(template) && isstruct(template) && isfield(template, fieldName)
+                        try
+                            defaultValue = template.(fieldName);
+                        catch
+                            defaultValue = [];
+                        end
                     end
                     for idx = 1:numel(structArray)
                         structArray(idx).(fieldName) = defaultValue;
