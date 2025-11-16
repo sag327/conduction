@@ -2886,6 +2886,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
             end
 
+            % Discarding should not leave the schedule dimmed; clear dirty flag
+            app.IsOptimizationDirty = false;
+            try
+                schedule = app.getScheduleForRendering();
+                app.ScheduleRenderer.renderOptimizedSchedule(app, schedule, app.LastOptimizationMetadata);
+                if ismethod(app, 'refreshOptimizeButtonLabel')
+                    app.refreshOptimizeButtonLabel();
+                end
+            catch
+            end
+
             context = struct( ...
                 'Type', "discard", ...
                 'DiscardedSchedule', app.UndoProposedSchedule, ...
