@@ -303,9 +303,15 @@ classdef OptimizationController < handle
                     procEndM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procEndTime','endTime'}, NaN);
                     postM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
                     turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+                    procDurM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procTime','procedureMinutes'}, NaN);
 
                     if isnan(startM) || ~(startM > nowMinutes)
                         continue; % only future scheduled
+                    end
+
+                    % If procEndTime is missing, compute from procStart + procTime (fallback)
+                    if isnan(procEndM) && ~isnan(procStartM) && ~isnan(procDurM)
+                        procEndM = procStartM + double(procDurM);
                     end
 
                     % Build lock entry compatible with buildLockedCaseConstraints
@@ -320,12 +326,25 @@ classdef OptimizationController < handle
                     entry.postTime = double(postM);
                     entry.turnoverTime = double(turnM);
                     entry.requiredResourceIds = {};
+                    entry.procedure = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procedure','Procedure','procedureName'}, "");
 
                     % Pull required resources from CaseStore
                     try
                         [caseObj, ~] = app.CaseManager.findCaseById(caseId);
                         if ~isempty(caseObj)
                             entry.requiredResourceIds = caseObj.RequiredResourceIds;
+                            % Fill any missing operator/procedure from the caseObj
+                            if strlength(string(entry.operator)) == 0
+                                entry.operator = char(caseObj.OperatorName);
+                            end
+                            if strlength(string(entry.procedure)) == 0
+                                entry.procedure = char(caseObj.ProcedureName);
+                            end
+                            % Fill missing timing
+                            if isnan(procEndM) && ~isnan(caseObj.ScheduledProcStartTime) && ~isnan(caseObj.EstimatedDurationMinutes)
+                                entry.procStartTime = double(caseObj.ScheduledProcStartTime);
+                                entry.procEndTime = entry.procStartTime + double(caseObj.EstimatedDurationMinutes);
+                            end
                         end
                     catch
                     end
