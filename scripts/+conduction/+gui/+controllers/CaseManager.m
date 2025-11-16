@@ -1207,7 +1207,7 @@ classdef CaseManager < handle
             end
 
             stats = struct('unscheduledTotal', 0, 'scheduledFutureTotal', 0, ...
-                'unscheduledEligible', 0, 'scheduledEligible', 0, ...
+                'scheduledBeforeNow', 0, 'unscheduledEligible', 0, 'scheduledEligible', 0, ...
                 'earliestScheduledStart', inf);
 
             if isempty(casesStruct)
@@ -1260,6 +1260,9 @@ classdef CaseManager < handle
 
                 if isnan(startMinutes) || startMinutes <= nowMinutes
                     includeMask(idx) = false;
+                    if ~isnan(startMinutes) && startMinutes <= nowMinutes
+                        stats.scheduledBeforeNow = stats.scheduledBeforeNow + 1;
+                    end
                     continue;
                 end
 
@@ -1279,6 +1282,8 @@ classdef CaseManager < handle
             if ~isfinite(stats.earliestScheduledStart)
                 stats.earliestScheduledStart = NaN;
             end
+
+            % Suppress console filter summary in release
         end
     end
 

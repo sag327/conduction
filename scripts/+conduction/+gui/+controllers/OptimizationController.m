@@ -55,9 +55,7 @@ classdef OptimizationController < handle
                     casesStruct, nowMinutes, includeScheduledFuture);
                 app.updateScopeSummaryLabel();
 
-                if excludedCount > 0
-                    fprintf('Re-optimization: Excluded %d case(s) scheduled before NOW (%.0f minutes).\n', excludedCount, nowMinutes);
-                end
+                % Suppress console logs in release build
 
 
                 if isempty(casesStruct)
@@ -70,6 +68,7 @@ classdef OptimizationController < handle
 
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
+            lockedAssignments = app.OptimizationController.normalizeLockAssignments(lockedAssignments);
             if isReoptMode && ~app.ReoptRespectLocks
                 % When the user turns off "Respect user locks", we still must
                 % respect auto-locks (in-progress and completed before NOW).
@@ -83,8 +82,18 @@ classdef OptimizationController < handle
             if isReoptMode && ~includeScheduledFuture
                 try
                     nowForLocks = app.getNowPosition();
-                    futureLocks = app.OptimizationController.extractFutureScheduledAssignments(app, nowForLocks);
+                    % Build future locks from authoritative case store (more robust than
+                    % schedule parsing) and fall back to parsing schedule entries if needed.
+                    futureLocks = app.OptimizationController.buildFutureLocksFromCaseStore(app, nowForLocks);
+                    if isempty(futureLocks)
+                        futureLocks = app.OptimizationController.extractFutureScheduledAssignments(app, nowForLocks);
+                    end
                     if ~isempty(futureLocks)
+                        % Normalize schemas before concatenation
+                        futureLocks = app.OptimizationController.normalizeLockAssignments(futureLocks);
+                        if ~isempty(lockedAssignments)
+                            lockedAssignments = app.OptimizationController.normalizeLockAssignments(lockedAssignments);
+                        end
                         if isempty(lockedAssignments)
                             lockedAssignments = futureLocks;
                         else
@@ -92,6 +101,7 @@ classdef OptimizationController < handle
                         end
                     end
                 catch
+                    % Ignore future-lock build errors in release; continue with existing locks
                 end
             end
 
@@ -156,6 +166,27 @@ classdef OptimizationController < handle
             if ~isempty(lockedAssignments)
                 casesStruct = app.OptimizationController.mergeLockedCasesIntoInput(...
                     casesStruct, lockedAssignments, defaults);
+                % DEBUG (unscheduled-only): verify that future scheduled locks were merged
+                if isReoptMode && ~includeScheduledFuture && ~isempty(expectedFutureIds)
+                    present = false(size(expectedFutureIds));
+                    try
+                        if ~isempty(casesStruct)
+                            ids = string({casesStruct.caseID});
+                            for di = 1:numel(expectedFutureIds)
+                                present(di) = any(ids == expectedFutureIds(di));
+                            end
+                        end
+                    catch
+                    end
+                    missing = expectedFutureIds(~present);
+                    fprintf('[UNSCH-ONLY] merged future locks: %d present, %d missing\n', ...
+                        sum(present), numel(missing));
+                    if ~isempty(missing)
+                        for mi = 1:numel(missing)
+                            fprintf('  missing future lock: %s\n', char(missing(mi)));
+                        end
+                    end
+                end
             end
 
             app.IsOptimizationRunning = true;
@@ -165,6 +196,18 @@ classdef OptimizationController < handle
 
             try
                 [dailySchedule, outcome] = conduction.optimizeDailySchedule(casesStruct, scheduleOptions);
+
+                % VISUAL-SAFETY NET: In Unscheduled-only mode, ensure all future
+                % scheduled locks are visible in the Proposed preview by
+                % overlaying them back into the returned schedule. This guards
+                % against any upstream omission due to incomplete fields.
+                if isReoptMode && ~includeScheduledFuture && ~isempty(lockedAssignments)
+                    try
+                        dailySchedule = app.DrawerController.mergeLockedCases(app, dailySchedule, lockedAssignments);
+                    catch
+                        % Non-fatal: continue with solver output as-is
+                    end
+                end
 
                 % DUAL-ID: Re-annotate caseNumber on schedule cases using persistent CaseIds
                 try
@@ -183,6 +226,7 @@ classdef OptimizationController < handle
                     app.ProposedOutcome = outcome;
                     app.ProposedMetadata = metadata;
                     app.ProposedSourceVersion = app.OptimizationChangeCounter;
+                    % Suppress debug logs in release
                     app.showProposedTab();
                 else
                     app.hideProposedTab(true);
@@ -283,7 +327,7 @@ classdef OptimizationController < handle
 
         function assignments = extractFutureScheduledAssignments(~, app, nowMinutes)
             %EXTRACTFUTURESCHEDULEDASSIGNMENTS Return schedule entries after NOW as locks
-            assignments = struct([]);
+            entries = {};
             if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
                 return;
             end
@@ -305,8 +349,13 @@ classdef OptimizationController < handle
                     turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
                     procDurM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procTime','procedureMinutes'}, NaN);
 
-                    if isnan(startM) || ~(startM > nowMinutes)
-                        continue; % only future scheduled
+                    % Use procedure start when available to decide "future"
+                    candidateStart = procStartM;
+                    if isnan(candidateStart)
+                        candidateStart = startM;
+                    end
+                    if isnan(candidateStart) || ~(candidateStart > nowMinutes)
+                        continue; % only future scheduled (after NOW)
                     end
 
                     % If procEndTime is missing, compute from procStart + procTime (fallback)
@@ -314,19 +363,19 @@ classdef OptimizationController < handle
                         procEndM = procStartM + double(procDurM);
                     end
 
-                    % Build lock entry compatible with buildLockedCaseConstraints
+                    % Build lock entry with consistent schema (single struct ctor)
                     outIdx = outIdx + 1;
-                    entry = struct();
-                    entry.caseID = char(caseId);
-                    entry.operator = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'operator','Operator','operatorName'}, "");
-                    entry.assignedLab = labIdx;
-                    entry.startTime = double(startM);
-                    entry.procStartTime = double(procStartM);
-                    entry.procEndTime = double(procEndM);
-                    entry.postTime = double(postM);
-                    entry.turnoverTime = double(turnM);
-                    entry.requiredResourceIds = {};
-                    entry.procedure = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procedure','Procedure','procedureName'}, "");
+                    entry = struct( ...
+                        'caseID', char(caseId), ...
+                        'operator', char(conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'operator','Operator','operatorName'}, "")), ...
+                        'procedure', char(conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procedure','Procedure','procedureName'}, "")), ...
+                        'assignedLab', double(labIdx), ...
+                        'startTime', double(startM), ...
+                        'procStartTime', double(procStartM), ...
+                        'procEndTime', double(procEndM), ...
+                        'postTime', double(postM), ...
+                        'turnoverTime', double(turnM), ...
+                        'requiredResourceIds', {});
 
                     % Pull required resources from CaseStore
                     try
@@ -348,8 +397,127 @@ classdef OptimizationController < handle
                         end
                     catch
                     end
-                    assignments(outIdx,1) = entry; %#ok<AGROW>
+                    entries{end+1,1} = entry; %#ok<AGROW>
                 end
+            end
+            % Suppress debug print in release
+            if isempty(entries)
+                assignments = struct('caseID', {}, 'operator', {}, 'procedure', {}, 'assignedLab', {}, ...
+                                      'startTime', {}, 'procStartTime', {}, 'procEndTime', {}, ...
+                                      'postTime', {}, 'turnoverTime', {}, 'requiredResourceIds', {});
+            else
+                assignments = vertcat(entries{:});
+            end
+        end
+
+        function assignments = buildFutureLocksFromCaseStore(~, app, nowMinutes)
+            %BUILDFUTURELOCKSFROMCASESTORE Build future locks using CaseStore/CaseManager
+            entries = {};
+            if isempty(app.CaseManager) || app.CaseManager.CaseCount == 0
+                fprintf('[UNSCH-ONLY] case store has no cases; cannot build future locks\n');
+                return;
+            end
+            outIdx = 0;
+            for i = 1:app.CaseManager.CaseCount
+                caseObj = app.CaseManager.getCase(i);
+                if isempty(caseObj)
+                    continue;
+                end
+                % Use scheduled procedure start; fall back to scheduled start
+                procStart = caseObj.ScheduledProcStartTime;
+                if isnan(procStart)
+                    procStart = caseObj.ScheduledStartTime;
+                end
+                if isnan(procStart) || ~(procStart > nowMinutes)
+                    continue; % not a future scheduled case
+                end
+
+                % Use pure procedure window for operator conflict checks:
+                procEnd = NaN;
+                if ~isnan(procStart) && ~isnan(caseObj.EstimatedDurationMinutes)
+                    procEnd = procStart + double(caseObj.EstimatedDurationMinutes);
+                end
+
+                if isnan(procEnd)
+                    % Skip only if we cannot infer an end; log once
+                    fprintf('[UNSCH-ONLY] skip future lock (no end): %s\n', char(caseObj.CaseId));
+                    continue;
+                end
+
+                % Build entry compatible with buildLockedCaseConstraints
+                outIdx = outIdx + 1;
+                % Compute start time with fallback first
+                startTime = caseObj.ScheduledStartTime;
+                if isnan(startTime)
+                    startTime = procStart;
+                end
+                entry = struct( ...
+                    'caseID', char(caseObj.CaseId), ...
+                    'operator', char(caseObj.OperatorName), ...
+                    'procedure', char(caseObj.ProcedureName), ...
+                    'assignedLab', double(caseObj.AssignedLab), ...
+                    'startTime', double(startTime), ...
+                    'procStartTime', double(procStart), ...
+                    'procEndTime', double(procEnd), ...
+                    'postTime', 0, ...
+                    'turnoverTime', 0, ...
+                    'requiredResourceIds', caseObj.RequiredResourceIds);
+                if isnan(entry.assignedLab) || entry.assignedLab < 1
+                    % If lab index is missing, skip; locked without lab cannot be enforced
+                    fprintf('[UNSCH-ONLY] skip future lock (no lab): %s\n', char(caseObj.CaseId));
+                    outIdx = outIdx - 1; %#ok<FXSET>
+                    continue;
+                end
+                entries{end+1,1} = entry; %#ok<AGROW>
+            end
+            if isempty(entries)
+                assignments = struct('caseID', {}, 'operator', {}, 'procedure', {}, 'assignedLab', {}, ...
+                                      'startTime', {}, 'procStartTime', {}, 'procEndTime', {}, ...
+                                      'postTime', {}, 'turnoverTime', {}, 'requiredResourceIds', {});
+            else
+                assignments = vertcat(entries{:});
+            end
+            % Suppress debug print in release
+        end
+
+        function locks = normalizeLockAssignments(obj, locks)
+            %NORMALIZELOCKASSIGNMENTS Ensure lock structs share a common schema
+            if isempty(locks)
+                return;
+            end
+            tmpl = struct( ...
+                'caseID', '', ...
+                'operator', '', ...
+                'procedure', '', ...
+                'caseNumber', NaN, ...
+                'assignedLab', [], ...
+                'startTime', NaN, ...
+                'procStartTime', NaN, ...
+                'procEndTime', NaN, ...
+                'postTime', 0, ...
+                'turnoverTime', 0, ...
+                'requiredResourceIds', {});
+
+            locks = obj.addMissingFieldsToStruct(locks, fieldnames(tmpl), tmpl);
+            % Reorder fields to a canonical order to allow concatenation
+            try
+                locks = orderfields(locks, tmpl);
+            catch
+                % If orderfields with template fails, at least ensure stable order
+                locks = orderfields(locks);
+            end
+
+            % Strip any non-canonical fields so arrays can concatenate safely
+            try
+                templateFields = fieldnames(tmpl);
+                currentFields = fieldnames(locks);
+                extraFields = setdiff(currentFields, templateFields);
+                if ~isempty(extraFields)
+                    locks = rmfield(locks, extraFields);
+                end
+                % Ensure final order again
+                locks = orderfields(locks, tmpl);
+            catch
             end
         end
 
@@ -1456,8 +1624,12 @@ classdef OptimizationController < handle
                 fieldName = fieldNames{i};
                 if ~isfield(structArray, fieldName)
                     defaultValue = [];
-                    if isfield(template, fieldName)
-                        defaultValue = template.(fieldName);
+                    if ~isempty(template) && isstruct(template) && isfield(template, fieldName)
+                        try
+                            defaultValue = template.(fieldName);
+                        catch
+                            defaultValue = [];
+                        end
                     end
                     for idx = 1:numel(structArray)
                         structArray(idx).(fieldName) = defaultValue;
