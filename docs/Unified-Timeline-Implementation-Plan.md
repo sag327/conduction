@@ -1954,6 +1954,15 @@ disp('✅ Sub-task 3.4.1 PASSED');
 **5.4 Comprehensive edge case testing**
 **5.5 Performance optimization (large schedules, frequent NOW drags)**
 **5.6 Accessibility audit (keyboard navigation, screen readers)**
+
+---
+
+## Future Work
+
+See `docs/Future-Work.md` for post‑preview features and cleanup tasks, including:
+- Locking model cleanup to remove legacy arrays and finalize per‑case locks only.
+- Regression tests for re‑opt flows, earliest‑start enforcement, and Proposed UX polish.
+- Prefer‑current‑labs tunables, per‑lab open/close windows, and operator availability.
 **5.7 Session save/load migration**
 **5.8 Documentation and help content**
 
