@@ -99,6 +99,61 @@ classdef ResourceOverlayRenderer
             delete(findobj(ax, 'Tag', 'ResourceHighlightMask'));
             delete(findobj(ax, 'Tag', 'ResourceHighlightOutline'));
         end
+
+        function updateCaseBlockMetadata(ax, schedule, app)
+            if isempty(ax) || ~isgraphics(ax)
+                return;
+            end
+            if isempty(schedule) || ~isa(schedule, 'conduction.DailySchedule')
+                return;
+            end
+
+            try
+                assignments = schedule.labAssignments();
+            catch
+                assignments = {};
+            end
+            if isempty(assignments)
+                return;
+            end
+
+            blocks = findobj(ax, 'Tag', 'CaseBlock');
+            if isempty(blocks)
+                return;
+            end
+
+            blockMap = containers.Map('KeyType','char','ValueType','any');
+            for idx = 1:numel(blocks)
+                payload = get(blocks(idx), 'UserData');
+                if isstruct(payload) && isfield(payload, 'caseId')
+                    caseId = char(string(payload.caseId));
+                    if strlength(caseId) > 0
+                        blockMap(caseId) = blocks(idx);
+                    end
+                end
+            end
+
+            if blockMap.Count == 0
+                return;
+            end
+
+            for labIdx = 1:numel(assignments)
+                labCases = assignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                labCases = labCases(:);
+                for caseIdx = 1:numel(labCases)
+                    caseStruct = labCases(caseIdx);
+                    caseId = conduction.gui.renderers.ResourceOverlayRenderer.extractCaseId(caseStruct);
+                    if strlength(caseId) == 0 || ~blockMap.isKey(char(caseId))
+                        continue;
+                    end
+                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(app, caseStruct, caseId);
+                    conduction.gui.renderers.ResourceOverlayRenderer.attachResourceMetadata(blockMap(char(caseId)), resources);
+                end
+            end
+        end
     end
 
     methods (Static, Access = private)
@@ -272,60 +327,7 @@ classdef ResourceOverlayRenderer
             uistack(mask, 'top');
         end
 
-        function updateCaseBlockMetadata(ax, schedule, app)
-            if isempty(ax) || ~isgraphics(ax)
-                return;
-            end
-            if isempty(schedule) || ~isa(schedule, 'conduction.DailySchedule')
-                return;
-            end
-
-            try
-                assignments = schedule.labAssignments();
-            catch
-                assignments = {};
-            end
-            if isempty(assignments)
-                return;
-            end
-
-            blocks = findobj(ax, 'Tag', 'CaseBlock');
-            if isempty(blocks)
-                return;
-            end
-
-            blockMap = containers.Map('KeyType','char','ValueType','any');
-            for idx = 1:numel(blocks)
-                payload = get(blocks(idx), 'UserData');
-                if isstruct(payload) && isfield(payload, 'caseId')
-                    caseId = char(string(payload.caseId));
-                    if strlength(caseId) > 0
-                        blockMap(caseId) = blocks(idx);
-                    end
-                end
-            end
-
-            if blockMap.Count == 0
-                return;
-            end
-
-            for labIdx = 1:numel(assignments)
-                labCases = assignments{labIdx};
-                if isempty(labCases)
-                    continue;
-                end
-                labCases = labCases(:);
-                for caseIdx = 1:numel(labCases)
-                    caseStruct = labCases(caseIdx);
-                    caseId = conduction.gui.renderers.ResourceOverlayRenderer.extractCaseId(caseStruct);
-                    if strlength(caseId) == 0 || ~blockMap.isKey(char(caseId))
-                        continue;
-                    end
-                    resources = conduction.gui.renderers.ResourceOverlayRenderer.extractResourceIds(app, caseStruct, caseId);
-                    conduction.gui.renderers.ResourceOverlayRenderer.attachResourceMetadata(blockMap(char(caseId)), resources);
-                end
-            end
-        end
+        
 
         function pos = computeCaseRectPosition(ax, caseStruct)
             pos = [];
