@@ -77,6 +77,24 @@ classdef OptimizationController < handle
                 lockedAssignments = app.OptimizationController.retainAutoLocksOnly(app, lockedAssignments);
             end
 
+            % SCOPE: If user selected "Unscheduled only", treat all currently
+            % scheduled FUTURE cases as frozen context (add them as locks) so we
+            % schedule only the unscheduled pool AROUND the existing plan.
+            if isReoptMode && ~includeScheduledFuture
+                try
+                    nowForLocks = app.getNowPosition();
+                    futureLocks = app.OptimizationController.extractFutureScheduledAssignments(app, nowForLocks);
+                    if ~isempty(futureLocks)
+                        if isempty(lockedAssignments)
+                            lockedAssignments = futureLocks;
+                        else
+                            lockedAssignments = [lockedAssignments(:); futureLocks(:)]; %#ok<AGROW>
+                        end
+                    end
+                catch
+                end
+            end
+
             % CASE-LOCKING: Ensure locked assignments remain valid for current lab count
             [lockedAssignments, removedLockIds] = app.OptimizationController.sanitizeLockedAssignments(app, lockedAssignments);
             if ~isempty(removedLockIds)
@@ -259,6 +277,59 @@ classdef OptimizationController < handle
                 if caseObj.shouldBeAutoLocked(nowMinutes)
                     outIdx = outIdx + 1;
                     filtered(outIdx) = entry; %#ok<AGROW>
+                end
+            end
+        end
+
+        function assignments = extractFutureScheduledAssignments(~, app, nowMinutes)
+            %EXTRACTFUTURESCHEDULEDASSIGNMENTS Return schedule entries after NOW as locks
+            assignments = struct([]);
+            if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())
+                return;
+            end
+            labAssignments = app.OptimizedSchedule.labAssignments();
+            outIdx = 0;
+            for labIdx = 1:numel(labAssignments)
+                labCases = labAssignments{labIdx};
+                if isempty(labCases), continue; end
+                for k = 1:numel(labCases)
+                    e = labCases(k);
+                    caseId = string(conduction.utils.conversion.asString(e.caseID));
+                    if strlength(caseId) == 0, continue; end
+
+                    % Determine start/proc/end times
+                    startM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'startTime','procStartTime'}, NaN);
+                    procStartM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'procStartTime', startM);
+                    procEndM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'procEndTime','endTime'}, NaN);
+                    postM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, 'postTime', 0);
+                    turnM = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'turnoverTime','turnoverMinutes'}, 0);
+
+                    if isnan(startM) || ~(startM > nowMinutes)
+                        continue; % only future scheduled
+                    end
+
+                    % Build lock entry compatible with buildLockedCaseConstraints
+                    outIdx = outIdx + 1;
+                    entry = struct();
+                    entry.caseID = char(caseId);
+                    entry.operator = conduction.gui.controllers.ScheduleRenderer.getFieldValue(e, {'operator','Operator','operatorName'}, "");
+                    entry.assignedLab = labIdx;
+                    entry.startTime = double(startM);
+                    entry.procStartTime = double(procStartM);
+                    entry.procEndTime = double(procEndM);
+                    entry.postTime = double(postM);
+                    entry.turnoverTime = double(turnM);
+                    entry.requiredResourceIds = {};
+
+                    % Pull required resources from CaseStore
+                    try
+                        [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                        if ~isempty(caseObj)
+                            entry.requiredResourceIds = caseObj.RequiredResourceIds;
+                        end
+                    catch
+                    end
+                    assignments(outIdx,1) = entry; %#ok<AGROW>
                 end
             end
         end
