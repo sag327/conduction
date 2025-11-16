@@ -1,6 +1,13 @@
 function buildOptimizationTab(app, optimizationGrid)
 %BUILDOPTIMIZATIONTAB Populate the Optimization tab controls.
 
+    % Tighten overall grid spacing to make room for scope controls
+    try
+        optimizationGrid.RowSpacing = 2;
+        optimizationGrid.ColumnSpacing = 6;
+        optimizationGrid.Padding = [4 4 4 4];
+    catch
+    end
     if isempty(app.Opts) || ~isfield(app.Opts, 'metric')
         app.initializeOptimizationDefaults();
     end
@@ -40,9 +47,9 @@ function buildOptimizationTab(app, optimizationGrid)
     availableWrapper.Layout.Column = 2;
     % Cap the visual height of the Available Labs area to expose the Scope panel
     % The inner panel is scrollable, so a fixed pixel height improves layout.
-    availableWrapper.RowHeight = {24, 64};
+    availableWrapper.RowHeight = {24, 48};
     availableWrapper.ColumnWidth = {'1x'};
-    availableWrapper.RowSpacing = 4;
+    availableWrapper.RowSpacing = 2;
     availableWrapper.Padding = [0 0 0 0];
 
     app.OptAvailableSelectAll = uicheckbox(availableWrapper);
@@ -176,8 +183,8 @@ function buildOptimizationTab(app, optimizationGrid)
     scopeGrid = uigridlayout(scopePanel, [4, 2]);
     scopeGrid.ColumnWidth = {'fit', '1x'};
     scopeGrid.RowHeight = {'fit','fit','fit','fit'};
-    scopeGrid.RowSpacing = 6;
-    scopeGrid.Padding = [10 8 10 8];
+    scopeGrid.RowSpacing = 4;
+    scopeGrid.Padding = [8 6 8 6];
 
     app.ScopeSummaryLabel = uilabel(scopeGrid);
     app.ScopeSummaryLabel.Layout.Row = 1;
@@ -216,4 +223,23 @@ function buildOptimizationTab(app, optimizationGrid)
     app.ScopePreferLabsCheckBox.ValueChangedFcn = @(src, ~) app.onScopePreferLabsChanged(logical(src.Value));
 
     app.ScopeControlsPanel = scopePanel;
+
+    % Give the bottom scope row more breathing room; compress others
+    try
+        optimizationGrid.RowHeight = {
+            'fit', ...   % 1 metric
+            'fit', ...   % 2 labs
+            'fit', ...   % 3 available label
+            48,    ...   % 4 available list (scrolls)
+            'fit', ...   % 5 case filter
+            'fit', ...   % 6 turnover
+            'fit', ...   % 7 setup
+            'fit', ...   % 8 post
+            'fit', ...   % 9 max operator
+            'fit', ...   % 10 enforce midnight
+            'fit', ...   % 11 Outpt/Inpt handling
+            140     ...  % 12 Re-optimization Scope
+        };
+    catch
+    end
 end
