@@ -139,7 +139,7 @@ classdef ScheduleRenderer < handle
             end
 
             app.updateResourceLegendContents(resourceTypes, resourceSummary);
-            obj.refreshResourceHighlights(app);
+            obj.refreshResourceHighlightsForAxes(app, app.ScheduleAxes, dailySchedule, resourceTypes);
 
 
             app.OptimizationController.updateOptimizationStatus(app);
@@ -164,34 +164,87 @@ classdef ScheduleRenderer < handle
             obj.applyMultiSelectionHighlights(app);
         end
 
-        function refreshResourceHighlights(~, app)
+        function refreshResourceHighlights(obj, app)
             % Ensure we have a valid axes to draw on
-            if isempty(app)
-                return;
-            end
-            if ~isprop(app, 'ScheduleAxes') || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+            if isempty(app) || ~isprop(app, 'ScheduleAxes') || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
                 return;
             end
 
-            % Gather resource types from app state (legend/store snapshot)
+            scheduleForRender = app.getScheduleForRendering();
+            if isempty(scheduleForRender)
+                conduction.gui.renderers.ResourceOverlayRenderer.clear(app.ScheduleAxes);
+                return;
+            end
+
             resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
             try
                 if ~isempty(app.LastResourceMetadata) && isfield(app.LastResourceMetadata, 'resourceTypes')
                     resourceTypes = app.LastResourceMetadata.resourceTypes;
                 end
             catch
-                % Ignore access issues; fall back to empty
             end
 
-            % Choose the correct schedule to overlay (respects time control)
-            scheduleForRender = app.getScheduleForRendering();
-            if isempty(scheduleForRender)
-                conduction.gui.renderers.ResourceOverlayRenderer.clear(app);
+            obj.refreshResourceHighlightsForAxes(app, app.ScheduleAxes, scheduleForRender, resourceTypes);
+        end
+
+        function refreshProposedResourceHighlights(obj, app, annotatedSchedule)
+            if isempty(app) || ~isprop(app, 'ProposedAxes') || isempty(app.ProposedAxes) || ~isvalid(app.ProposedAxes)
                 return;
             end
 
-            % Draw overlays
-            conduction.gui.renderers.ResourceOverlayRenderer.draw(app, scheduleForRender, resourceTypes, app.ResourceHighlightIds);
+            if nargin < 3 || isempty(annotatedSchedule)
+                if isempty(app.ProposedSchedule)
+                    conduction.gui.renderers.ResourceOverlayRenderer.clear(app.ProposedAxes);
+                    return;
+                end
+                annotatedSchedule = obj.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule);
+            end
+
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            try
+                if ~isempty(app.LastResourceMetadata) && isfield(app.LastResourceMetadata, 'resourceTypes')
+                    resourceTypes = app.LastResourceMetadata.resourceTypes;
+                end
+            catch
+            end
+            if isempty(resourceTypes)
+                resourceTypes = obj.collectResourceTypes(app);
+            end
+
+            obj.refreshResourceHighlightsForAxes(app, app.ProposedAxes, annotatedSchedule, resourceTypes);
+        end
+
+        function refreshAllResourceHighlights(obj, app)
+            obj.refreshResourceHighlights(app);
+            obj.refreshProposedResourceHighlights(app);
+        end
+
+        function refreshResourceHighlightsForAxes(obj, app, axesHandle, schedule, resourceTypes)
+            if nargin < 5
+                resourceTypes = obj.collectResourceTypes(app);
+            end
+            if isempty(axesHandle) || ~isvalid(axesHandle)
+                return;
+            end
+            if nargin < 4 || isempty(schedule) || ~isa(schedule, 'conduction.DailySchedule')
+                conduction.gui.renderers.ResourceOverlayRenderer.clear(axesHandle);
+                return;
+            end
+
+            highlightIds = string(app.ResourceHighlightIds);
+            conduction.gui.renderers.ResourceOverlayRenderer.draw(axesHandle, schedule, resourceTypes, highlightIds);
+        end
+
+        function resourceTypes = collectResourceTypes(~, app)
+            resourceTypes = struct('Id', {}, 'Name', {}, 'Capacity', {}, 'Color', {}, 'Pattern', {}, 'IsTracked', {});
+            if isempty(app) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            store = app.CaseManager.getResourceStore();
+            if isempty(store) || ~isvalid(store)
+                return;
+            end
+            resourceTypes = store.snapshot();
         end
 
         % REALTIME-SCHEDULING: NOW Line Drag Functionality

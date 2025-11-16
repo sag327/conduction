@@ -71,7 +71,7 @@ classdef ResourceController < handle
 
             if hasChanges
                 obj.refreshResourceLegend(app);
-                app.ScheduleRenderer.refreshResourceHighlights(app);
+                app.ScheduleRenderer.refreshAllResourceHighlights(app);
             end
         end
 
@@ -514,7 +514,7 @@ classdef ResourceController < handle
             app.ResourceLegend.setData(resourceTypes, resourceSummary);
             app.ResourceLegend.setHighlights(trimmedHighlight, true);
 
-            app.ScheduleRenderer.refreshResourceHighlights(app);
+            app.ScheduleRenderer.refreshAllResourceHighlights(app);
         end
 
         function onResourceLegendHighlightChanged(obj, app, highlightIds)
@@ -522,7 +522,7 @@ classdef ResourceController < handle
             if ~isequal(highlightIds, app.ResourceHighlightIds)
                 app.ResourceHighlightIds = highlightIds;
             end
-            app.ScheduleRenderer.refreshResourceHighlights(app);
+            app.ScheduleRenderer.refreshAllResourceHighlights(app);
         end
 
         function [store, isValid] = getValidatedResourceStore(~, app)

@@ -2668,6 +2668,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ProposedSourceVersion = 0;
                 if ~isempty(app.ProposedAxes) && isvalid(app.ProposedAxes)
                     cla(app.ProposedAxes);
+                    conduction.gui.renderers.ResourceOverlayRenderer.clear(app.ProposedAxes);
                 end
                 if ~isempty(app.ProposedSummaryLabel) && isvalid(app.ProposedSummaryLabel)
                     app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
@@ -2687,6 +2688,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             cla(app.ProposedAxes);
+            conduction.gui.renderers.ResourceOverlayRenderer.clear(app.ProposedAxes);
 
             if isempty(app.ProposedSchedule)
                 return;
@@ -2702,6 +2704,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'OperatorColors', app.OperatorColors, ...
                 'CaseClickedFcn', @(varargin) [], ...
                 'BackgroundClickedFcn', @(varargin) []);
+
+            app.ScheduleRenderer.refreshProposedResourceHighlights(app, annotatedSchedule);
 
             nowLine = findobj(app.ProposedAxes, 'Tag', 'NowLine');
             if ~isempty(nowLine)
@@ -3700,7 +3704,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.ResourceLegend.setHighlights(string.empty(0, 1), true);
                 end
             end
-            app.ScheduleRenderer.refreshResourceHighlights(app);
+            app.ScheduleRenderer.refreshAllResourceHighlights(app);
 
             % Apply restored current time (used for baseline scheduling reference)
             app.CaseManager.setCurrentTime(restoredCurrentTime);
