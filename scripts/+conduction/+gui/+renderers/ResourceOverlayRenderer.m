@@ -192,39 +192,41 @@ classdef ResourceOverlayRenderer
         end
 
         function resources = extractResourceIds(app, caseStruct, caseId)
-            resources = string.empty(0, 1);
+            scheduleResources = string.empty(0, 1);
             candidates = {"requiredResources", "requiredResourceIds", "RequiredResourceIds"};
             for idx = 1:numel(candidates)
                 fieldName = candidates{idx};
                 if isfield(caseStruct, fieldName) && ~isempty(caseStruct.(fieldName))
                     raw = caseStruct.(fieldName);
                     if isstring(raw)
-                        resources = raw(:);
+                        scheduleResources = raw(:);
                     elseif iscellstr(raw) || ischar(raw)
-                        resources = string(raw);
-                        resources = resources(:);
+                        scheduleResources = string(raw);
+                        scheduleResources = scheduleResources(:);
                     elseif isnumeric(raw)
-                        resources = string(raw(:));
+                        scheduleResources = string(raw(:));
                     end
                     break;
                 end
             end
 
-            mask = strlength(resources) > 0;
-            resources = unique(resources(mask), 'stable');
-
-            if isempty(resources) && nargin >= 3 && ~isempty(app)
+            caseManagerResources = string.empty(0, 1);
+            if nargin >= 3 && ~isempty(app)
                 try
                     if isprop(app, 'CaseManager') && ~isempty(app.CaseManager)
                         [caseObj, ~] = app.CaseManager.findCaseById(caseId);
                         if ~isempty(caseObj)
-                            resources = caseObj.listRequiredResources();
+                            caseManagerResources = caseObj.listRequiredResources();
                         end
                     end
                 catch
                     % ignore lookup failures
                 end
             end
+
+            combined = [scheduleResources(:); caseManagerResources(:)];
+            mask = strlength(combined) > 0;
+            resources = unique(combined(mask), 'stable');
         end
 
         function attachResourceMetadata(rectHandle, resources)
