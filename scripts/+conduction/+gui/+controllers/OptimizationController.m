@@ -1095,10 +1095,26 @@ classdef OptimizationController < handle
                 return;
             end
 
+            % Compute locked ids from per-case flags and NOW-derived auto-lock
+            lockedIds = string.empty(0,1);
+            try
+                nowM = app.getNowPosition();
+                if ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0
+                    for i = 1:app.CaseManager.CaseCount
+                        c = app.CaseManager.getCase(i);
+                        if c.getComputedLock(nowM)
+                            lockedIds(end+1,1) = c.CaseId; %#ok<AGROW>
+                        end
+                    end
+                end
+            catch
+                lockedIds = string.empty(0,1);
+            end
+
             conduction.visualizeDailySchedule(app.OptimizedSchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
-                'LockedCaseIds', app.LockedCaseIds, ...  % CASE-LOCKING: Pass locked case IDs
+                'LockedCaseIds', lockedIds, ...  % CASE-LOCKING: computed from per-case flags
                 'OperatorColors', app.OperatorColors);  % Pass persistent operator colors
         end
 

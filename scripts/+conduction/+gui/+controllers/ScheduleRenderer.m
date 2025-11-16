@@ -92,6 +92,21 @@ classdef ScheduleRenderer < handle
             % UNIFIED-TIMELINE: Always render NOW line (use app.NowPositionMinutes)
             currentTime = app.getNowPosition();
 
+            % Build locked case ids on demand from per-case flags and NOW-derived auto-lock
+            lockedIds = string.empty(0,1);
+            try
+                if ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0
+                    for i = 1:app.CaseManager.CaseCount
+                        c = app.CaseManager.getCase(i);
+                        if c.getComputedLock(currentTime)
+                            lockedIds(end+1,1) = c.CaseId; %#ok<AGROW>
+                        end
+                    end
+                end
+            catch
+                lockedIds = string.empty(0,1);
+            end
+
             % Detect and cache overlapping cases before rendering
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
@@ -101,7 +116,7 @@ classdef ScheduleRenderer < handle
                 'ShowLabels', true, ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
                 'BackgroundClickedFcn', @() app.onScheduleBackgroundClicked(), ...
-                'LockedCaseIds', app.LockedCaseIds, ...
+                'LockedCaseIds', lockedIds, ...
                 'SelectedCaseId', "", ...
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
