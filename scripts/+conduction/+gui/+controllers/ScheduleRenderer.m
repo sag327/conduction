@@ -2818,6 +2818,15 @@ classdef ScheduleRenderer < handle
             else
                 nowMinutes = nowOverride;
             end
+
+            % DEBUG: Proposed NOW annotation trace (remove after investigation)
+            try
+                if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                        app.CanvasTabGroup.SelectedTab == app.ProposedTab
+                    fprintf('[DEBUG][annotateStatus] proposed tab; now=%.2f\n', nowMinutes);
+                end
+            catch
+            end
             labs = schedule.Labs;
             assignments = schedule.labAssignments();
 
