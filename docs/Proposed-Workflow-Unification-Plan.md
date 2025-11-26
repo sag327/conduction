@@ -48,6 +48,67 @@ So users can preview, accept, or discard changes consistently, with scope contro
 - Staleness
   - Any context changes (NOW move, options, labs/resources) increment the change counter; banner appears in Proposed with “Re‑run with current state.”
 
+- KPI metrics in Proposed
+  - KPIs (utilization/idle/flip and KPI bar) recalculate dynamically for the Proposed schedule whenever the proposal changes: after a re‑optimization, after interactive edits (drag/resize/lock), after drawer resource assignments, and after Proposed‑NOW adjustments.
+  - The same AnalyticsRenderer routines are reused; Proposed passes the Proposed schedule to the KPI update calls (axes‑agnostic where applicable) to keep behavior DRY.
+
+## Proposed‑NOW Sandbox (Dual‑NOW Model)
+
+Goal: Allow moving the NOW line inside the Proposed tab for bulk operations (e.g., locking several cases at once) without mutating the global NOW or other global context until the user accepts.
+
+What this means
+- Dual NOW values:
+  - Baseline NOW: `app.NowPositionMinutes` (global; drives main Schedule and status).
+  - Proposed NOW: `app.ProposedNowMinutes` (sandbox override; NaN means “mirror baseline NOW”).
+- Proposed NOW is draggable on the Proposed tab only and affects only the preview and re‑optimization scope/locks performed from within Proposed. Baseline NOW remains unchanged unless explicitly applied.
+
+Data model additions
+- `app.ProposedNowMinutes` (double; NaN when unset).
+- `app.ProposedLockOverrides` (string[]): case IDs locked in the Proposed sandbox (e.g., by “lock before Proposed NOW” action or per‑case toggles).
+- `app.ProposedMetadata.ProposedSourceNowMinutes` (double) to record the NOW used when the proposal was generated (for staleness detection).
+
+UI behavior
+- Proposed tab shows a draggable NOW line (using Proposed NOW if set; otherwise the baseline NOW). The original baseline NOW may be drawn as a thin dashed reference line for orientation.
+- Actions row in Proposed:
+  - “Lock cases before Proposed NOW” — updates `app.ProposedLockOverrides` only (no baseline changes).
+  - “Apply Proposed NOW to Baseline” — optional one‑click to copy Proposed NOW to `app.NowPositionMinutes`.
+  - “Reset Proposed NOW” — clears override (mirror baseline again).
+- Editing and dragging within Proposed operate against `app.ProposedSchedule` and `app.ProposedLockOverrides` (sandbox), not the baseline schedule/locks.
+
+Threading into solver (no global mutation)
+- When executing optimization from Proposed, pass an explicit `nowMinutes` override sourced from `app.ProposedNowMinutes` (fallback to baseline when NaN):
+  - Case filtering: `CaseManager.filterCasesByNowPosition(cases, nowOverride, includeScheduledFuture)`.
+  - Future locks (unscheduled‑only): build from `nowOverride` via `buildFutureLocksFromCaseStore` / `extractFutureScheduledAssignments`.
+  - Earliest starts per lab: compute using `nowOverride` in `computeLabEarliestStartsFromSchedule` so model time grids enforce “no placements before Proposed‑NOW”.
+- Rendering in Proposed uses `annotateScheduleWithDerivedStatus(app, schedule, nowOverride)` so statuses match the sandbox time.
+
+Accept/Discard semantics
+- Accept copies the Proposed schedule to baseline as usual. Baseline NOW is not changed unless the user chooses “Apply Proposed NOW to Baseline”. Sandbox locks (`ProposedLockOverrides`) are merged into baseline locks only on Accept.
+- Discard clears `app.ProposedSchedule`, `app.ProposedNowMinutes`, and `app.ProposedLockOverrides` (baseline remains untouched).
+
+Staleness rules
+- Record `ProposedSourceNowMinutes` when the proposal is generated. If `app.ProposedNowMinutes` changes from that value, show a non‑blocking banner in Proposed: “Proposed NOW changed; re‑run to enforce.”
+- Baseline context mutations (labs/resources/options/locks) still increment the shared `OptimizationChangeCounter` and can also mark the proposal stale.
+
+Implementation notes (DRY/KISS)
+- Generalize NOW drag to be axes‑aware:
+  - Add `enableNowLineDragOnAxes(app, axes, commitFcn)` and reuse it for main Schedule (commit = `app.setNowPosition`) and Proposed (commit = set `app.ProposedNowMinutes` + re‑annotate Proposed + mark proposal stale).
+  - Refactor existing NOW drag helpers to accept an axes handle instead of using only `app.ScheduleAxes`.
+- Do not alter `app.setNowPosition` from Proposed; only mutate `app.ProposedNowMinutes` inside the sandbox.
+
+CLI tests (headless)
+- Filtering honors Proposed‑NOW:
+  - Build a mixed set; assert `filterCasesByNowPosition` with `nowOverride` excludes only pre‑NOW starts.
+- Earliest‑start bounds:
+  - With an in‑progress case before Proposed‑NOW, computed per‑lab earliest start ≥ case end + post + turnover.
+- Unscheduled‑only locks:
+  - Future locks built from Proposed‑NOW are included and preserve post/turnover; Proposed overlay shows all frozen future cases.
+- Accept/Discard:
+  - Accept does not change baseline NOW unless explicitly applied; Discard resets Proposed NOW and sandbox locks.
+
+- KPI recomputation (Proposed):
+  - After a Proposed edit (e.g., drag one case +10 min), recompute KPIs against the Proposed schedule and assert KPI labels or computed metrics change consistently with the delta.
+
 ## Implementation Plan (phased)
 
 Phase 1 — Routing (unified) + Auto‑apply first run
@@ -227,6 +288,9 @@ delete(app);
   - Add `EnablePreviewInPlanning` property (and session save/load if we persist it).
   - `showProposedTab`, `hideProposedTab`: also manage read‑only overlay lifecycle.
   - `updateProposedSummary`: handle empty baseline case.
+- `scripts/+conduction/+gui/+controllers/ScheduleRenderer.m` and `scripts/+conduction/+gui/+controllers/AnalyticsRenderer.m`
+  - Expose/update helpers so KPI bar and analytics can be recomputed for an arbitrary schedule/axes context.
+  - When Proposed tab renders or when Proposed schedule mutates (opt result, drag/resize/lock, drawer resource edits, Proposed‑NOW change), call KPI recompute with the Proposed schedule.
 - `scripts/+conduction/+gui/+controllers/ScheduleRenderer.m` or a small helper
   - Glass‑pane overlay management (create/destroy; z‑order; resize handling).
 
@@ -242,8 +306,18 @@ delete(app);
 - First optimize (no baseline): auto‑applies result and shows Undo toast.
 - Subsequent optimizes (planning and re‑opt): route to Proposed, respect scope options; Accept/Discard works.
 - Scope options work identically in both modes; unscheduled‑only freezes scheduled context; resources respected.
-- Staleness banner appears when context changes; “Re‑run with current state” works.
-- Schedule tab is non‑interactive during proposal via overlay.
+- Staleness banner appears when context changes; “Re-run with current state” works.
+- Schedule tab is non-interactive during proposal via overlay.
+- KPI metrics (utilization/idle/flip + KPI bar) update dynamically in the Proposed tab after any change to the proposal (re-opt or interactive edits), using the same analytics code path as the main schedule.
 
 ## Rollback
-- Remove the preview checkbox and planning‑mode routing; revert to current behavior (Proposed only in re‑optimization).
+- Remove the preview checkbox and planning-mode routing; revert to current behavior (Proposed only in re-optimization).
+
+## Minimal Refactor/DRY Plan (limit file bloat)
+- Keep heavy files stable: `ProspectiveSchedulerApp` (4.3k LOC) only gets thin orchestration; push new logic into small helpers/controllers instead of new nested functions.
+- Axes-agnostic interactions: Extract existing Schedule interactions into `ScheduleRenderer.enableCaseInteractionOnAxes(app, axes, ctx)` and `enableNowLineDragOnAxes(app, axes, commitFcn)`; reuse for Schedule/Proposed to avoid duplicating drag/selection/NOW wiring.
+- Overlay + summary helpers: Add a tiny overlay utility (e.g., `ScheduleRenderer.ensureReadOnlyOverlay(axes, mode)`) and keep proposal summaries in a single `updateProposedSummary(app)` path called by all proposal mutations.
+- Proposed state bundle: Add `resetProposedState(app)` / `applyProposedState(app)` helpers (could live in a small `ProposedState` utility) so Accept/Discard/auto-apply touch one surface instead of hand-editing app fields.
+- Analytics/KPIs by context: Provide a single entry (e.g., `AnalyticsRenderer.renderForSchedule(app, schedule, outcome, axesSet)`) so main/Proposed both reuse it; no bespoke KPI code per tab.
+- Staleness/undo reuse: Reuse the existing `OptimizationChangeCounter` + `ProposedSourceVersion` check and the current Undo toast plumbing—no new staleness flags or toasts scattered around.
+- Timer cleanup reuse: Any new timers (if needed for overlay sizing or Proposed-only updates) must use the existing `clearTimerProperty` pattern to avoid adding cleanup branches in `delete(app)`.
