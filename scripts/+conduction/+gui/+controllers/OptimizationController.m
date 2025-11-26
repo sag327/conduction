@@ -54,7 +54,7 @@ classdef OptimizationController < handle
             includeScheduledFuture = ~(app.ReoptIncludeScope == "unscheduled");
 
             if shouldPreview
-                nowMinutes = app.getNowPosition();
+                nowMinutes = app.getEffectiveProposedNowMinutes();
                 [casesStruct, excludedCount, stats] = app.CaseManager.filterCasesByNowPosition( ...
                     casesStruct, nowMinutes, includeScheduledFuture);
                 app.updateScopeSummaryLabel();
@@ -162,8 +162,13 @@ classdef OptimizationController < handle
 
             % Build scheduling options upfront so we can validate locks against the optimizer grid
             scheduleOptions = [];
+            if exist('nowMinutes', 'var')
+                nowOverride = nowMinutes;
+            else
+                nowOverride = [];
+            end
             try
-                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints);
+                scheduleOptions = app.OptimizationController.buildSchedulingOptions(app, lockedConstraints, nowOverride);
             catch ME
                 uialert(app.UIFigure, sprintf('Failed to build scheduling options: %s', ME.message), 'Optimization');
                 return;
@@ -236,8 +241,12 @@ classdef OptimizationController < handle
                     'IncludeScheduledFuture', includeScheduledFuture, ...
                     'RespectLocks', app.ReoptRespectLocks, ...
                     'PreferCurrentLabs', app.ReoptPreferCurrentLabs);
+                if exist('nowMinutes', 'var')
+                    metadata.ProposedSourceNowMinutes = nowMinutes;
+                end
 
                 if shouldPreview
+                    app.ProposedNowMinutes = NaN;
                     app.ProposedSchedule = dailySchedule;
                     app.ProposedOutcome = outcome;
                     app.ProposedMetadata = metadata;
@@ -704,9 +713,12 @@ classdef OptimizationController < handle
             removedCaseIds = unique(removedCaseIds(removedCaseIds ~= ""), 'stable');
         end
 
-        function scheduleOptions = buildSchedulingOptions(obj, app, lockedConstraints)
+        function scheduleOptions = buildSchedulingOptions(obj, app, lockedConstraints, nowOverride)
             if nargin < 3
                 lockedConstraints = struct([]);
+            end
+            if nargin < 4
+                nowOverride = [];
             end
 
             numLabs = max(1, round(app.Opts.labs));
@@ -724,7 +736,7 @@ classdef OptimizationController < handle
             % Compute per-lab earliest start minutes (freeze context before NOW)
             earliest = double.empty(1, 0);
             if ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode()
-                earliest = obj.computeLabEarliestStartsFromSchedule(app, numLabs);
+                earliest = obj.computeLabEarliestStartsFromSchedule(app, numLabs, nowOverride);
             end
 
             % Get OutpatientInpatientMode with fallback to default
@@ -756,8 +768,12 @@ classdef OptimizationController < handle
                 'OutpatientInpatientMode', outpatientInpatientMode);
         end
 
-        function earliest = computeLabEarliestStartsFromSchedule(~, app, numLabs)
-            nowMinutes = app.getNowPosition();
+        function earliest = computeLabEarliestStartsFromSchedule(~, app, numLabs, nowOverride)
+            if nargin < 4 || isempty(nowOverride)
+                nowMinutes = app.getNowPosition();
+            else
+                nowMinutes = nowOverride;
+            end
             earliest = repmat(nowMinutes, 1, numLabs);
             try
                 if isempty(app.OptimizedSchedule) || isempty(app.OptimizedSchedule.labAssignments())

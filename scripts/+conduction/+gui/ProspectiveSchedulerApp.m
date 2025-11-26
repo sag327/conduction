@@ -926,6 +926,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ProposedOutcome struct = struct()
         ProposedMetadata struct = struct()
         ProposedSourceVersion double = 0
+        ProposedNowMinutes double = NaN
         UndoSchedule conduction.DailySchedule = conduction.DailySchedule.empty
         UndoMetadata struct = struct()
         UndoOutcome struct = struct()
@@ -2518,6 +2519,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if newTab == app.CanvasAnalyzeTab
                 conduction.gui.app.renderAnalyticsTab(app);
             end
+            app.refreshKPIForActiveSchedule();
         end
 
         function MainTabGroupSelectionChanged(app, event)
@@ -2576,6 +2578,27 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.NowPositionMinutes = timeMinutes;
             app.markDirty();  % Session state changed
             app.refreshOptimizeButtonLabel();
+        end
+
+        function setProposedNowPosition(app, timeMinutes)
+            if isnan(timeMinutes)
+                app.ProposedNowMinutes = NaN;
+                return;
+            end
+            timeMinutes = max(0, min(1440, timeMinutes));
+            app.ProposedNowMinutes = timeMinutes;
+            app.refreshProposedStalenessBanner();
+        end
+
+        function minutes = getProposedNowPosition(app)
+            minutes = app.ProposedNowMinutes;
+        end
+
+        function minutes = getEffectiveProposedNowMinutes(app)
+            minutes = app.ProposedNowMinutes;
+            if isnan(minutes)
+                minutes = app.getNowPosition();
+            end
         end
 
         function updateScheduleReadOnlyOverlay(app)
@@ -2639,6 +2662,23 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
+        function refreshKPIForActiveSchedule(app)
+            if isempty(app.AnalyticsRenderer) || ~isvalid(app.AnalyticsRenderer)
+                return;
+            end
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                    app.CanvasTabGroup.SelectedTab == app.ProposedTab && ~isempty(app.ProposedSchedule)
+                schedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus( ...
+                    app, app.ProposedSchedule, app.getEffectiveProposedNowMinutes());
+                app.AnalyticsRenderer.updateKPIBar(app, schedule);
+            else
+                schedule = app.getScheduleForRendering();
+                if ~isempty(schedule)
+                    app.AnalyticsRenderer.updateKPIBar(app, schedule);
+                end
+            end
+        end
+
         function isReoptMode = isReoptimizationMode(app)
             % Determine if NOW is past the first scheduled case
             isReoptMode = (app.getOptimizeButtonLabel() == "Re-optimize Remaining");
@@ -2671,6 +2711,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ProposedOutcome = struct();
                 app.ProposedMetadata = struct();
                 app.ProposedSourceVersion = 0;
+                app.ProposedNowMinutes = NaN;
                 if ~isempty(app.ProposedAxes) && isvalid(app.ProposedAxes)
                     cla(app.ProposedAxes);
                     conduction.gui.renderers.ResourceOverlayRenderer.clear(app.ProposedAxes);
@@ -2707,8 +2748,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule);
-            nowMinutes = app.getNowPosition();
+            nowMinutes = app.getEffectiveProposedNowMinutes();
+            annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule, nowMinutes);
             conduction.visualizeDailySchedule(annotatedSchedule, ...
                 'ScheduleAxes', app.ProposedAxes, ...
                 'Title', 'Proposed Schedule', ...
@@ -2725,11 +2766,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             nowLine = findobj(app.ProposedAxes, 'Tag', 'NowLine');
             if ~isempty(nowLine)
-                set(nowLine, 'ButtonDownFcn', []);
+                app.ScheduleRenderer.enableNowLineDragOnAxes(app, app.ProposedAxes, "proposed");
             end
             handleMarker = findobj(app.ProposedAxes, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
-                set(handleMarker, 'ButtonDownFcn', []);
+                app.ScheduleRenderer.enableNowLineDragOnAxes(app, app.ProposedAxes, "proposed");
             end
 
             app.refreshProposedStalenessBanner();
@@ -2756,10 +2797,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.ProposedSchedule)
                 return;
             end
-            if app.ProposedSourceVersion <= 0
+            if app.ProposedSourceVersion > 0 && app.OptimizationChangeCounter > app.ProposedSourceVersion
+                tf = true;
                 return;
             end
-            tf = app.OptimizationChangeCounter > app.ProposedSourceVersion;
+            if isfield(app.ProposedMetadata, 'ProposedSourceNowMinutes')
+                baselineNowUsed = app.ProposedMetadata.ProposedSourceNowMinutes;
+                effectiveNow = app.getEffectiveProposedNowMinutes();
+                if ~isnan(baselineNowUsed) && abs(effectiveNow - baselineNowUsed) > eps
+                    tf = true;
+                    return;
+                end
+            end
         end
 
         function updateProposedSummary(app)

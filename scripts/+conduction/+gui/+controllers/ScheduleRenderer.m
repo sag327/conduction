@@ -317,8 +317,19 @@ classdef ScheduleRenderer < handle
 
         % REALTIME-SCHEDULING: NOW Line Drag Functionality
         function enableNowLineDrag(obj, app)
-            %ENABLENOWLINEDRAG Make NOW line draggable
-            nowLine = findobj(app.ScheduleAxes, 'Tag', 'NowLine');
+            %ENABLENOWLINEDRAG Make NOW line draggable on main schedule
+            obj.enableNowLineDragOnAxes(app, app.ScheduleAxes, "baseline");
+        end
+
+        function enableNowLineDragOnAxes(obj, app, axesHandle, mode)
+            if nargin < 4
+                mode = "baseline";
+            end
+            if isempty(axesHandle) || ~isvalid(axesHandle)
+                return;
+            end
+            %ENABLENOWLINEDRAG Make NOW line draggable for given axes
+            nowLine = findobj(axesHandle, 'Tag', 'NowLine');
             if isempty(nowLine)
                 return;
             end
@@ -327,12 +338,12 @@ classdef ScheduleRenderer < handle
             nowLine.LineWidth = 4;
             nowLine.LineStyle = '-';
             nowLine.Color = [1, 1, 1];
-            nowLine.ButtonDownFcn = @(src, event) obj.startDragNowLine(app, src);
+            nowLine.ButtonDownFcn = @(src, event) obj.startDragNowLine(app, src, axesHandle, mode);
 
-            handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
+            handleMarker = findobj(axesHandle, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
                 set(handleMarker, 'MarkerSize', 18, ...
-                    'ButtonDownFcn', @(src, event) obj.startDragNowLine(app, src));
+                    'ButtonDownFcn', @(src, event) obj.startDragNowLine(app, src, axesHandle, mode));
             end
         end
 
@@ -1058,10 +1069,16 @@ classdef ScheduleRenderer < handle
             end
         end
 
-        function startDragNowLine(obj, app, lineHandle)
+        function startDragNowLine(obj, app, lineHandle, axesHandle, mode)
             %STARTDRAGNOWLINE Initialize drag state
+            if nargin < 4 || isempty(axesHandle)
+                axesHandle = app.ScheduleAxes;
+            end
+            if nargin < 5 || strlength(mode) == 0
+                mode = "baseline";
+            end
             if ~isgraphics(lineHandle) || ~strcmp(get(lineHandle, 'Tag'), 'NowLine')
-                primaryLine = findobj(app.ScheduleAxes, 'Tag', 'NowLine');
+                primaryLine = findobj(axesHandle, 'Tag', 'NowLine');
                 if isempty(primaryLine)
                     return;
                 end
@@ -1070,6 +1087,8 @@ classdef ScheduleRenderer < handle
 
             app.UIFigure.UserData.isDraggingNowLine = true;
             app.UIFigure.UserData.dragLineHandle = lineHandle;
+            app.UIFigure.UserData.dragAxesHandle = axesHandle;
+            app.UIFigure.UserData.dragMode = string(mode);
 
             % Set motion and release callbacks
             app.UIFigure.WindowButtonMotionFcn = @(~,~) obj.updateNowLinePosition(app);
@@ -1096,12 +1115,18 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            if isfield(app.UIFigure.UserData, 'dragAxesHandle') && isvalid(app.UIFigure.UserData.dragAxesHandle)
+                axesHandle = app.UIFigure.UserData.dragAxesHandle;
+            else
+                axesHandle = app.ScheduleAxes;
+            end
+
             % Get mouse position in axes coordinates
-            pt = app.ScheduleAxes.CurrentPoint;
+            pt = axesHandle.CurrentPoint;
             newTimeHour = pt(1, 2); % Y-coordinate in axes
 
             % Constrain to schedule bounds
-            yLimits = ylim(app.ScheduleAxes);
+            yLimits = ylim(axesHandle);
             newTimeHour = max(yLimits(1), min(yLimits(2), newTimeHour));
 
             % Update line position
@@ -1112,22 +1137,22 @@ classdef ScheduleRenderer < handle
             timeStr = app.ScheduleRenderer.minutesToTimeString(newTimeMinutes);
 
             % Find and update NOW label
-            nowLabel = findobj(app.ScheduleAxes, 'Tag', 'NowLabel');
+            nowLabel = findobj(axesHandle, 'Tag', 'NowLabel');
             if ~isempty(nowLabel)
                 nowLabel.String = sprintf('NOW (%s)', timeStr);
                 nowLabel.Position(2) = newTimeHour - 0.1;
             end
 
-            handleMarker = findobj(app.ScheduleAxes, 'Tag', 'NowHandle');
+            handleMarker = findobj(axesHandle, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
-                xLimits = xlim(app.ScheduleAxes);
+                xLimits = xlim(axesHandle);
                 set(handleMarker, 'XData', xLimits(1), 'YData', newTimeHour);
             end
 
-            shadowLine = findobj(app.ScheduleAxes, 'Tag', 'NowLineShadow');
+            shadowLine = findobj(axesHandle, 'Tag', 'NowLineShadow');
             if ~isempty(shadowLine)
                 shadowOffsetHours = 0.05;
-                yLimits = ylim(app.ScheduleAxes);
+                yLimits = ylim(axesHandle);
                 shadowY = min(yLimits(2), max(yLimits(1), newTimeHour + shadowOffsetHours));
                 set(shadowLine, 'YData', [shadowY, shadowY]);
             end
@@ -1157,6 +1182,18 @@ classdef ScheduleRenderer < handle
 
             % Get final time
             finalTimeMinutes = lineHandle.UserData.timeMinutes;
+
+            dragMode = "baseline";
+            if isfield(app.UIFigure.UserData, 'dragMode')
+                dragMode = string(app.UIFigure.UserData.dragMode);
+            end
+
+            if dragMode == "proposed"
+                app.setProposedNowPosition(finalTimeMinutes);
+                app.renderProposedSchedule();
+                app.updateProposedSummary();
+                return;
+            end
 
             % UNIFIED-TIMELINE: Update NOW position in app state
             app.setNowPosition(finalTimeMinutes);
@@ -2759,13 +2796,14 @@ classdef ScheduleRenderer < handle
             end
         end
 
-        function annotatedSchedule = annotateScheduleWithDerivedStatus(app, schedule)
+        function annotatedSchedule = annotateScheduleWithDerivedStatus(app, schedule, nowOverride)
             % Annotate schedule with status derived from NOW position
             % Replaces updateCaseStatusesByTime pattern
             %
             % Args:
             %   app: App instance
             %   schedule: DailySchedule to annotate
+            %   nowOverride: optional minutes value to use instead of app.NowPositionMinutes
             %
             % Returns:
             %   annotatedSchedule: DailySchedule with caseStatus fields updated
@@ -2775,7 +2813,11 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            nowMinutes = app.getNowPosition();
+            if nargin < 3 || isempty(nowOverride)
+                nowMinutes = app.getNowPosition();
+            else
+                nowMinutes = nowOverride;
+            end
             labs = schedule.Labs;
             assignments = schedule.labAssignments();
 
