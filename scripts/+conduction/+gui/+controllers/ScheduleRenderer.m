@@ -2818,15 +2818,6 @@ classdef ScheduleRenderer < handle
             else
                 nowMinutes = nowOverride;
             end
-
-            % DEBUG: Proposed NOW annotation trace (remove after investigation)
-            try
-                if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
-                        app.CanvasTabGroup.SelectedTab == app.ProposedTab
-                    fprintf('[DEBUG][annotateStatus] proposed tab; now=%.2f\n', nowMinutes);
-                end
-            catch
-            end
             labs = schedule.Labs;
             assignments = schedule.labAssignments();
 
@@ -2838,18 +2829,30 @@ classdef ScheduleRenderer < handle
                 end
 
                 for caseIdx = 1:numel(labCases)
-                    caseId = string(labCases(caseIdx).caseID);
-                    [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+                    entry = labCases(caseIdx);
+                    % Extract timings from the schedule entry itself (avoid CaseManager/baseline data)
+                    procStart = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'procStartTime','startTime','scheduleStartTime'}, NaN);
+                    procEnd = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'procEndTime','endTime','procedureEndTime'}, NaN);
+                    postTime = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, 'postTime', 0);
+                    turnTime = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'turnoverTime','turnoverMinutes'}, 0);
+                    status = "pending";
 
-                    if isempty(caseObj)
-                        continue;
+                    if ~isnan(procStart) && ~isnan(procEnd)
+                        endWithBuffers = procEnd + max(0, postTime) + max(0, turnTime);
+                        if nowMinutes < procStart
+                            status = "pending";
+                        elseif nowMinutes >= procStart && nowMinutes < endWithBuffers
+                            status = "in_progress";
+                        else
+                            status = "completed";
+                        end
                     end
 
-                    % Compute status from NOW position
-                    status = caseObj.getComputedStatus(nowMinutes);
-
-                    % Update schedule struct (for visualization only)
+                    % Update status fields commonly used by renderer
                     labCases(caseIdx).caseStatus = char(status);
+                    if isfield(labCases(caseIdx), 'CaseStatus')
+                        labCases(caseIdx).CaseStatus = char(status);
+                    end
                 end
 
                 % Update assignment

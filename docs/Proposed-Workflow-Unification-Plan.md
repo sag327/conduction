@@ -310,6 +310,7 @@ delete(app);
 - Schedule tab is non-interactive during proposal via overlay.
 - KPI metrics (utilization/idle/flip + KPI bar) update dynamically in the Proposed tab after any change to the proposal (re-opt or interactive edits), using the same analytics code path as the main schedule.
 - KPI context follows the active view: when switching between Schedule and Proposed tabs, KPI bar recalculates against the schedule currently shown, using the shared analytics entry point (no duplicated logic).
+- Status derivation in Proposed uses the Proposed schedule timings directly (no baseline CaseManager lookups) so NOW-based simulation reflects the previewed plan.
 
 ## Rollback
 - Remove the preview checkbox and planning-mode routing; revert to current behavior (Proposed only in re-optimization).
