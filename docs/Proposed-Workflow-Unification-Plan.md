@@ -312,6 +312,11 @@ delete(app);
 - KPI context follows the active view: when switching between Schedule and Proposed tabs, KPI bar recalculates against the schedule currently shown, using the shared analytics entry point (no duplicated logic).
 - Status derivation in Proposed uses the Proposed schedule timings directly (no baseline CaseManager lookups) so NOW-based simulation reflects the previewed plan.
 
+## Open Issues to Debug
+- Reset to Planning Mode: currently the NOW line does not move back to start-of-day and case statuses are not reset; needs investigation.
+- Schedule padding: vertical padding/offset above the Gantt differs between Schedule and Proposed tabs, making visual comparison harder; should be aligned.
+- Proposed selection/interaction: selecting cases in Proposed highlights table/drawer but not the visualized blocks; drag/resize is still not available in Proposed (not yet implemented, needs to be completed).
+
 ## Rollback
 - Remove the preview checkbox and planning-mode routing; revert to current behavior (Proposed only in re-optimization).
 
