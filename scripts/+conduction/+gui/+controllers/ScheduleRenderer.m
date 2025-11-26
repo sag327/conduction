@@ -2831,17 +2831,25 @@ classdef ScheduleRenderer < handle
                 for caseIdx = 1:numel(labCases)
                     entry = labCases(caseIdx);
                     % Extract timings from the schedule entry itself (avoid CaseManager/baseline data)
+                    setupStart = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'startTime','setupStartTime','scheduleStartTime','caseStartTime'}, NaN);
                     procStart = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'procStartTime','startTime','scheduleStartTime'}, NaN);
                     procEnd = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'procEndTime','endTime','procedureEndTime'}, NaN);
                     postTime = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, 'postTime', 0);
-                    turnTime = conduction.gui.controllers.ScheduleRenderer.getFieldValue(entry, {'turnoverTime','turnoverMinutes'}, 0);
                     status = "pending";
 
-                    if ~isnan(procStart) && ~isnan(procEnd)
-                        endWithBuffers = procEnd + max(0, postTime) + max(0, turnTime);
-                        if nowMinutes < procStart
+                    % Status thresholds: start at setupStart (fallback procStart); complete at procEnd + post
+                    if isnan(setupStart)
+                        setupStart = procStart;
+                    end
+                    completeAt = procEnd;
+                    if ~isnan(procEnd)
+                        completeAt = procEnd + max(0, postTime);
+                    end
+
+                    if ~isnan(setupStart) && ~isnan(completeAt)
+                        if nowMinutes < setupStart
                             status = "pending";
-                        elseif nowMinutes >= procStart && nowMinutes < endWithBuffers
+                        elseif nowMinutes >= setupStart && nowMinutes < completeAt
                             status = "in_progress";
                         else
                             status = "completed";
