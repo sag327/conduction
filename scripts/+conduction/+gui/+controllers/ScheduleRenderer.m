@@ -568,10 +568,16 @@ classdef ScheduleRenderer < handle
             end
         end
 
-        function startDragCase(obj, app, rectHandle, caseEntry)
+        function startDragCase(obj, app, rectHandle, caseEntry, axesHandle, mode)
             %STARTDRAGCASE Begin dragging a case overlay
             if nargin < 4
                 caseEntry = struct();
+            end
+            if nargin < 5 || isempty(axesHandle)
+                axesHandle = app.ScheduleAxes;
+            end
+            if nargin < 6 || strlength(mode) == 0
+                mode = "baseline";
             end
 
             dragController = app.CaseDragController;
@@ -605,7 +611,7 @@ classdef ScheduleRenderer < handle
 
             if ~isempty(dragController)
                 dragController.hideSelectionOverlay(false);
-                dragController.showSoftHighlight(app.ScheduleAxes, rectHandle);
+                dragController.showSoftHighlight(axesHandle, rectHandle);
             end
 
             allowTimeControlEdits = false;
