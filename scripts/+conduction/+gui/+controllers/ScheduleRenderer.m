@@ -65,6 +65,72 @@ classdef ScheduleRenderer < handle
                 app.AnalyticsRenderer.drawFlipMetrics(app, app.FlipAxes);
                 app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
             end
+
+            % Keep schedule read-only when a proposal is present
+            app.updateScheduleReadOnlyOverlay();
+        end
+
+        function ensureReadOnlyOverlay(obj, app, enabled)
+            if nargin < 3
+                enabled = false;
+            end
+
+            if isempty(app) || ~isvalid(app) || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+
+            existing = findobj(app.ScheduleAxes, 'Tag', 'ScheduleReadOnlyOverlay');
+            if ~enabled
+                if ~isempty(existing)
+                    delete(existing);
+                end
+                return;
+            end
+
+            try
+                xl = xlim(app.ScheduleAxes);
+                yl = ylim(app.ScheduleAxes);
+            catch
+                xl = [0 1];
+                yl = [0 1];
+            end
+
+            if isempty(existing) || ~isgraphics(existing(1))
+                overlay = rectangle(app.ScheduleAxes, ...
+                    'Position', [xl(1), yl(1), diff(xl), diff(yl)], ...
+                    'FaceColor', [0 0 0], ...
+                    'FaceAlpha', 0.08, ...
+                    'EdgeColor', 'none', ...
+                    'Tag', 'ScheduleReadOnlyOverlay', ...
+                    'PickableParts', 'all', ...
+                    'HitTest', 'on', ...
+                    'ButtonDownFcn', @(varargin) obj.onReadOnlyOverlayClicked(app));
+            else
+                overlay = existing(1);
+                set(overlay, 'Position', [xl(1), yl(1), diff(xl), diff(yl)]);
+                set(overlay, 'Visible', 'on', ...
+                    'ButtonDownFcn', @(varargin) obj.onReadOnlyOverlayClicked(app));
+            end
+
+            try
+                uistack(overlay, 'top');
+            catch
+            end
+        end
+
+        function onReadOnlyOverlayClicked(~, app)
+            if isempty(app) || ~isvalid(app)
+                return;
+            end
+            if isempty(app.ProposedSchedule)
+                return;
+            end
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return;
+            end
+            uialert(app.UIFigure, ...
+                'Accept, discard, or re-run the proposal to resume editing the baseline schedule.', ...
+                'Proposal Pending', 'Icon', 'info');
         end
 
         function renderOptimizedSchedule(obj, app, dailySchedule, metadata)

@@ -44,16 +44,17 @@ classdef OptimizationController < handle
                 return;
             end
 
+            hasBaseline = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
             isReoptMode = ismethod(app, 'isReoptimizationMode') && app.isReoptimizationMode();
+            shouldPreview = hasBaseline;
 
             % Track future-locked case ids for internal validation in unscheduled-only mode
             expectedFutureIds = string.empty(0,1);
 
-            includeScheduledFuture = true;
+            includeScheduledFuture = ~(app.ReoptIncludeScope == "unscheduled");
 
-            if isReoptMode
+            if shouldPreview
                 nowMinutes = app.getNowPosition();
-                includeScheduledFuture = ~(app.ReoptIncludeScope == "unscheduled");
                 [casesStruct, excludedCount, stats] = app.CaseManager.filterCasesByNowPosition( ...
                     casesStruct, nowMinutes, includeScheduledFuture);
                 app.updateScopeSummaryLabel();
@@ -72,7 +73,7 @@ classdef OptimizationController < handle
             % CASE-LOCKING: Extract locked case assignments before optimization
             lockedAssignments = app.DrawerController.extractLockedCaseAssignments(app);
             lockedAssignments = app.OptimizationController.normalizeLockAssignments(lockedAssignments);
-            if isReoptMode && ~app.ReoptRespectLocks
+            if shouldPreview && ~app.ReoptRespectLocks
                 % When the user turns off "Respect user locks", we still must
                 % respect auto-locks (in-progress and completed before NOW).
                 % Filter out user-only locks but keep auto-locked cases.
@@ -82,9 +83,13 @@ classdef OptimizationController < handle
             % SCOPE: If user selected "Unscheduled only", treat all currently
             % scheduled FUTURE cases as frozen context (add them as locks) so we
             % schedule only the unscheduled pool AROUND the existing plan.
-            if isReoptMode && ~includeScheduledFuture
+            if shouldPreview && ~includeScheduledFuture
                 try
-                    nowForLocks = app.getNowPosition();
+                    if exist('nowMinutes', 'var')
+                        nowForLocks = nowMinutes;
+                    else
+                        nowForLocks = app.getNowPosition();
+                    end
                     % Build future locks from authoritative case store (more robust than
                     % schedule parsing) and fall back to parsing schedule entries if needed.
                     futureLocks = app.OptimizationController.buildFutureLocksFromCaseStore(app, nowForLocks);
@@ -232,18 +237,24 @@ classdef OptimizationController < handle
                     'RespectLocks', app.ReoptRespectLocks, ...
                     'PreferCurrentLabs', app.ReoptPreferCurrentLabs);
 
-                if isReoptMode
+                if shouldPreview
                     app.ProposedSchedule = dailySchedule;
                     app.ProposedOutcome = outcome;
                     app.ProposedMetadata = metadata;
                     app.ProposedSourceVersion = app.OptimizationChangeCounter;
-                    % Suppress debug logs in release
+                    app.IsOptimizationDirty = true;
                     app.showProposedTab();
                 else
                     app.hideProposedTab(true);
                     app.ProposedSchedule = conduction.DailySchedule.empty;
                     app.ProposedOutcome = struct();
                     app.ProposedMetadata = struct();
+
+                    previousSchedule = app.OptimizedSchedule;
+                    previousOutcome = app.OptimizationOutcome;
+                    previousMetadata = app.LastOptimizationMetadata;
+                    previousDirty = app.IsOptimizationDirty;
+                    previousLastRun = app.OptimizationLastRun;
 
                     app.OptimizedSchedule = dailySchedule;
                     app.OptimizationOutcome = outcome;
@@ -254,6 +265,20 @@ classdef OptimizationController < handle
                     % UNIFIED-TIMELINE: Render optimized schedule (status will be derived from NOW position)
                     app.ScheduleRenderer.renderOptimizedSchedule(app, dailySchedule, metadata);
                     app.LastOptimizationMetadata = metadata;
+
+                    % Auto-apply initial run with Undo support
+                    context = struct( ...
+                        'Type', "accept", ...
+                        'PreviousSchedule', previousSchedule, ...
+                        'PreviousOutcome', previousOutcome, ...
+                        'PreviousMetadata', previousMetadata, ...
+                        'PreviousDirty', previousDirty, ...
+                        'PreviousLastRun', previousLastRun, ...
+                        'AcceptedSchedule', dailySchedule, ...
+                        'AcceptedOutcome', outcome, ...
+                        'AcceptedMetadata', metadata, ...
+                        'AcceptedSourceVersion', app.ProposedSourceVersion);
+                    app.showUndoToast('Initial plan applied', context);
                 end
                 if ismethod(app, 'refreshOptimizeButtonLabel')
                     app.refreshOptimizeButtonLabel();
@@ -281,7 +306,7 @@ classdef OptimizationController < handle
                 end
             catch ME
                 % Don't clear schedule on validation errors - let user see and fix
-                if ~contains(ME.identifier, 'InvalidLockedConstraint') && ~isReoptMode
+                if ~contains(ME.identifier, 'InvalidLockedConstraint') && ~shouldPreview
                     app.OptimizedSchedule = conduction.DailySchedule.empty;
                     app.OptimizationController.showOptimizationPendingPlaceholder(app);
                     if ismethod(app, 'refreshOptimizeButtonLabel')
@@ -289,7 +314,7 @@ classdef OptimizationController < handle
                     end
                 end
 
-                if ~isReoptMode
+                if ~shouldPreview
                     app.OptimizationOutcome = struct();
                     app.IsOptimizationDirty = true;
                     app.OptimizationLastRun = NaT;
@@ -308,6 +333,9 @@ classdef OptimizationController < handle
             app.IsOptimizationRunning = false;
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
+            if ismethod(app, 'updateScopeControlsVisibility')
+                app.updateScopeControlsVisibility();
+            end
         end
 
         function filtered = retainAutoLocksOnly(~, app, assignments)

@@ -169,6 +169,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         KPI3                        matlab.ui.control.Label
         KPI4                        matlab.ui.control.Label
         KPI5                        matlab.ui.control.Label
+        ScheduleReadOnlyOverlay     matlab.graphics.primitive.Rectangle = matlab.graphics.primitive.Rectangle.empty
     end
 
     properties (Constant, Access = private)
@@ -2514,17 +2515,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             newTab = event.NewValue;
-            if newTab ~= app.ProposedTab && ~isempty(app.ProposedSchedule) && ...
-                    ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
-                app.IsHandlingCanvasSelection = true;
-                app.CanvasTabGroup.SelectedTab = app.ProposedTab;
-                app.IsHandlingCanvasSelection = false;
-                warningMsg = sprintf(['Review or discard the proposed schedule before returning to other views.\n', ...
-                    'Use Accept, Discard, or Re-run to continue.']);
-                uialert(app.UIFigure, warningMsg, 'Finish Reviewing Proposal', 'Icon', 'info');
-                return;
-            end
-
             if newTab == app.CanvasAnalyzeTab
                 conduction.gui.app.renderAnalyticsTab(app);
             end
@@ -2586,6 +2576,21 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.NowPositionMinutes = timeMinutes;
             app.markDirty();  % Session state changed
             app.refreshOptimizeButtonLabel();
+        end
+
+        function updateScheduleReadOnlyOverlay(app)
+            if isempty(app.ScheduleRenderer) || ~isvalid(app.ScheduleRenderer)
+                return;
+            end
+            isReadOnly = ~isempty(app.ProposedSchedule);
+            app.ScheduleRenderer.ensureReadOnlyOverlay(app, isReadOnly);
+        end
+
+        function clearScheduleReadOnlyOverlay(app)
+            if isempty(app.ScheduleRenderer) || ~isvalid(app.ScheduleRenderer)
+                return;
+            end
+            app.ScheduleRenderer.ensureReadOnlyOverlay(app, false);
         end
 
         function timeMinutes = getNowPosition(app)
@@ -2652,6 +2657,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.renderProposedSchedule();
             app.updateProposedSummary();
             app.refreshProposedStalenessBanner();
+            app.updateScheduleReadOnlyOverlay();
         end
 
         function hideProposedTab(app, clearState)
@@ -2678,6 +2684,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ~isempty(app.ProposedTab.Parent)
                 app.ProposedTab.Parent = [];
             end
+
+            app.updateScheduleReadOnlyOverlay();
+            if ismethod(app, 'refreshOptimizeButtonLabel')
+                app.refreshOptimizeButtonLabel();
+            end
+            if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && app.CanvasTabGroup.SelectedTab == app.ProposedTab
+                app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
+            end
         end
 
         function renderProposedSchedule(app)
@@ -2701,10 +2715,13 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'ShowLabels', true, ...
                 'CurrentTimeMinutes', nowMinutes, ...
                 'OperatorColors', app.OperatorColors, ...
-                'CaseClickedFcn', @(varargin) [], ...
-                'BackgroundClickedFcn', @(varargin) []);
+                'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
+                'BackgroundClickedFcn', @() app.onScheduleBackgroundClicked());
 
             app.ScheduleRenderer.refreshProposedResourceHighlights(app, annotatedSchedule);
+            if ~isempty(app.AnalyticsRenderer) && isvalid(app.AnalyticsRenderer)
+                app.AnalyticsRenderer.updateKPIBar(app, annotatedSchedule);
+            end
 
             nowLine = findobj(app.ProposedAxes, 'Tag', 'NowLine');
             if ~isempty(nowLine)
@@ -2755,8 +2772,24 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
+            hasBaseline = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
             proposedMap = app.buildScheduleCaseMap(app.ProposedSchedule);
             currentMap = app.buildScheduleCaseMap(app.OptimizedSchedule);
+
+            if ~hasBaseline
+                scheduledCount = 0;
+                try
+                    if ~isempty(proposedMap)
+                        scheduledCount = numel(keys(proposedMap));
+                    end
+                catch
+                    scheduledCount = 0;
+                end
+                conflictCount = app.computeProposalConflictCount();
+                app.ProposedSummaryLabel.Text = sprintf('Summary: Scheduled %d case(s) • %d conflicts', ...
+                    scheduledCount, conflictCount);
+                return;
+            end
 
             movedCount = 0;
             unchangedCount = 0;
@@ -3121,7 +3154,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.ScopeControlsPanel) || ~isvalid(app.ScopeControlsPanel)
                 return;
             end
-            shouldShow = app.isReoptimizationMode();
+            hasBaseline = ~isempty(app.OptimizedSchedule) && ~isempty(app.OptimizedSchedule.labAssignments());
+            shouldShow = app.isReoptimizationMode() || hasBaseline;
             if shouldShow
                 app.ScopeControlsPanel.Visible = 'on';
             else
