@@ -399,6 +399,23 @@ classdef ScheduleRenderer < handle
 
         end
 
+        function enableCaseSelectionOnAxes(obj, app, axesHandle)
+            %ENABLECASESELECTIONONAXES Register case blocks for selection overlays (no drag)
+            if isempty(app) || isempty(app.CaseDragController) || isempty(axesHandle) || ~isvalid(axesHandle)
+                return;
+            end
+
+            caseBlocks = findobj(axesHandle, 'Tag', 'CaseBlock');
+            if isempty(caseBlocks)
+                app.CaseDragController.hideSelectionOverlay(false);
+                app.CaseDragController.clearRegistry();
+                return;
+            end
+
+            app.CaseDragController.registerCaseBlocks(app, caseBlocks);
+            obj.applyMultiSelectionHighlights(app);
+        end
+
         function onCaseBlockMouseDown(obj, app, rectHandle)
             %ONCASEBLOCKMOUSEDOWN Entry point for case drag or click
             if ~isgraphics(rectHandle)

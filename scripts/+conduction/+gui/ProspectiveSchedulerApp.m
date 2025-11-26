@@ -2773,6 +2773,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.ScheduleRenderer.enableNowLineDragOnAxes(app, app.ProposedAxes, "proposed");
             end
 
+            % Register case blocks for selection overlays (no drag) in Proposed
+            app.ScheduleRenderer.enableCaseSelectionOnAxes(app, app.ProposedAxes);
+
             app.refreshProposedStalenessBanner();
         end
 
