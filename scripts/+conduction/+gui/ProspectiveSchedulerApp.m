@@ -1520,6 +1520,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function onScheduleBackgroundClicked(app)
             % Clear selection when clicking on empty schedule area
+            % When a proposal is pending, keep selection for inspection.
+            if ~isempty(app.ProposedSchedule) && ~isempty(app.ProposedSchedule.labAssignments())
+                return;
+            end
             if ~isempty(app.CaseStore)
                 app.CaseStore.clearSelection();
             end
