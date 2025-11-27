@@ -2698,6 +2698,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateProposedSummary();
             app.refreshProposedStalenessBanner();
             app.updateScheduleReadOnlyOverlay();
+            app.updateScopeSummaryLabel();
         end
 
         function hideProposedTab(app, clearState)
@@ -2733,6 +2734,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && app.CanvasTabGroup.SelectedTab == app.ProposedTab
                 app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
             end
+            app.updateScopeSummaryLabel();
         end
 
         function renderProposedSchedule(app)
@@ -3277,6 +3279,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if ~includeScheduled
                 summaryStr = summaryStr + " (Unscheduled only)";
             end
+
+            hasProposal = ~isempty(app.ProposedSchedule) && ~isempty(app.ProposedSchedule.labAssignments());
+            if hasProposal
+                summaryStr = summaryStr + " — Manual editing disabled while proposal is pending";
+            end
+
             app.ScopeSummaryLabel.Text = summaryStr;
         end
 
