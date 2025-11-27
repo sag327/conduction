@@ -776,6 +776,18 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             isMultiSelect = numel(selectedIds) > 1;
 
             if ~isempty(selectedIds)
+                % Ensure drag controller registry targets the active canvas axes
+                try
+                    if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup)
+                        if app.CanvasTabGroup.SelectedTab == app.CanvasScheduleTab
+                            app.ScheduleRenderer.enableCaseSelectionOnAxes(app, app.ScheduleAxes);
+                        elseif app.CanvasTabGroup.SelectedTab == app.ProposedTab
+                            app.ScheduleRenderer.enableCaseSelectionOnAxes(app, app.ProposedAxes);
+                        end
+                    end
+                catch
+                end
+
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
                     overlayApplied = app.CaseDragController.showSelectionOverlayForIds(app, selectedIds);
