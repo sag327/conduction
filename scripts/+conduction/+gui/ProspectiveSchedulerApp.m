@@ -4123,17 +4123,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.SelectedCaseId = app.SelectedCaseIds(end);
             end
 
-            hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
-                ~isempty(app.ProposedSchedule.labAssignments());
+            if ~strcmp(source, "case-store")
+                app.pushSelectionToCaseStore();
+            end
 
-            if ~hasProposal
-                if ~strcmp(source, "case-store")
-                    app.pushSelectionToCaseStore();
-                end
-
-                if ~strcmp(source, "bucket")
-                    app.pushSelectionToBucketStores();
-                end
+            if ~strcmp(source, "bucket")
+                app.pushSelectionToBucketStores();
             end
 
             app.updateCaseSelectionVisuals();
