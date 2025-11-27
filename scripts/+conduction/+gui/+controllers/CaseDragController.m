@@ -309,12 +309,18 @@ classdef CaseDragController < handle
             end
             canResize = ~(timeControlActive && ~allowTimeControlEdits);
 
-            % Disable resize grip entirely in Proposed tab to avoid affordance
+            % Disable resize grip when edits are not allowed:
+            %  - Proposed tab (preview mode)
+            %  - Baseline schedule while a proposal is pending
             try
-                if ~isempty(app) && isprop(app, 'CanvasTabGroup') && isvalid(app.CanvasTabGroup) && ...
-                        isprop(app, 'ProposedTab') && ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ...
-                        app.CanvasTabGroup.SelectedTab == app.ProposedTab
-                    canResize = false;
+                if ~isempty(app) && isprop(app, 'CanvasTabGroup') && isvalid(app.CanvasTabGroup)
+                    inProposedTab = isprop(app, 'ProposedTab') && ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ...
+                        app.CanvasTabGroup.SelectedTab == app.ProposedTab;
+                    hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                        ~isempty(app.ProposedSchedule.labAssignments());
+                    if inProposedTab || hasProposal
+                        canResize = false;
+                    end
                 end
             catch
             end

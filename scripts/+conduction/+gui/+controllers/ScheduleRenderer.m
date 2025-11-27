@@ -102,14 +102,16 @@ classdef ScheduleRenderer < handle
                     'FaceAlpha', 0.08, ...
                     'EdgeColor', 'none', ...
                     'Tag', 'ScheduleReadOnlyOverlay', ...
-                    'PickableParts', 'all', ...
-                    'HitTest', 'on', ...
-                    'ButtonDownFcn', @(varargin) obj.onReadOnlyOverlayClicked(app));
+                    'PickableParts', 'none', ...
+                    'HitTest', 'off', ...
+                    'ButtonDownFcn', []);
             else
                 overlay = existing(1);
                 set(overlay, 'Position', [xl(1), yl(1), diff(xl), diff(yl)]);
                 set(overlay, 'Visible', 'on', ...
-                    'ButtonDownFcn', @(varargin) obj.onReadOnlyOverlayClicked(app));
+                    'PickableParts', 'none', ...
+                    'HitTest', 'off', ...
+                    'ButtonDownFcn', []);
             end
 
             try
@@ -225,8 +227,14 @@ classdef ScheduleRenderer < handle
                 app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
             end
 
-            % Bind drag after everything is drawn
-            obj.enableCaseDrag(app);
+            % Bind interactions after everything is drawn
+            if isempty(app.ProposedSchedule)
+                % Normal mode: allow drag/resize
+                obj.enableCaseDrag(app);
+            else
+                % Proposal pending: selection-only on baseline schedule
+                obj.enableCaseSelectionOnAxes(app, app.ScheduleAxes);
+            end
             obj.applyMultiSelectionHighlights(app);
         end
 
