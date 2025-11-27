@@ -436,6 +436,18 @@ classdef ScheduleRenderer < handle
             if ~isgraphics(rectHandle)
                 return;
             end
+
+            % When a proposal is pending, treat clicks as selection-only on baseline
+            try
+                hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedSchedule.labAssignments());
+            catch
+                hasProposal = false;
+            end
+            if hasProposal
+                obj.invokeCaseBlockClick(app, rectHandle);
+                return;
+            end
             % When multi-select is active, we allow selection clicks but block
             % drag initiation. We attach a lightweight motion guard that
             % shows a warning only if the user actually moves the mouse.
