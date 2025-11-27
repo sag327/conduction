@@ -308,6 +308,17 @@ classdef CaseDragController < handle
                 end
             end
             canResize = ~(timeControlActive && ~allowTimeControlEdits);
+
+            % Disable resize grip entirely in Proposed tab to avoid affordance
+            try
+                if ~isempty(app) && isprop(app, 'CanvasTabGroup') && isvalid(app.CanvasTabGroup) && ...
+                        isprop(app, 'ProposedTab') && ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ...
+                        app.CanvasTabGroup.SelectedTab == app.ProposedTab
+                    canResize = false;
+                end
+            catch
+            end
+
             if ~canResize
                 if ~isempty(obj.SelectionGrip) && isgraphics(obj.SelectionGrip)
                     set(obj.SelectionGrip, 'Visible', 'off');
