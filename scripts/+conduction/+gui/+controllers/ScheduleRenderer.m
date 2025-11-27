@@ -157,6 +157,13 @@ classdef ScheduleRenderer < handle
                 fadeAlpha = 0.35;  % Faded when stale (35% opacity)
             end
 
+            % DEBUG: trace render when proposal pending
+            try
+                hasProposal = ~isempty(app.ProposedSchedule) && ~isempty(app.ProposedSchedule.labAssignments());
+                fprintf('[DEBUG][renderOptimizedSchedule] hasProposal=%d\n', hasProposal);
+            catch
+            end
+
             % UNIFIED-TIMELINE: Always render NOW line (use app.NowPositionMinutes)
             currentTime = app.getNowPosition();
 
@@ -2519,8 +2526,24 @@ classdef ScheduleRenderer < handle
             end
 
             if isempty(ids)
+                % DEBUG: trace selection clearing
+                try
+                    hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                        ~isempty(app.ProposedSchedule.labAssignments());
+                    fprintf('[DEBUG][applyMultiSelectionHighlights] ids=empty hasProposal=%d\n', hasProposal);
+                catch
+                end
                 app.CaseDragController.hideSelectionOverlay(true);
                 return;
+            end
+
+            % DEBUG: trace selection application
+            try
+                hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedSchedule.labAssignments());
+                idsCell = cellstr(ids);
+                fprintf('[DEBUG][applyMultiSelectionHighlights] ids={%s} hasProposal=%d\n', strjoin(idsCell, ','), hasProposal);
+            catch
             end
 
             if ismethod(app.CaseDragController, 'showSelectionOverlayForIds')

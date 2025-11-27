@@ -1514,6 +1514,22 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Normal single-click behavior: select case
             app.selectCases(caseIdStr, 'replace');
 
+            % DEBUG: trace selection after schedule block click
+            try
+                ids = string.empty(0, 1);
+                if isprop(app, 'SelectedCaseIds')
+                    ids = app.SelectedCaseIds;
+                elseif strlength(app.SelectedCaseId) > 0
+                    ids = string(app.SelectedCaseId);
+                end
+                idsCell = cellstr(ids);
+                hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedSchedule.labAssignments());
+                fprintf('[DEBUG][onScheduleBlockClicked] caseId=%s selected={%s} hasProposal=%d\n', ...
+                    char(caseIdStr), strjoin(idsCell, ','), hasProposal);
+            catch
+            end
+
             % ⚠️ DO NOT auto-open drawer here - it should only open via manual toggle button
             % This behavior remains managed centrally when selection changes.
         end
