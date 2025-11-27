@@ -46,29 +46,17 @@ classdef TimeControlEditController < handle
         end
 
         function pauseNowTimer(~, app)
-            if isempty(app) || ~isprop(app, 'CaseStatusController') || isempty(app.CaseStatusController)
-                return;
-            end
-            controller = app.CaseStatusController;
-            try
-                controller.stopCurrentTimeTimer();
-            catch ME
-                warning('TimeControlEditController:PauseTimerFailed', ...
-                    'Failed to pause NOW timer: %s', ME.message);
-            end
+            %#ok<INUSD>
+            % REALTIME-SCHEDULING: Timer-based current-time indicator removed.
+            % This method is retained as a no-op to keep Time Control edit
+            % flows simple and backwards compatible.
         end
 
         function resumeNowTimer(~, app)
-            if isempty(app) || ~isprop(app, 'CaseStatusController') || isempty(app.CaseStatusController)
-                return;
-            end
-            controller = app.CaseStatusController;
-            try
-                controller.startCurrentTimeTimer(app);
-            catch ME
-                warning('TimeControlEditController:ResumeTimerFailed', ...
-                    'Failed to resume NOW timer: %s', ME.message);
-            end
+            %#ok<INUSD>
+            % REALTIME-SCHEDULING: Timer-based current-time indicator removed.
+            % This method is retained as a no-op to keep Time Control edit
+            % flows simple and backwards compatible.
         end
     end
 

@@ -152,6 +152,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'OperatorColors', [], @(x) isempty(x) || isa(x, 'containers.Map'));  % Persistent operator colors
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
+    addParameter(p, 'CurrentTimeLabel', "", @(x) isstring(x) || ischar(x));  % Optional override for NOW label text
     addParameter(p, 'OverlappingCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % DRAG: array of overlapping case IDs for lateral offset
     addParameter(p, 'DebugShowCaseIds', false, @(x) islogical(x) || isnumeric(x));
     parse(p, varargin{:});
@@ -614,10 +615,15 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
                 'Tag', 'NowHandle');
             handleMarker.ButtonDownFcn = [];
 
-            % Add "NOW" label with tag for updating
+            % Add label with tag for updating (default "NOW (time)" unless
+            % overridden via CurrentTimeLabel option)
             timeStr = conduction.visualization.timeFormatting.minutesToTimeString(currentTimeMinutes);
+            labelText = sprintf('NOW (%s)', timeStr);
+            if isfield(opts, 'CurrentTimeLabel') && strlength(string(opts.CurrentTimeLabel)) > 0
+                labelText = char(string(opts.CurrentTimeLabel));
+            end
             nowLabelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, ...
-                sprintf('NOW (%s)', timeStr), ...
+                labelText, ...
                 'Color', [0, 0, 0], 'FontWeight', 'bold', 'FontSize', 13, ...
                 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
                 'BackgroundColor', [1, 1, 1], ...

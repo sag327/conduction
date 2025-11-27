@@ -12,8 +12,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         DatePicker                  matlab.ui.control.DatePicker
         RunBtn                      matlab.ui.control.Button
         SessionMenuDropDown         matlab.ui.control.DropDown  % SAVE/LOAD: Session management dropdown menu (includes Test Mode)
-        CurrentTimeLabel            matlab.ui.control.Label
-        CurrentTimeCheckbox         matlab.ui.control.CheckBox  % REALTIME-SCHEDULING: Toggle actual time indicator
         % TimeControlSwitch           matlab.ui.control.Switch  % DEPRECATED: Removed in unified timeline
 
         TabGroup                    matlab.ui.container.TabGroup
@@ -46,7 +44,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ScopeIncludeDropDown        matlab.ui.control.DropDown
         ScopeRespectLocksCheckBox   matlab.ui.control.CheckBox
         ScopePreferLabsCheckBox     matlab.ui.control.CheckBox
-        AdvanceNowButton            matlab.ui.control.Button
         ResetPlanningButton         matlab.ui.control.Button
         
         Drawer                      matlab.ui.container.Panel
@@ -961,7 +958,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         TimeControlBaselineLockedIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks in place before time control enabled
         TimeControlLockedCaseIds string = string.empty(1, 0)  % REALTIME-SCHEDULING: Locks applied by time control mode
         TimeControlStatusBaseline struct = struct('caseId', {}, 'status', {}, 'isLocked', {})  % REALTIME-SCHEDULING: Original status/lock for cases touched by time control
-        IsCurrentTimeVisible logical = false  % REALTIME-SCHEDULING: Show actual time indicator
         DrawerTimer timer = timer.empty
         DrawerWidth double = conduction.gui.app.Constants.DrawerHandleWidth  % Starts collapsed at the drawer handle width
         DrawerCurrentCaseId string = ""
@@ -1057,7 +1053,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.Layout.Row = 1;
             app.TopBarLayout.Layout.Column = 1;
             app.TopBarLayout.RowHeight = {'fit'};
-            app.TopBarLayout.ColumnWidth = {'fit','1x','fit','fit','fit','fit',50};  % Column 1: Optimize btn, Column 2: spacer, Columns 3-6: time controls/actions, Column 7: dropdown
+            % Column 1: Optimize btn, Column 2: spacer,
+            % Column 3: Reset to Planning, Column 4: session dropdown
+            app.TopBarLayout.ColumnWidth = {'fit','1x','fit',50};
             app.TopBarLayout.ColumnSpacing = 8;  % Reduced spacing for tighter grouping of controls
             app.TopBarLayout.Padding = [0 0 42 0];  % Right padding to align with middle panel edge (avoid drawer overlap)
 
@@ -1072,27 +1070,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.Tooltip = 'Run optimization to generate schedule (Primary Action)';
             app.refreshOptimizeButtonLabel();
 
-            app.CurrentTimeLabel = uilabel(app.TopBarLayout);
-            app.CurrentTimeLabel.Text = 'Current Time';
-            app.CurrentTimeLabel.Layout.Column = 3;
-            app.CurrentTimeLabel.HorizontalAlignment = 'right';
-
-            app.CurrentTimeCheckbox = uicheckbox(app.TopBarLayout);
-            app.CurrentTimeCheckbox.Text = '';
-            app.CurrentTimeCheckbox.Layout.Column = 4;
-            app.CurrentTimeCheckbox.Value = false;
-            app.CurrentTimeCheckbox.ValueChangedFcn = createCallbackFcn(app, @CurrentTimeCheckboxValueChanged, true);
-
-            app.AdvanceNowButton = uibutton(app.TopBarLayout, 'push');
-            app.AdvanceNowButton.Text = 'Advance NOW to Actual';
-            app.AdvanceNowButton.Layout.Column = 5;
-            app.AdvanceNowButton.Visible = 'off';
-            app.AdvanceNowButton.Tooltip = 'Set the NOW line to match the current clock time.';
-            app.AdvanceNowButton.ButtonPushedFcn = @(~, ~) app.advanceNowToActualTime();
-
             app.ResetPlanningButton = uibutton(app.TopBarLayout, 'push');
             app.ResetPlanningButton.Text = 'Reset to Planning';
-            app.ResetPlanningButton.Layout.Column = 6;
+            app.ResetPlanningButton.Layout.Column = 3;
             app.ResetPlanningButton.Visible = 'off';
             app.ResetPlanningButton.Tooltip = 'Return to start-of-day planning (clears manual completions).';
             app.ResetPlanningButton.ButtonPushedFcn = @(~, ~) app.onResetToPlanningMode();
@@ -1107,7 +1087,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % app.TimeControlSwitch.ValueChangedFcn = createCallbackFcn(app, @TimeControlSwitchValueChanged, true);
 
             % SAVE/LOAD: Session management dropdown (includes Test Mode, Save/Load, Auto-save)
-            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 7);
+            conduction.gui.app.session.buildSessionControls(app, app.TopBarLayout, 4);
 
             % Middle layout with tabs and schedule visualization
             app.MiddleLayout = uigridlayout(app.MainGridLayout);
@@ -1263,7 +1243,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.updateScopeSummaryLabel();
             app.updateScopeControlsVisibility();
-            app.updateAdvanceNowButton();
             app.updateResetPlanningButton();
 
             % Add optimization options and status as caption below schedule
@@ -1636,10 +1615,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Destructor & Cleanup
         % ------------------------------------------------------------------
         function delete(app)
-            if ~isempty(app.CaseStatusController)
-                app.CaseStatusController.stopCurrentTimeTimer();
-                app.CaseStatusController.cleanupCurrentTimeTimer();
-            end
             app.dismissUndoToast();
             app.stopAutoSaveTimerInternal();  % SAVE/LOAD: Cleanup auto-save timer (Stage 8)
             app.DrawerController.clearDrawerTimer(app);
@@ -2476,31 +2451,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
 
 
-        function CurrentTimeCheckboxValueChanged(app, ~)
-            app.IsCurrentTimeVisible = logical(app.CurrentTimeCheckbox.Value);
-
-            if app.IsCurrentTimeVisible
-                app.startCurrentTimeTimer();
-            else
-                app.stopCurrentTimeTimer();
-                app.ScheduleRenderer.clearActualTimeIndicator(app);
-            end
-
-            app.ScheduleRenderer.updateActualTimeIndicator(app);
-        end
-
-        function startCurrentTimeTimer(app)
-            app.CaseStatusController.startCurrentTimeTimer(app);
-        end
-
-        function stopCurrentTimeTimer(app)
-            app.CaseStatusController.stopCurrentTimeTimer();
-        end
-
-        function onCurrentTimeTimerTick(app)
-            app.CaseStatusController.onCurrentTimeTimerTick(app);
-        end
-
         % ----------------------- Testing Mode Events ---------------------
         % (Test Mode toggle now handled in session dropdown)
 
@@ -2728,9 +2678,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             timeMinutes = app.NowPositionMinutes;
         end
 
-        function label = getOptimizeButtonLabel(app)
-            % Get context-aware optimize button label
-            label = "Optimize Schedule";
+        function firstCaseStart = getFirstScheduledCaseStartMinutes(app)
+            %GETFIRSTSCHEDULEDCASESTARTMINUTES Earliest scheduled case start in minutes.
+            firstCaseStart = NaN;
 
             schedule = app.OptimizedSchedule;
             if isempty(schedule)
@@ -2747,7 +2697,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            firstCaseStart = inf;
+            bestStart = inf;
             for labIdx = 1:numel(labs)
                 labCases = labs{labIdx};
                 if isempty(labCases)
@@ -2755,17 +2705,31 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
                 for caseIdx = 1:numel(labCases)
                     startMinutes = conduction.gui.controllers.ScheduleRenderer.getCaseStartMinutes(labCases(caseIdx));
-                    if ~isnan(startMinutes) && startMinutes < firstCaseStart
-                        firstCaseStart = startMinutes;
+                    if ~isnan(startMinutes) && startMinutes < bestStart
+                        bestStart = startMinutes;
                     end
                 end
             end
 
-            if isfinite(firstCaseStart)
-                nowMinutes = app.getNowPosition();
-                if nowMinutes > firstCaseStart
-                    label = "Re-optimize Remaining";
-                end
+            if isfinite(bestStart)
+                firstCaseStart = bestStart;
+            else
+                firstCaseStart = NaN;
+            end
+        end
+
+        function label = getOptimizeButtonLabel(app)
+            % Get context-aware optimize button label
+            label = "Optimize Schedule";
+
+            firstCaseStart = app.getFirstScheduledCaseStartMinutes();
+            if isnan(firstCaseStart)
+                return;
+            end
+
+            nowMinutes = app.getNowPosition();
+            if nowMinutes > firstCaseStart
+                label = "Re-optimize Remaining";
             end
         end
 
@@ -3428,6 +3392,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.hideProposedTab(true);
             app.clearManualCompletionFlags();
             app.setNowPosition(app.getPlanningStartMinutes());
+            scheduleForRender = app.getScheduleForRendering();
+            if ~isempty(scheduleForRender)
+                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
+            end
             app.updateScopeSummaryLabel();
             app.updateScopeControlsVisibility();
         end
@@ -3443,7 +3411,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     continue;
                 end
                 caseObj.ManuallyCompleted = false;
-                caseObj.CaseStatus = "pending";
             end
             app.refreshCaseBuckets('ResetPlanning');
             app.updateResetPlanningButton();
@@ -3466,33 +3433,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         function minutes = getPlanningStartMinutes(~)
             minutes = 475;
-        end
-
-        function advanceNowToActualTime(app)
-            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
-            if isnan(actualMinutes)
-                return;
-            end
-            app.setNowPosition(actualMinutes);
-        end
-
-        function updateAdvanceNowButton(app)
-            if isempty(app.AdvanceNowButton) || ~isvalid(app.AdvanceNowButton)
-                return;
-            end
-            actualMinutes = conduction.gui.controllers.ScheduleRenderer.getActualCurrentTimeMinutes();
-            if isnan(actualMinutes)
-                app.AdvanceNowButton.Visible = 'off';
-                return;
-            end
-            delta = actualMinutes - app.getNowPosition();
-            shouldShow = abs(delta) >= 5;
-            if shouldShow
-                app.AdvanceNowButton.Text = sprintf('Advance NOW to %s', app.formatMinutesAsTime(actualMinutes));
-                app.AdvanceNowButton.Visible = 'on';
-            else
-                app.AdvanceNowButton.Visible = 'off';
-            end
         end
 
         function updateResetPlanningButton(app)
@@ -3526,7 +3466,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             label = char(app.getOptimizeButtonLabel());
             app.RunBtn.Text = sprintf('  %s  ', label);
             app.updateScopeControlsVisibility();
-            app.updateAdvanceNowButton();
             app.updateResetPlanningButton();
         end
 

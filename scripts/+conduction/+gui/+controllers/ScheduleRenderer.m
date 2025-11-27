@@ -180,6 +180,10 @@ classdef ScheduleRenderer < handle
             % visualized axes stay aligned when both exist.
             sharedRange = app.getSharedTimeRange(dailySchedule, app.ProposedSchedule);
 
+            % Determine initial NOW label text so visualizeDailySchedule
+            % does not briefly show "NOW" when we are still in planning.
+            nowLabelText = conduction.gui.controllers.ScheduleRenderer.computeNowLabelText(app, currentTime);
+
             app.OperatorColors = conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'ScheduleAxes', app.ScheduleAxes, ...
@@ -192,6 +196,7 @@ classdef ScheduleRenderer < handle
                 'FadeAlpha', fadeAlpha, ...
                 'TimeRange', sharedRange, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
+                'CurrentTimeLabel', nowLabelText, ...
                 'OverlappingCaseIds', app.OverlappingCaseIds);
 
             obj.drawClosedLabOverlays(app, dailySchedule);
@@ -222,6 +227,7 @@ classdef ScheduleRenderer < handle
 
             % UNIFIED-TIMELINE: Always enable NOW line drag
             obj.enableNowLineDrag(app);
+            conduction.gui.controllers.ScheduleRenderer.refreshNowLabelForAxes(app, app.ScheduleAxes);
 
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
@@ -1154,7 +1160,7 @@ classdef ScheduleRenderer < handle
             app.UIFigure.Pointer = 'hand';
         end
 
-        function updateNowLinePosition(~, app)
+        function updateNowLinePosition(obj, app)
             %UPDATENOWLINEPOSITION Update line position during drag
             if ~isfield(app.UIFigure.UserData, 'isDraggingNowLine') || ~app.UIFigure.UserData.isDraggingNowLine
                 return;
@@ -1188,16 +1194,10 @@ classdef ScheduleRenderer < handle
             % Update line position
             lineHandle.YData = [newTimeHour, newTimeHour];
 
-            % Update text label
+            % Update NOW state and label text based on current drag position
             newTimeMinutes = newTimeHour * 60;
-            timeStr = app.ScheduleRenderer.minutesToTimeString(newTimeMinutes);
-
-            % Find and update NOW label
-            nowLabel = findobj(axesHandle, 'Tag', 'NowLabel');
-            if ~isempty(nowLabel)
-                nowLabel.String = sprintf('NOW (%s)', timeStr);
-                nowLabel.Position(2) = newTimeHour - 0.1;
-            end
+            app.setNowPosition(newTimeMinutes);
+            obj.refreshNowLabelForAxes(app, axesHandle);
 
             handleMarker = findobj(axesHandle, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
@@ -1250,9 +1250,6 @@ classdef ScheduleRenderer < handle
                 app.updateProposedSummary();
                 return;
             end
-
-            % UNIFIED-TIMELINE: Update NOW position in app state
-            app.setNowPosition(finalTimeMinutes);
 
             % Auto-update case statuses based on new time
             updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
@@ -1528,59 +1525,12 @@ classdef ScheduleRenderer < handle
             changed = false;
         end
 
-        function updateActualTimeIndicator(obj, app)
-            %UPDATEACTUALTIMEINDICATOR Draw or refresh the actual-time line
-            ax = app.ScheduleAxes;
-            if isempty(ax) || ~isvalid(ax)
-                return;
-            end
-
-            obj.clearActualTimeIndicator(app);
-
-            if ~app.IsCurrentTimeVisible
-                return;
-            end
-
-            actualTimeMinutes = obj.getActualCurrentTimeMinutes();
-            if isnan(actualTimeMinutes)
-                return;
-            end
-
-            currentTimeHour = actualTimeMinutes / 60;
-            yLimits = ylim(ax);
-            if isempty(yLimits) || currentTimeHour < yLimits(1) || currentTimeHour > yLimits(2)
-                return;
-            end
-
-            xLimits = xlim(ax);
-
-            lineHandle = line(ax, xLimits, [currentTimeHour, currentTimeHour], ...
-                'Color', [1, 0, 0], 'LineStyle', '-', 'LineWidth', 2, ...
-                'HitTest', 'off', 'Tag', 'ActualTimeLine');
-            if isprop(lineHandle, 'PickableParts')
-                lineHandle.PickableParts = 'none';
-            end
-
-            labelText = sprintf('Current (%s)', obj.minutesToTimeString(actualTimeMinutes));
-            labelHandle = text(ax, xLimits(2) - 0.2, currentTimeHour - 0.1, labelText, ...
-                'Color', [1, 0, 0], 'FontWeight', 'bold', 'FontSize', 10, ...
-                'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
-                'BackgroundColor', [0, 0, 0], 'Tag', 'ActualTimeLabel');
-            labelHandle.HitTest = 'off';
-            if isprop(labelHandle, 'PickableParts')
-                labelHandle.PickableParts = 'none';
-            end
-        end
-
-        function clearActualTimeIndicator(~, app)
-            %CLEARACTUALTIMEINDICATOR Remove existing actual-time line & label
-            ax = app.ScheduleAxes;
-            if isempty(ax) || ~isvalid(ax)
-                return;
-            end
-
-            delete(findobj(ax, 'Tag', 'ActualTimeLine'));
-            delete(findobj(ax, 'Tag', 'ActualTimeLabel'));
+        function updateActualTimeIndicator(~, ~)
+            %UPDATEACTUALTIMEINDICATOR (Removed)
+            % Timer-based "Current Time" indicator has been removed from the
+            % UI. This method is retained as a no-op so existing call sites
+            % (including tests and archived workflows) continue to run
+            % without error.
         end
 
         function drawClosedLabOverlays(obj, app, dailySchedule)
@@ -2782,12 +2732,6 @@ classdef ScheduleRenderer < handle
             timeStr = sprintf('%02d:%02d', mod(hours, 24), mins);
         end
 
-        function minutes = getActualCurrentTimeMinutes()
-            %GETACTUALCURRENTTIMEMINUTES Return current clock time in minutes from midnight
-            nowTime = datetime('now');
-            minutes = hour(nowTime) * 60 + minute(nowTime) + second(nowTime) / 60;
-        end
-
         function value = getFieldValue(structOrObj, fieldName, defaultValue)
             %GETFIELDVALUE Safely extract field value from struct or object
             %   Accepts a single field name (char/string) or a cell array of
@@ -2930,6 +2874,42 @@ classdef ScheduleRenderer < handle
     end
 
     methods (Static)
+        function labelText = computeNowLabelText(app, nowMinutes)
+            %COMPUTENOWLABELTEXT Return PLANNING vs NOW label string based on NOW vs first case.
+            if nargin < 2 || isnan(nowMinutes)
+                nowMinutes = app.getNowPosition();
+            end
+            firstCaseStart = app.getFirstScheduledCaseStartMinutes();
+            if isnan(firstCaseStart) || nowMinutes <= firstCaseStart
+                labelText = "PLANNING";
+            else
+                timeStr = conduction.gui.controllers.ScheduleRenderer.minutesToTimeString(nowMinutes);
+                labelText = sprintf('NOW (%s)', timeStr);
+            end
+        end
+        function refreshNowLabelForAxes(app, axesHandle)
+            %REFRESHNOWLABELFORAXES Update NOW label string for planning vs execution.
+            if isempty(axesHandle) || ~isvalid(axesHandle)
+                return;
+            end
+            nowLabel = findobj(axesHandle, 'Tag', 'NowLabel');
+            if isempty(nowLabel)
+                return;
+            end
+
+            nowMinutes = app.getNowPosition();
+            labelText = conduction.gui.controllers.ScheduleRenderer.computeNowLabelText(app, nowMinutes);
+            nowLabel.String = labelText;
+
+            % Keep vertical offset just above the NOW line
+            try
+                yLimits = ylim(axesHandle);
+                currentHour = (nowMinutes / 60);
+                labelY = min(yLimits(2), max(yLimits(1), currentHour - 0.1));
+                nowLabel.Position(2) = labelY;
+            catch
+            end
+        end
         function [startMinutes, endMinutes] = computeScheduleTimeBounds(dailySchedule)
             %COMPUTESCHEDULETIMEBOUNDS Return [start end] in minutes for a schedule.
             %   Uses the same field resolution strategy as
