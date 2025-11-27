@@ -844,6 +844,16 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % Disable resize in Proposed tab
+            try
+                if ~isempty(app.ProposedTab) && isvalid(app.ProposedTab) && ...
+                        ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
+                        app.CanvasTabGroup.SelectedTab == app.ProposedTab
+                    return;
+                end
+            catch
+            end
+
             if ismethod(app, 'isMultiSelectActive') && app.isMultiSelectActive()
                 obj.showCaseDragWarning(app, 'Resize disabled while multiple cases are selected.');
                 obj.restoreSelectionOverlay(app);
