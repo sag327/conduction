@@ -219,17 +219,6 @@ classdef CaseDragController < handle
                 clearCaseId = false;
             end
 
-            % DEBUG: trace overlay hide requests
-            try
-                src = 'unknown';
-                st = dbstack;
-                if numel(st) >= 2
-                    src = st(2).name;
-                end
-                fprintf('[DEBUG][hideSelectionOverlay] clearCaseId=%d caller=%s\n', clearCaseId, src);
-            catch
-            end
-
             if ~isempty(obj.SelectionRect) && isgraphics(obj.SelectionRect)
                 delete(obj.SelectionRect);
             end
