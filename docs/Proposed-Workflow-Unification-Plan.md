@@ -315,7 +315,7 @@ delete(app);
 ## Open Issues to Debug
 - Reset to Planning Mode: currently the NOW line does not move back to start-of-day and case statuses are not reset; needs investigation.
 - Schedule padding: vertical padding/offset above the Gantt differs between Schedule and Proposed tabs, making visual comparison harder; should be aligned.
-- Proposed selection/interaction: selecting cases in Proposed highlights table/drawer but not the visualized blocks; drag/resize is still not available in Proposed (not yet implemented, needs to be completed).
+- Proposed selection/interaction: selecting cases in Proposed highlights table/drawer but not the visualized blocks; drag/resize is intentionally disabled in Proposed. Decision: keep Proposed selection-only (no drag/resize) unless a future refactor makes axes-aware interactions low risk.
 
 ## Rollback
 - Remove the preview checkbox and planning-mode routing; revert to current behavior (Proposed only in re-optimization).

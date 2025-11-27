@@ -1,6 +1,6 @@
 ## Proposed Tab Drag/Resize Refactor Plan
 
-Goal: Enable live drag/resize/edit interactions in the Proposed tab (with multiple edits before re-run) while keeping baseline Schedule interactions intact and reusing existing logic.
+Goal: Enable live drag/resize/edit interactions in the Proposed tab (with multiple edits before re-run) while keeping baseline Schedule interactions intact and reusing existing logic. Current decision: postpone implementation; Proposed remains selection-only (no drag/resize) due to the size/risk of the refactor relative to the need.
 
 ### Core Idea
 - Make drag/resize logic axes- and context-aware (baseline vs proposed).
