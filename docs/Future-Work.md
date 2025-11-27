@@ -34,6 +34,10 @@ Risk: Low–medium. Critical paths already run off per‑case locks; risk is mis
 - Operator availability calendars (future feature)
   - Parameterize per‑operator availability windows; integrate into model constraints.
 
+## Selection & Bulk Actions
+- Extend multi‑case selection with additional bulk operations beyond Remove Selected (e.g., bulk lock/unlock, bulk resource assignment, and future bulk drag/move if UX risk is acceptable).
+- Add keyboard shortcuts for selection workflows (e.g., Delete to remove selected cases, Esc to clear selection) while keeping selection ephemeral and not persisted in session files.
+
 ## Proposed Tab & UX Polish
 - Conflict detail expansion
   - Enrich conflict reporting beyond resource violations (e.g., feasibility breakdown, operator windows).
@@ -41,6 +45,10 @@ Risk: Low–medium. Critical paths already run off per‑case locks; risk is mis
   - Keyboard shortcut for Undo toast; make duration configurable in settings.
 - Staleness behavior
   - Current banner works; consider live auto‑dismiss if a fresh proposal lands or proactively refresh on key mutations.
+- Proposed‑NOW sandbox
+  - Optional “Proposed NOW” override inside the Proposed tab so users can adjust locks and scope within the preview without mutating the baseline NOW; copy it back to the main timeline only on explicit action.
+- Interactive Proposed editing
+  - Revisit enabling drag/resize edits directly in the Proposed tab using axes‑aware drag/resize context, while keeping changes non‑destructive until Accept/Discard.
 
 ### Proposed vs Original Schedule Comparison (new)
 Goal: Let users compare a Proposed schedule against the current (original) schedule while a proposal is pending, without allowing edits to the original until Accept/Discard.
@@ -71,6 +79,7 @@ Acceptance (either option)
   - Validate rendering performance with many labs/cases; consider list/axes virtualization if needed.
 - Accessibility
   - Keyboard navigation across tabs and controls; high‑contrast theme audit.
+  - Keyboard shortcuts for core actions (optimize/re‑optimize, undo, selection) and screen‑reader‑friendly announcements for NOW changes and case status updates.
 
 ## Packaging & Logging
 - Follow the open TODOs in `docs/Executable-Packaging-Preflight-Plan.md` for runtime logging, entry wrapper, and artifact metadata.

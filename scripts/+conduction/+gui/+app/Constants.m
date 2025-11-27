@@ -10,6 +10,7 @@ classdef Constants
         DrawerContentWidth double = 400
         ScheduleStartHour double = 8
         MinutesPerHour double = 60
+        ScheduleHeaderHeight double = 56  % pixels; shared height for Schedule/Proposed canvas headers
     end
 
     methods (Static)

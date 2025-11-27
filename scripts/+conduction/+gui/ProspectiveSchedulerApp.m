@@ -160,6 +160,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
+        ScheduleStatusLabel         matlab.ui.control.Label
         ResourceLegendPanel        matlab.ui.container.Panel
         ResourceLegend             conduction.gui.components.ResourceLegend = conduction.gui.components.ResourceLegend.empty
         UtilAxes                    matlab.ui.control.UIAxes
@@ -1160,14 +1161,41 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CanvasAnalyzeTab = uitab(app.CanvasTabGroup, 'Title', 'Analyze');
 
             app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
-            app.CanvasScheduleLayout.RowHeight = {'1x'};
+            app.CanvasScheduleLayout.RowHeight = {conduction.gui.app.Constants.ScheduleHeaderHeight, '1x'};
             app.CanvasScheduleLayout.ColumnWidth = {'1x'};  % Single column - schedule fills width
-            app.CanvasScheduleLayout.Padding = [0 0 0 0];
-            app.CanvasScheduleLayout.RowSpacing = 0;
-            app.CanvasScheduleLayout.ColumnSpacing = 0;
+            % Match Proposed tab canvas layout so Schedule/Proposed axes
+            % share the same pixel height for the unified time range.
+            app.CanvasScheduleLayout.Padding = [10 10 10 10];
+            app.CanvasScheduleLayout.RowSpacing = 8;
+            app.CanvasScheduleLayout.ColumnSpacing = 10;
+
+            % Header row mirrors Proposed tab layout and is used to display
+            % read-only status when a proposal is pending.
+            scheduleHeaderPanel = uipanel(app.CanvasScheduleLayout);
+            scheduleHeaderPanel.Layout.Row = 1;
+            scheduleHeaderPanel.Layout.Column = 1;
+            scheduleHeaderPanel.BorderType = 'none';
+            scheduleHeaderPanel.BackgroundColor = [0.15 0.15 0.15];
+
+            % Use the same 2x4 grid pattern as the Proposed header
+            headerGrid = uigridlayout(scheduleHeaderPanel, [2, 4]);
+            headerGrid.ColumnWidth = {'1x', 'fit', 'fit', 'fit'};
+            headerGrid.RowHeight = {'fit', 'fit'};
+            headerGrid.Padding = [10 8 10 8];
+            headerGrid.ColumnSpacing = 10;
+            headerGrid.RowSpacing = 6;
+
+            app.ScheduleStatusLabel = uilabel(headerGrid);
+            app.ScheduleStatusLabel.Layout.Row = 1;
+            app.ScheduleStatusLabel.Layout.Column = 1;
+            app.ScheduleStatusLabel.Text = "";
+            app.ScheduleStatusLabel.FontSize = 14;
+            app.ScheduleStatusLabel.FontColor = [1 1 1];
+            app.ScheduleStatusLabel.HorizontalAlignment = 'left';
+            app.ScheduleStatusLabel.Visible = 'off';
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
-            app.ScheduleAxes.Layout.Row = 1;
+            app.ScheduleAxes.Layout.Row = 2;
             app.ScheduleAxes.Layout.Column = 1;
             app.ScheduleAxes.Title.String = '';
             app.ScheduleAxes.Title.FontWeight = 'bold';
@@ -1551,6 +1579,57 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 % Annotate schedule with derived statuses
                 schedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.OptimizedSchedule);
             end
+        end
+
+        function timeRange = getSharedTimeRange(app, baselineSchedule, proposedSchedule)
+            %GETSHAREDTIMERANGE Compute a shared time window (in minutes) for
+            % visualizing the baseline Schedule tab and Proposed tab.
+            %
+            % The range is based on the union of both schedules' activity
+            % windows with a one-hour buffer before the first case and
+            % after the last case, mimicking visualizeDailySchedule's
+            % default behavior while keeping both views aligned.
+            arguments
+                app
+                baselineSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+                proposedSchedule conduction.DailySchedule = conduction.DailySchedule.empty
+            end
+
+            if isempty(baselineSchedule) && ~isempty(app.OptimizedSchedule)
+                baselineSchedule = app.OptimizedSchedule;
+            end
+            if isempty(proposedSchedule) && ~isempty(app.ProposedSchedule)
+                proposedSchedule = app.ProposedSchedule;
+            end
+
+            [baseStart, baseEnd] = conduction.gui.controllers.ScheduleRenderer.computeScheduleTimeBounds(baselineSchedule);
+            [propStart, propEnd] = conduction.gui.controllers.ScheduleRenderer.computeScheduleTimeBounds(proposedSchedule);
+
+            allStarts = [baseStart, propStart];
+            allStarts = allStarts(~isnan(allStarts));
+            allEnds = [baseEnd, propEnd];
+            allEnds = allEnds(~isnan(allEnds));
+
+            if isempty(allStarts) || isempty(allEnds)
+                timeRange = [];
+                return;
+            end
+
+            scheduleStart = min(allStarts);
+            scheduleEnd = max(allEnds);
+
+            oneHour = 60;
+            % Mirror visualizeDailySchedule default: 1 hour padding and
+            % clamp to a typical 07:00–16:00 working window floor/ceiling.
+            startMinutes = min(7 * oneHour, scheduleStart - oneHour);
+            endMinutes = max(16 * oneHour, scheduleEnd + oneHour);
+
+            % Clamp defensively to a single day (0–24h) to avoid extreme
+            % zoom-out if data is malformed.
+            startMinutes = max(0, startMinutes);
+            endMinutes = min(24 * oneHour, endMinutes);
+
+            timeRange = [startMinutes, endMinutes];
         end
 
         % ------------------------------------------------------------------
@@ -2624,6 +2703,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
             isReadOnly = ~isempty(app.ProposedSchedule);
             app.ScheduleRenderer.ensureReadOnlyOverlay(app, isReadOnly);
+
+            % Update header text to indicate when manual edits are disabled
+            if ~isempty(app.ScheduleStatusLabel) && isvalid(app.ScheduleStatusLabel)
+                if isReadOnly
+                    app.ScheduleStatusLabel.Text = "Read-only — pending proposal (Accept/Discard in Proposed).";
+                    app.ScheduleStatusLabel.Visible = 'on';
+                else
+                    app.ScheduleStatusLabel.Text = "";
+                    app.ScheduleStatusLabel.Visible = 'off';
+                end
+            end
         end
 
         function clearScheduleReadOnlyOverlay(app)
@@ -2767,12 +2857,29 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
+            % Align axes plot box with main Schedule axes *before* drawing so
+            % lab labels and time grid use the same pixel geometry when
+            % converting font size (points) to data units.
+            try
+                if ~isempty(app.ScheduleAxes) && isvalid(app.ScheduleAxes)
+                    originalUnits = app.ProposedAxes.Units;
+                    app.ProposedAxes.Units = app.ScheduleAxes.Units;
+                    app.ProposedAxes.Position = app.ScheduleAxes.Position;
+                    app.ProposedAxes.Units = originalUnits;
+                end
+            catch
+            end
+
             nowMinutes = app.getEffectiveProposedNowMinutes();
             annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule, nowMinutes);
+            % Use the same shared time range as the main schedule so the
+            % vertical scale matches when comparing Schedule vs Proposed.
+            sharedRange = app.getSharedTimeRange(app.OptimizedSchedule, annotatedSchedule);
             conduction.visualizeDailySchedule(annotatedSchedule, ...
                 'ScheduleAxes', app.ProposedAxes, ...
                 'Title', 'Proposed Schedule', ...
                 'ShowLabels', true, ...
+                'TimeRange', sharedRange, ...
                 'CurrentTimeMinutes', nowMinutes, ...
                 'OperatorColors', app.OperatorColors, ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...

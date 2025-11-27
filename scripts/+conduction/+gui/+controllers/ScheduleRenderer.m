@@ -176,6 +176,10 @@ classdef ScheduleRenderer < handle
             % Detect and cache overlapping cases before rendering
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
 
+            % Compute a shared time range for Schedule vs Proposed so their
+            % visualized axes stay aligned when both exist.
+            sharedRange = app.getSharedTimeRange(dailySchedule, app.ProposedSchedule);
+
             app.OperatorColors = conduction.visualizeDailySchedule(dailySchedule, ...
                 'Title', 'Optimized Schedule', ...
                 'ScheduleAxes', app.ScheduleAxes, ...
@@ -186,6 +190,7 @@ classdef ScheduleRenderer < handle
                 'SelectedCaseId', "", ...
                 'OperatorColors', app.OperatorColors, ...
                 'FadeAlpha', fadeAlpha, ...
+                'TimeRange', sharedRange, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
                 'OverlappingCaseIds', app.OverlappingCaseIds);
 
@@ -2922,5 +2927,104 @@ classdef ScheduleRenderer < handle
             annotatedSchedule = conduction.DailySchedule(schedule.Date, labs, assignments, schedule.metrics());
         end
 
+    end
+
+    methods (Static)
+        function [startMinutes, endMinutes] = computeScheduleTimeBounds(dailySchedule)
+            %COMPUTESCHEDULETIMEBOUNDS Return [start end] in minutes for a schedule.
+            %   Uses the same field resolution strategy as
+            %   visualizeDailySchedule's internal timeline builder to stay
+            %   consistent with the Gantt visualization.
+
+            startMinutes = NaN;
+            endMinutes = NaN;
+
+            if nargin < 1 || isempty(dailySchedule) || ~isa(dailySchedule, 'conduction.DailySchedule')
+                return;
+            end
+
+            try
+                labAssignments = dailySchedule.labAssignments();
+            catch
+                return;
+            end
+
+            if isempty(labAssignments)
+                return;
+            end
+
+            for labIdx = 1:numel(labAssignments)
+                labCases = labAssignments{labIdx};
+                if isempty(labCases)
+                    continue;
+                end
+                labCases = labCases(:)';
+
+                for caseIdx = 1:numel(labCases)
+                    caseItem = labCases(caseIdx);
+
+                    % Start time: use setup/schedule start, falling back to proc start
+                    setupStart = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                        {'startTime', 'setupStartTime', 'scheduleStartTime', 'caseStartTime'});
+                    procStart = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                        {'procStartTime', 'procedureStartTime', 'procedureStart'});
+
+                    if isnan(setupStart)
+                        setupStart = procStart;
+                    end
+                    if isnan(procStart)
+                        procStart = setupStart;
+                    end
+
+                    % End time: procedure end + post + turnover (all in minutes)
+                    procEnd = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                        {'procEndTime', 'procedureEndTime', 'procedureEnd'});
+                    postDuration = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                        {'postTime', 'postDuration', 'postProcedureDuration'});
+                    turnoverDuration = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                        {'turnoverTime', 'turnoverDuration'});
+
+                    if isnan(procEnd)
+                        durationHint = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                            {'procedureMinutes', 'procedureDuration'});
+                        if ~isnan(durationHint) && ~isnan(procStart)
+                            procEnd = procStart + durationHint;
+                        else
+                            procEnd = procStart;
+                        end
+                    end
+
+                    if isnan(postDuration)
+                        % Fall back to explicit endTime if available
+                        endTimeFallback = conduction.visualization.fieldResolvers.getNumericField(caseItem, ...
+                            {'endTime', 'caseEndTime'});
+                        if ~isnan(endTimeFallback) && ~isnan(procEnd)
+                            postDuration = max(0, endTimeFallback - procEnd);
+                        else
+                            postDuration = 0;
+                        end
+                    end
+
+                    if isnan(turnoverDuration)
+                        turnoverDuration = 0;
+                    end
+
+                    % Derive schedule-level bounds for this case
+                    caseStart = min([setupStart, procStart], [], 'omitnan');
+                    caseEnd = procEnd + max(0, postDuration) + max(0, turnoverDuration);
+
+                    if isnan(caseStart) || isnan(caseEnd)
+                        continue;
+                    end
+
+                    if isnan(startMinutes) || caseStart < startMinutes
+                        startMinutes = caseStart;
+                    end
+                    if isnan(endMinutes) || caseEnd > endMinutes
+                        endMinutes = caseEnd;
+                    end
+                end
+            end
+        end
     end
 end

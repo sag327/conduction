@@ -222,6 +222,12 @@ Path: `scripts/+conduction/+scheduling/SchedulingPreprocessor.m`
 
 ## Unified Timeline & Re‑Optimization
 
+### Design Principles
+- Single timeline: planning, execution, and re‑optimization are all views of the same schedule, distinguished only by the NOW position (no separate modes).
+- Derived status: case status (pending, in_progress, completed) is computed from NOW and schedule times, with manual completion in the drawer as an override; the schedule itself remains the single source of truth.
+- Non‑destructive mid‑day changes: mid‑day optimizations always route through the Proposed tab so users can preview and Accept/Discard; completed and in‑progress cases act as frozen context that cannot be moved.
+- Scoped re‑optimization: scope controls (unscheduled‑only vs unscheduled + scheduled future, respect locks, prefer current labs) determine which future cases are candidates for re‑optimization and how strictly existing assignments are honored.
+
 ### NOW Line & Status
 - NOW line is always visible. Dragging recomputes status (pending, in_progress, completed) relative to NOW.
 - Manual completion (drawer) adds a persistent override for archival, independent of NOW.

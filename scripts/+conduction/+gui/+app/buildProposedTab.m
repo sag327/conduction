@@ -11,7 +11,7 @@ function buildProposedTab(app, tabGroup)
     app.ProposedTab = uitab(tabGroup, 'Title', 'Proposed');
 
     grid = uigridlayout(app.ProposedTab, [2, 1]);
-    grid.RowHeight = {'fit', '1x'};
+    grid.RowHeight = {conduction.gui.app.Constants.ScheduleHeaderHeight, '1x'};
     grid.ColumnWidth = {'1x'};
     grid.Padding = [10 10 10 10];
     grid.RowSpacing = 8;
@@ -60,11 +60,14 @@ function buildProposedTab(app, tabGroup)
     app.ProposedAxes = uiaxes(grid);
     app.ProposedAxes.Layout.Row = 2;
     app.ProposedAxes.Layout.Column = 1;
-    app.ProposedAxes.BackgroundColor = [0 0 0];
+    app.ProposedAxes.Color = [0 0 0];
     app.ProposedAxes.XColor = [1 1 1];
     app.ProposedAxes.YColor = [1 1 1];
+    app.ProposedAxes.Box = 'on';
     app.ProposedAxes.Toolbar.Visible = 'off';
-    title(app.ProposedAxes, '');
+    app.ProposedAxes.Title.String = '';
+    app.ProposedAxes.Title.FontWeight = 'bold';
+    app.ProposedAxes.Title.FontSize = 14;
     app.ProposedStaleBanner = uipanel(headerGrid);
     app.ProposedStaleBanner.Layout.Row = 2;
     app.ProposedStaleBanner.Layout.Column = [1 4];
