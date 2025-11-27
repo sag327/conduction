@@ -416,6 +416,42 @@ classdef ScheduleRenderer < handle
             obj.applyMultiSelectionHighlights(app);
         end
 
+        function disableDragAndResizeOnAxes(obj, app, axesHandle)
+            %DISABLEDRAGANDRESIZEONAXES Force selection-only interactions on provided axes
+            if isempty(axesHandle) || ~isvalid(axesHandle)
+                return;
+            end
+
+            caseBlocks = findobj(axesHandle, 'Tag', 'CaseBlock');
+            for idx = 1:numel(caseBlocks)
+                block = caseBlocks(idx);
+                try
+                    ud = get(block, 'UserData');
+                    if isstruct(ud) && isfield(ud, 'caseId')
+                        set(block, 'ButtonDownFcn', @(src, ~) obj.invokeCaseBlockClick(app, src));
+                    else
+                        set(block, 'ButtonDownFcn', @(src, ~) obj.invokeCaseBlockClick(app, src));
+                    end
+                catch
+                end
+            end
+
+            % Clear ButtonDownFcn on any other interactive children (e.g., resize grips)
+            allChildren = findall(axesHandle);
+            for idx = 1:numel(allChildren)
+                h = allChildren(idx);
+                if any(h == caseBlocks)
+                    continue;
+                end
+                try
+                    if ~isempty(get(h, 'ButtonDownFcn'))
+                        set(h, 'ButtonDownFcn', []);
+                    end
+                catch
+                end
+            end
+        end
+
         function onCaseBlockMouseDown(obj, app, rectHandle)
             %ONCASEBLOCKMOUSEDOWN Entry point for case drag or click
             if ~isgraphics(rectHandle)
