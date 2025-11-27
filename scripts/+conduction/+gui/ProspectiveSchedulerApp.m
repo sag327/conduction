@@ -4123,6 +4123,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 app.SelectedCaseId = app.SelectedCaseIds(end);
             end
 
+            % DEBUG: trace selection change
+            try
+                ids = app.SelectedCaseIds;
+                idsCell = cellstr(ids);
+                hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
+                    ~isempty(app.ProposedSchedule.labAssignments());
+                fprintf('[DEBUG][onSelectionChanged] source=%s ids={%s} hasProposal=%d\n', ...
+                    char(source), strjoin(idsCell, ','), hasProposal);
+            catch
+            end
+
             if ~strcmp(source, "case-store")
                 app.pushSelectionToCaseStore();
             end
