@@ -154,7 +154,6 @@ function opts = parseOptions(varargin)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
     addParameter(p, 'OverlappingCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % DRAG: array of overlapping case IDs for lateral offset
     addParameter(p, 'DebugShowCaseIds', false, @(x) islogical(x) || isnumeric(x));
-    addParameter(p, 'EnableInteractions', true, @(x) islogical(x) || isnumeric(x));
     parse(p, varargin{:});
     opts = p.Results;
 end
@@ -554,8 +553,8 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             end
         end
 
-        % Transparent overlay for interaction (drag/click/resize) - can be disabled
-        if ~isnan(setupStartHour) && ~isnan(postEndHour) && opts.EnableInteractions
+        % Transparent overlay for interaction (drag/click/resize)
+        if ~isnan(setupStartHour) && ~isnan(postEndHour)
             caseStartHour = setupStartHour;
             caseEndHour = postEndHour;
             caseTotalDuration = max(caseEndHour - caseStartHour, eps);
