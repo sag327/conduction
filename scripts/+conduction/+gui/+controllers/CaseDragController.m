@@ -27,7 +27,6 @@ classdef CaseDragController < handle
         SoftHighlightColor double = [1 1 1]
         SoftHighlightLineWidth double = 2.5
         SoftHighlightLastPosition double = [NaN NaN NaN NaN]
-        DebugTiming logical = false
 
         SelectionRect = gobjects(0, 1)
         SelectionAxes = gobjects(0, 1)
@@ -104,12 +103,6 @@ classdef CaseDragController < handle
             obj.LastRegistryUpdate = datetime('now');
 
             obj.enableSelectionHoverWatcher();
-
-            if ~isempty(app) && isprop(app, 'SelectedCaseIds') && ~isempty(app.SelectedCaseIds)
-                obj.showSelectionOverlayForIds(app, app.SelectedCaseIds);
-            elseif strlength(obj.SelectionCaseId) > 0
-                obj.showSelectionOverlay(obj.SelectionCaseId);
-            end
         end
 
         function clearRegistry(obj)
@@ -866,12 +859,6 @@ classdef CaseDragController < handle
             tf = ~isempty(fieldnames(obj.ActiveResize));
         end
 
-        function enableTimingDebug(obj, tf)
-            if nargin < 2
-                tf = true;
-            end
-            obj.DebugTiming = logical(tf);
-        end
         function [dxLabs, dyHours] = pointsToDataOffsets(~, ax, points)
             if nargin < 3 || isempty(points)
                 points = 1;

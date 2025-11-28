@@ -773,6 +773,41 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             selectedId = app.SelectedCaseId;
             isMultiSelect = numel(selectedIds) > 1;
 
+            % Resource focus: keep selection state and drawer behavior but
+            % suppress selection overlays/resize grips so resource
+            % highlighting remains the primary visual cue.
+            if ismethod(app, 'hasResourceFocus') && app.hasResourceFocus()
+                if ~isempty(app.CaseDragController)
+                    app.CaseDragController.hideSelectionOverlay(false);
+                end
+
+                if ~isempty(selectedIds)
+                    if isMultiSelect
+                        app.DrawerCurrentCaseId = "";
+                        if ~isempty(app.DrawerController)
+                            app.DrawerController.showMultiSelectMessage(app);
+                        end
+                    else
+                        app.DrawerCurrentCaseId = selectedId;
+                        if ~isempty(app.DrawerController) && strlength(selectedId) > 0
+                            app.DrawerController.showInspectorContents(app);
+                            if app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
+                                app.DrawerController.populateDrawer(app, selectedId);
+                            elseif app.DrawerAutoOpenOnSelect && ...
+                                    app.DrawerWidth <= conduction.gui.app.Constants.DrawerHandleWidth
+                                app.DrawerController.openDrawer(app, selectedId);
+                            end
+                        end
+                    end
+                else
+                    app.DrawerCurrentCaseId = "";
+                    if ~isempty(app.DrawerController)
+                        app.DrawerController.showInspectorContents(app);
+                    end
+                end
+                return;
+            end
+
             if ~isempty(selectedIds)
                 % Ensure drag controller registry targets the active canvas axes
                 try
@@ -1513,6 +1548,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if startsWith(caseIdStr, 'lock-toggle:')
                 % Extract the actual caseId from the prefix
                 actualCaseId = extractAfter(caseIdStr, 'lock-toggle:');
+
+                % When resource focus is active, treat double-click as a
+                % normal selection only (no lock toggle) to avoid mutating
+                % baseline state from a filtered view.
+                if ismethod(app, 'hasResourceFocus') && app.hasResourceFocus()
+                    if strlength(actualCaseId) > 0
+                        app.selectCases(actualCaseId, 'replace');
+                    end
+                    return;
+                end
+
                 if strlength(actualCaseId) > 0
                     % Toggle lock state
                     app.DrawerController.toggleCaseLock(app, actualCaseId);
@@ -2616,11 +2662,14 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % ------------------------------------------------------------------
         function setNowPosition(app, timeMinutes)
             % Set NOW line position (in minutes from midnight)
-            % Clamps to valid range [0, 1440]
             if isnan(timeMinutes)
-                timeMinutes = 475;  % Default to 07:55 AM
+                timeMinutes = app.getPlanningStartMinutes();
             end
-            timeMinutes = max(0, min(1440, timeMinutes));
+            if ismethod(app, 'normalizeNowTimeForPlanning')
+                timeMinutes = app.normalizeNowTimeForPlanning(timeMinutes);
+            else
+                timeMinutes = max(0, min(1440, timeMinutes));
+            end
             app.NowPositionMinutes = timeMinutes;
             app.markDirty();  % Session state changed
             app.refreshOptimizeButtonLabel();
@@ -2644,6 +2693,33 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             minutes = app.ProposedNowMinutes;
             if isnan(minutes)
                 minutes = app.getNowPosition();
+            end
+        end
+
+        function minutesOut = normalizeNowTimeForPlanning(app, rawMinutes)
+            %NORMALIZENOWTIMEFORPLANNING Clamp NOW to planning baseline and snap
+            %   Ensures NOW never moves earlier than the planning baseline
+            %   (getPlanningStartMinutes). When a schedule exists, any time
+            %   at or before the first scheduled case snaps back to the
+            %   planning baseline so "planning mode" has a single canonical
+            %   NOW position.
+
+            if nargin < 2 || isnan(rawMinutes)
+                rawMinutes = app.getPlanningStartMinutes();
+            end
+
+            planningStart = app.getPlanningStartMinutes();
+
+            % Clamp to [planningStart, 1440]
+            rawMinutes = max(planningStart, min(1440, rawMinutes));
+
+            % Snap to planningStart whenever we are at or before the first
+            % scheduled case (i.e., in "planning mode").
+            firstCaseStart = app.getFirstScheduledCaseStartMinutes();
+            if ~isnan(firstCaseStart) && rawMinutes <= firstCaseStart
+                minutesOut = planningStart;
+            else
+                minutesOut = rawMinutes;
             end
         end
 
@@ -2671,6 +2747,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
             app.ScheduleRenderer.ensureReadOnlyOverlay(app, false);
+        end
+
+        function tf = isScheduleReadOnly(app)
+            %ISSCHEDULEREADONLY True when baseline schedule should be read-only.
+            %   Read-only when a proposal is present or when a resource
+            %   highlight is active.
+            hasProposal = ~isempty(app.ProposedSchedule) && ...
+                ~isempty(app.ProposedSchedule.labAssignments());
+            hasResourceFocus = ~isempty(app.ResourceHighlightIds);
+            tf = hasProposal || hasResourceFocus;
+        end
+
+        function tf = hasResourceFocus(app)
+            tf = ~isempty(app.ResourceHighlightIds);
         end
 
         function timeMinutes = getNowPosition(app)
@@ -2847,7 +2937,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'CurrentTimeMinutes', nowMinutes, ...
                 'OperatorColors', app.OperatorColors, ...
                 'CaseClickedFcn', @(caseId) app.onScheduleBlockClicked(caseId), ...
-                'BackgroundClickedFcn', @() app.onScheduleBackgroundClicked());
+                'BackgroundClickedFcn', @() app.onScheduleBackgroundClicked(), ...
+                'EnableDoubleClickLock', false);
 
             app.ScheduleRenderer.refreshProposedResourceHighlights(app, annotatedSchedule);
             if ~isempty(app.AnalyticsRenderer) && isvalid(app.AnalyticsRenderer)

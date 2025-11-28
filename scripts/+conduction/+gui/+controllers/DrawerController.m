@@ -418,10 +418,14 @@ classdef DrawerController < handle
                 end
             end
 
-            % Re-render schedule to show lock state change
-            if ~isempty(app.OptimizedSchedule)
-                scheduleToRender = app.getScheduleForRendering();
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
+            % Incrementally update lock visuals without a full re-render
+            if ~isempty(app.ScheduleRenderer) && isvalid(app.ScheduleRenderer)
+                try
+                    app.ScheduleRenderer.refreshLockVisualForCase(app, caseId);
+                catch ME
+                    warning('DrawerController:RefreshLockVisualFailed', ...
+                        'Failed to refresh lock visual for case %s: %s', char(caseId), ME.message);
+                end
             end
         end
 

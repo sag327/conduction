@@ -515,6 +515,14 @@ classdef ResourceController < handle
             app.ResourceLegend.setHighlights(trimmedHighlight, true);
 
             app.ScheduleRenderer.refreshAllResourceHighlights(app);
+            hasHighlight = ~isempty(app.ResourceHighlightIds);
+            if ~isempty(app.ScheduleRenderer) && isvalid(app.ScheduleRenderer)
+                app.ScheduleRenderer.applyResourceFocusVisuals(app, hasHighlight);
+            end
+
+            if ~hasHighlight && ismethod(app, 'updateCaseSelectionVisuals')
+                app.updateCaseSelectionVisuals();
+            end
         end
 
         function onResourceLegendHighlightChanged(obj, app, highlightIds)
@@ -523,6 +531,14 @@ classdef ResourceController < handle
                 app.ResourceHighlightIds = highlightIds;
             end
             app.ScheduleRenderer.refreshAllResourceHighlights(app);
+            hasHighlight = ~isempty(app.ResourceHighlightIds);
+            if ~isempty(app.ScheduleRenderer) && isvalid(app.ScheduleRenderer)
+                app.ScheduleRenderer.applyResourceFocusVisuals(app, hasHighlight);
+            end
+
+            if ~hasHighlight && ismethod(app, 'updateCaseSelectionVisuals')
+                app.updateCaseSelectionVisuals();
+            end
         end
 
         function [store, isValid] = getValidatedResourceStore(~, app)

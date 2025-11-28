@@ -421,16 +421,44 @@ classdef ScheduleRenderer < handle
             if isempty(app) || isempty(app.CaseDragController) || isempty(axesHandle) || ~isvalid(axesHandle)
                 return;
             end
+            dragController = app.CaseDragController;
 
             caseBlocks = findobj(axesHandle, 'Tag', 'CaseBlock');
             if isempty(caseBlocks)
-                app.CaseDragController.hideSelectionOverlay(false);
-                app.CaseDragController.clearRegistry();
+                dragController.hideSelectionOverlay(false);
+                dragController.clearRegistry();
                 return;
             end
 
-            app.CaseDragController.registerCaseBlocks(app, caseBlocks);
-            obj.applyMultiSelectionHighlights(app);
+            % Avoid rebuilding the registry if the active selection is
+            % already registered for this axes. This keeps simple clicks
+            % fast by reusing existing metadata.
+            needRegister = true;
+            try
+                primaryId = "";
+                if isprop(app, 'SelectedCaseId')
+                    primaryId = app.SelectedCaseId;
+                end
+                if strlength(primaryId) == 0 && isprop(app, 'SelectedCaseIds') && ~isempty(app.SelectedCaseIds)
+                    primaryId = app.SelectedCaseIds(end);
+                end
+
+                if strlength(primaryId) > 0 && ismethod(dragController, 'findCaseById')
+                    [entry, ~] = dragController.findCaseById(primaryId);
+                    if ~isempty(entry) && isfield(entry, 'rectHandle') && isgraphics(entry.rectHandle)
+                        axForEntry = ancestor(entry.rectHandle, 'axes');
+                        if ~isempty(axForEntry) && isequal(axForEntry, axesHandle)
+                            needRegister = false;
+                        end
+                    end
+                end
+            catch
+                needRegister = true;
+            end
+
+            if needRegister
+                dragController.registerCaseBlocks(app, caseBlocks);
+            end
         end
 
         function onCaseBlockMouseDown(obj, app, rectHandle)
@@ -439,16 +467,14 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            % When a proposal is pending, treat clicks as selection-only on baseline
+            % When the baseline schedule is read-only (proposal pending or
+            % resource focus), treat clicks as selection-only on baseline.
             try
-                hasProposal = isprop(app, 'ProposedSchedule') && ~isempty(app.ProposedSchedule) && ...
-                    ~isempty(app.ProposedSchedule.labAssignments());
+                if ismethod(app, 'isScheduleReadOnly') && app.isScheduleReadOnly()
+                    obj.invokeCaseBlockClick(app, rectHandle);
+                    return;
+                end
             catch
-                hasProposal = false;
-            end
-            if hasProposal
-                obj.invokeCaseBlockClick(app, rectHandle);
-                return;
             end
             % When multi-select is active, we allow selection clicks but block
             % drag initiation. We attach a lightweight motion guard that
@@ -1187,17 +1213,31 @@ classdef ScheduleRenderer < handle
             pt = axesHandle.CurrentPoint;
             newTimeHour = pt(1, 2); % Y-coordinate in axes
 
-            % Constrain to schedule bounds
+            % Constrain to schedule bounds; do not allow NOW earlier than
+            % the planning baseline.
             yLimits = ylim(axesHandle);
-            newTimeHour = max(yLimits(1), min(yLimits(2), newTimeHour));
+            planningStartHour = app.getPlanningStartMinutes() / 60;
+            minHour = max(yLimits(1), planningStartHour);
+            newTimeHour = max(minHour, min(yLimits(2), newTimeHour));
 
             % Update line position
             lineHandle.YData = [newTimeHour, newTimeHour];
 
-            % Update NOW state and label text based on current drag position
+            % Update NOW label based on current drag position (do not
+            % commit app.NowPositionMinutes yet).
             newTimeMinutes = newTimeHour * 60;
-            app.setNowPosition(newTimeMinutes);
-            obj.refreshNowLabelForAxes(app, axesHandle);
+            nowLabel = findobj(axesHandle, 'Tag', 'NowLabel');
+            if ~isempty(nowLabel)
+                labelText = conduction.gui.controllers.ScheduleRenderer.computeNowLabelText(app, newTimeMinutes);
+                try
+                    yLimits = ylim(axesHandle);
+                    labelY = min(yLimits(2), max(yLimits(1), newTimeHour - 0.1));
+                    set(nowLabel, 'String', labelText);
+                    nowLabel.Position(2) = labelY;
+                catch
+                    set(nowLabel, 'String', labelText);
+                end
+            end
 
             handleMarker = findobj(axesHandle, 'Tag', 'NowHandle');
             if ~isempty(handleMarker)
@@ -1251,8 +1291,14 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            normalizedMinutes = finalTimeMinutes;
+            if ismethod(app, 'normalizeNowTimeForPlanning')
+                normalizedMinutes = app.normalizeNowTimeForPlanning(finalTimeMinutes);
+            end
+            app.setNowPosition(normalizedMinutes);
+
             % Auto-update case statuses based on new time
-            updatedSchedule = obj.updateCaseStatusesByTime(app, finalTimeMinutes);
+            updatedSchedule = obj.updateCaseStatusesByTime(app, normalizedMinutes);
 
             % Check if any case statuses actually changed
             statusesChanged = obj.didCaseStatusesChange(app.OptimizedSchedule, updatedSchedule);
@@ -1262,10 +1308,6 @@ classdef ScheduleRenderer < handle
                 % Mark optimization dirty but don't mark session dirty yet
                 app.OptimizationController.markOptimizationDirty(app, false);
             end
-
-            % Always mark session dirty because time position is saved state
-            % (even if no statuses changed, the time position itself changed)
-            app.markDirty();
 
             % Re-render schedule to show updated statuses
             % (with fade effect if statusesChanged=true, otherwise normal)
@@ -2495,6 +2537,7 @@ classdef ScheduleRenderer < handle
             end
         end
 
+
         function value = extractField(~, source, fieldName, defaultValue)
             if nargin < 4
                 defaultValue = [];
@@ -2869,6 +2912,179 @@ classdef ScheduleRenderer < handle
 
             % Create new schedule with updated assignments
             annotatedSchedule = conduction.DailySchedule(schedule.Date, labs, assignments, schedule.metrics());
+        end
+
+    end
+
+    methods (Access = public)
+
+        function refreshLockVisualForCase(obj, app, caseId)
+            %REFRESHLOCKVISUALFORCASE Incrementally update lock outline for a case.
+            %   Avoids a full schedule re-render when a single case's lock
+            %   state changes (e.g., via double-click or drawer toggle).
+
+            if isempty(app) || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+            if isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                return;
+            end
+            if isempty(app.CaseDragController) || ~isvalid(app.CaseDragController)
+                return;
+            end
+
+            caseId = string(caseId);
+            if strlength(caseId) == 0
+                return;
+            end
+
+            try
+                [caseObj, ~] = app.CaseManager.findCaseById(caseId);
+            catch
+                caseObj = [];
+            end
+            if isempty(caseObj)
+                return;
+            end
+
+            isLockedNow = logical(caseObj.IsUserLocked);
+
+            % Resolve the interactive rect for this case
+            [entry, axesHandle] = app.CaseDragController.findCaseById(caseId);
+            if isempty(entry) || ~isfield(entry, 'rectHandle') || ~isgraphics(entry.rectHandle)
+                return;
+            end
+            if isempty(axesHandle) || ~isgraphics(axesHandle)
+                axesHandle = ancestor(entry.rectHandle, 'axes');
+                if isempty(axesHandle) || ~isgraphics(axesHandle)
+                    return;
+                end
+            end
+
+            casePos = get(entry.rectHandle, 'Position');
+            if numel(casePos) ~= 4 || any(~isfinite(casePos))
+                return;
+            end
+
+            % Remove any existing incremental lock overlays for this case
+            existingOverlays = findobj(axesHandle, 'Tag', 'CaseLockOverlay');
+            for idx = 1:numel(existingOverlays)
+                h = existingOverlays(idx);
+                if ~isgraphics(h)
+                    continue;
+                end
+                ud = get(h, 'UserData');
+                if isstruct(ud) && isfield(ud, 'caseId') && string(ud.caseId) == caseId
+                    delete(h);
+                end
+            end
+
+            % When unlocking, also try to remove legacy locked outlines
+            % drawn during previous full renders (red border at case bounds).
+            lockedColor = [1 0 0];
+            if ~isLockedNow
+                rects = findobj(axesHandle, 'Type', 'rectangle');
+                for idx = 1:numel(rects)
+                    r = rects(idx);
+                    if ~isgraphics(r)
+                        continue;
+                    end
+                    tag = "";
+                    try
+                        tag = string(get(r, 'Tag'));
+                    catch
+                        tag = "";
+                    end
+                    if tag == "CaseLockOverlay" || tag == "CaseSelectionOverlay" || tag == "CaseResizeHandle"
+                        continue;
+                    end
+
+                    try
+                        faceColor = get(r, 'FaceColor');
+                    catch
+                        faceColor = 'none';
+                    end
+                    if ~(ischar(faceColor) && strcmp(faceColor, 'none'))
+                        if isnumeric(faceColor) && numel(faceColor) == 3 && any(faceColor ~= 0)
+                            % Admission bars / other filled rectangles; skip
+                            continue;
+                        end
+                    end
+
+                    try
+                        edgeColor = get(r, 'EdgeColor');
+                        lineWidth = get(r, 'LineWidth');
+                        pos = get(r, 'Position');
+                    catch
+                        continue;
+                    end
+
+                    if ~(isnumeric(edgeColor) && numel(edgeColor) == 3)
+                        continue;
+                    end
+                    if abs(lineWidth - 3) > 1e-3
+                        continue;
+                    end
+                    if norm(double(edgeColor) - lockedColor) > 1e-3
+                        continue;
+                    end
+                    if numel(pos) ~= 4
+                        continue;
+                    end
+
+                    if max(abs(pos - casePos)) < 1e-6
+                        delete(r);
+                    end
+                end
+                return;
+            end
+
+            % Case is locked: draw a red outline at the case bounds.
+            lockRect = rectangle(axesHandle, ...
+                'Position', casePos, ...
+                'FaceColor', 'none', ...
+                'EdgeColor', lockedColor, ...
+                'LineWidth', 3, ...
+                'Clipping', 'on', ...
+                'HitTest', 'off', ...
+                'PickableParts', 'none', ...
+                'Tag', 'CaseLockOverlay', ...
+                'UserData', struct('caseId', caseId));
+            try
+                uistack(lockRect, 'top');
+            catch
+                % ignore stacking failures
+            end
+        end
+
+        function applyResourceFocusVisuals(obj, app, enabled)
+            %APPLYRESOURCEFOCUSVISUALS Toggle visibility of lock/selection visuals
+            %   When enabled=true, hide lock and selection overlays so the
+            %   resource highlight is the primary focus. When enabled=false,
+            %   restore their visibility.
+
+            if isempty(app) || isempty(app.ScheduleAxes) || ~isvalid(app.ScheduleAxes)
+                return;
+            end
+
+            ax = app.ScheduleAxes;
+            if enabled
+                visibility = 'off';
+            else
+                visibility = 'on';
+            end
+
+            tagsToToggle = {'CaseLockOutline', 'CaseLockOverlay', 'CaseSelectionOverlay', 'CaseResizeHandle'};
+            for i = 1:numel(tagsToToggle)
+                tag = tagsToToggle{i};
+                objs = findobj(ax, 'Tag', tag);
+                if ~isempty(objs)
+                    try
+                        set(objs, 'Visible', visibility);
+                    catch
+                    end
+                end
+            end
         end
 
     end

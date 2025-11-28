@@ -153,6 +153,7 @@ function opts = parseOptions(varargin)
     addParameter(p, 'FadeAlpha', 1.0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);  % Opacity for stale schedules (0=transparent, 1=opaque)
     addParameter(p, 'CurrentTimeMinutes', NaN, @(x) isnan(x) || (isnumeric(x) && isscalar(x) && x >= 0));  % REALTIME-SCHEDULING: Current time in minutes from midnight
     addParameter(p, 'CurrentTimeLabel', "", @(x) isstring(x) || ischar(x));  % Optional override for NOW label text
+    addParameter(p, 'EnableDoubleClickLock', true, @(x) islogical(x) || isnumeric(x));  % Allow double-click to toggle lock
     addParameter(p, 'OverlappingCaseIds', string.empty, @(x) isstring(x) || ischar(x) || iscellstr(x));  % DRAG: array of overlapping case IDs for lateral offset
     addParameter(p, 'DebugShowCaseIds', false, @(x) islogical(x) || isnumeric(x));
     parse(p, varargin{:});
@@ -453,8 +454,10 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
             % Draw red locked outline at the exact case bounds if locked
             if isLocked
                 lockedRect = rectangle(ax, 'Position', [xPosEff - barWidthEff/2, caseStartHour, barWidthEff, caseTotalDuration], ...
-                    'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3, 'Clipping', 'on');
+                    'FaceColor', 'none', 'EdgeColor', lockedOutlineColor, 'LineWidth', 3, 'Clipping', 'on', ...
+                    'Tag', 'CaseLockOutline');
                 lockedRect.PickableParts = 'none';
+                lockedRect.UserData = struct('caseId', string(entry.caseId));
             end
 
             % Draw white selection outline slightly larger by the lock line thickness (no overlap)
@@ -737,9 +740,17 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
 
             selectionType = get(fig, 'SelectionType');
 
-            if strcmp(selectionType, 'open')
-                % Double-click detected - toggle lock
-                % Send special prefix to indicate lock toggle request
+            enableLockToggle = true;
+            if isfield(opts, 'EnableDoubleClickLock')
+                try
+                    enableLockToggle = logical(opts.EnableDoubleClickLock);
+                catch
+                    enableLockToggle = true;
+                end
+            end
+
+            if strcmp(selectionType, 'open') && enableLockToggle
+                % Double-click detected and lock toggling enabled
                 callback(sprintf('lock-toggle:%s', string(userData.caseId)));
             else
                 % Single-click or other - normal behavior
