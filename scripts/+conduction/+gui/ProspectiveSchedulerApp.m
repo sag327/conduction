@@ -1081,6 +1081,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
             app.UIFigure.Position = [100 100 1400 900];
+            % Explicitly set a dark background color so all panels that
+            % inherit UIFigure.Color remain consistent in compiled and
+            % non-compiled environments.
+            app.UIFigure.Color = [0.1 0.1 0.1];
             versionInfo = conduction.version();
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
