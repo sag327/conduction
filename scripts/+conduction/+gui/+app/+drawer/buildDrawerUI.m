@@ -16,7 +16,9 @@ function buildDrawerUI(app)
     leftPanel = uipanel(app.DrawerLayout);
     leftPanel.Layout.Row = [1 3];
     leftPanel.Layout.Column = 1;
-    leftPanel.BackgroundColor = app.UIFigure.Color;
+    % Use the same background as the drawer so the handle strip blends with
+    % the inspector panel in both interactive and compiled apps.
+    leftPanel.BackgroundColor = app.Drawer.BackgroundColor;
     leftPanel.BorderType = 'none';
 
     leftGrid = uigridlayout(leftPanel);
@@ -25,7 +27,7 @@ function buildDrawerUI(app)
     leftGrid.Padding = [0 0 0 0];
     leftGrid.RowSpacing = 0;
     leftGrid.ColumnSpacing = 0;
-    leftGrid.BackgroundColor = app.UIFigure.Color;
+    leftGrid.BackgroundColor = leftPanel.BackgroundColor;
 
     app.DrawerHandleButton = uibutton(leftGrid, 'push');
     app.DrawerHandleButton.Layout.Row = 2;
