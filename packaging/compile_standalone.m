@@ -82,7 +82,8 @@ function compile_standalone()
                 'Expected main source file not found at: %s', mainSource);
         end
 
-        cmd = sprintf('mcc -m -d "%s" -o "%s" "%s"', distRoot, exeName, mainSource);
+        % For mcc, the source file should follow -m directly.
+        cmd = sprintf('mcc -m "%s" -d "%s" -o "%s"', mainSource, distRoot, exeName);
         for i = 1:numel(additionalFiles)
             cmd = sprintf('%s -a "%s"', cmd, additionalFiles{i});
         end
