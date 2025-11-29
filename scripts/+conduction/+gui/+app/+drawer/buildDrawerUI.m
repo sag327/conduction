@@ -16,9 +16,9 @@ function buildDrawerUI(app)
     leftPanel = uipanel(app.DrawerLayout);
     leftPanel.Layout.Row = [1 3];
     leftPanel.Layout.Column = 1;
-    % Use the same background as the drawer so the handle strip blends with
-    % the inspector panel in both interactive and compiled apps.
-    leftPanel.BackgroundColor = app.Drawer.BackgroundColor;
+    % Match the primary panel background (e.g., Add/Edit tab) so the handle
+    % gutter blends with the rest of the app rather than the inspector.
+    leftPanel.BackgroundColor = app.TabAdd.BackgroundColor;
     leftPanel.BorderType = 'none';
 
     leftGrid = uigridlayout(leftPanel);
