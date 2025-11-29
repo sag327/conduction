@@ -106,6 +106,9 @@ classdef CasesPopout < handle
     methods (Access = private)
         function buildWindow(obj)
             fig = uifigure('Visible', 'off');
+            % Match main app dark theme so backgrounds remain consistent in
+            % both interactive and compiled environments.
+            fig.Color = [0.1 0.1 0.1];
             fig.Name = char(obj.Options.Title);
             fig.CloseRequestFcn = @(src, event) obj.handleCloseRequest();
             fig.Position = obj.Options.Position;
