@@ -464,6 +464,15 @@ classdef CaseDragController < handle
             obj.MultiSelectionRects = handles;
             obj.MultiSelectionIds = appliedIds;
             success = success || ~isempty(appliedIds);
+
+            % Optional debug logging when testing mode is active
+            if ~isempty(app) && isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
+                try
+                    fprintf('[PERF] showSelectionOverlayForIds: primary=%s, secondaryCount=%d, success=%d\n', ...
+                        char(primaryId), numel(secondaryIds), success);
+                catch
+                end
+            end
         end
 
         function [entry, axesHandle, selPos] = resolveSelectionGeometry(obj, caseId)

@@ -863,9 +863,21 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            % Apply move and measure render/selection costs when in testing mode
             scheduleWasUpdated = obj.applyCaseMove(app, drag.caseId, targetLabIndex, newSetupStartMinutes);
             if scheduleWasUpdated
+                renderStartTic = [];
+                if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
+                    renderStartTic = tic;
+                end
                 app.OptimizationController.markOptimizationDirty(app);
+                if ~isempty(renderStartTic)
+                    try
+                        elapsedRender = toc(renderStartTic);
+                        fprintf('[PERF] drag render: %.3f s\n', elapsedRender);
+                    catch
+                    end
+                end
                 if ismethod(app, 'notifyScheduleEdited')
                     app.notifyScheduleEdited();
                 end
@@ -874,7 +886,18 @@ classdef ScheduleRenderer < handle
                 % active selection so it remains highlighted (or takes over
                 % highlighting from any previously selected case).
                 if ismethod(app, 'selectCases')
+                    selectStartTic = [];
+                    if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
+                        selectStartTic = tic;
+                    end
                     app.selectCases(drag.caseId, 'replace');
+                    if ~isempty(selectStartTic)
+                        try
+                            elapsedSelect = toc(selectStartTic);
+                            fprintf('[PERF] drag selectCases: %.3f s\n', elapsedSelect);
+                        catch
+                        end
+                    end
                 end
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
