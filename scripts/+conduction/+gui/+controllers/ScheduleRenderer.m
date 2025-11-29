@@ -546,7 +546,6 @@ classdef ScheduleRenderer < handle
                     continue;
                 end
                 set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
-                try, uistack(blockHandle, 'top'); catch, end
             end
             if ~isempty(bindTic)
                 try
