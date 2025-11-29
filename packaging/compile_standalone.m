@@ -73,15 +73,14 @@ function compile_standalone()
 
     % Prefer the newer compiler.build API when available
     if ~isempty(which('compiler.build.standaloneApplication'))
-        % Use the source file path rather than the package-qualified name so
-        % validation can locate the file reliably.
-        opts = compiler.build.StandaloneApplicationOptions(mainSource, ...
+        % Use the source file path directly with name-value options.
+        args = {mainSource, ...
             'ExecutableName', exeName, ...
-            'OutputDir', distRoot);
+            'OutputDir', distRoot};
         if ~isempty(additionalFiles)
-            opts.AdditionalFiles = additionalFiles;
+            args(end+1:end+2) = {'AdditionalFiles', additionalFiles}; %#ok<AGROW>
         end
-        buildResults = compiler.build.standaloneApplication('conduction.main', opts); %#ok<NASGU>
+        buildResults = compiler.build.standaloneApplication(args{:}); %#ok<NASGU>
     else
         % Fallback to mcc if compiler.build is not available.
         % Use direct function call form to avoid parsing issues.
