@@ -64,9 +64,18 @@ function compile_standalone()
     fprintf('  Output dir  : %s\n', distRoot);
     fprintf('  Executable  : %s\n', exeName);
 
+    % Resolve main source file for both APIs
+    mainSource = fullfile(scriptsDir, '+conduction', 'main.m');
+    if exist(mainSource, 'file') ~= 2
+        error('compile_standalone:MissingMainSource', ...
+            'Expected main source file not found at: %s', mainSource);
+    end
+
     % Prefer the newer compiler.build API when available
     if ~isempty(which('compiler.build.standaloneApplication'))
-        opts = compiler.build.StandaloneApplicationOptions('conduction.main', ...
+        % Use the source file path rather than the package-qualified name so
+        % validation can locate the file reliably.
+        opts = compiler.build.StandaloneApplicationOptions(mainSource, ...
             'ExecutableName', exeName, ...
             'OutputDir', distRoot);
         if ~isempty(additionalFiles)
@@ -76,11 +85,6 @@ function compile_standalone()
     else
         % Fallback to mcc if compiler.build is not available.
         % Use direct function call form to avoid parsing issues.
-        mainSource = fullfile(scriptsDir, '+conduction', 'main.m');
-        if exist(mainSource, 'file') ~= 2
-            error('compile_standalone:MissingMainSource', ...
-                'Expected main source file not found at: %s', mainSource);
-        end
         if isempty(which('mcc'))
             error('compile_standalone:NoMCC', ...
                 'MATLAB Compiler (mcc) is not available in this installation.');
