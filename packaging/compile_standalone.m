@@ -65,7 +65,7 @@ function compile_standalone()
     fprintf('  Executable  : %s\n', exeName);
 
     % Prefer the newer compiler.build API when available
-    if exist('compiler.build.standaloneApplication', 'file') == 2
+    if ~isempty(which('compiler.build.standaloneApplication'))
         opts = compiler.build.StandaloneApplicationOptions('conduction.main', ...
             'ExecutableName', exeName, ...
             'OutputDir', distRoot);
@@ -75,20 +75,26 @@ function compile_standalone()
         buildResults = compiler.build.standaloneApplication('conduction.main', opts); %#ok<NASGU>
     else
         % Fallback to mcc if compiler.build is not available.
-        % mcc expects a source file path rather than a package-qualified name.
+        % Use direct function call form to avoid parsing issues.
         mainSource = fullfile(scriptsDir, '+conduction', 'main.m');
         if exist(mainSource, 'file') ~= 2
             error('compile_standalone:MissingMainSource', ...
                 'Expected main source file not found at: %s', mainSource);
         end
-
-        % For mcc, the source file should follow -m directly.
-        cmd = sprintf('mcc -m "%s" -d "%s" -o "%s"', mainSource, distRoot, exeName);
-        for i = 1:numel(additionalFiles)
-            cmd = sprintf('%s -a "%s"', cmd, additionalFiles{i});
+        if isempty(which('mcc'))
+            error('compile_standalone:NoMCC', ...
+                'MATLAB Compiler (mcc) is not available in this installation.');
         end
-        fprintf('Invoking mcc:\n  %s\n', cmd);
-        eval(cmd);
+
+        args = {'-m', mainSource, '-d', distRoot, '-o', exeName};
+        for i = 1:numel(additionalFiles)
+            args(end+1:end+2) = {'-a', additionalFiles{i}}; %#ok<AGROW>
+        end
+        fprintf('Invoking mcc with arguments:\n');
+        for i = 1:numel(args)
+            fprintf('  %s\n', args{i});
+        end
+        mcc(args{:});
     end
 
     fprintf('Build complete.\n');
