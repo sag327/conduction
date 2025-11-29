@@ -74,8 +74,15 @@ function compile_standalone()
         end
         buildResults = compiler.build.standaloneApplication('conduction.main', opts); %#ok<NASGU>
     else
-        % Fallback to mcc if compiler.build is not available
-        cmd = sprintf('mcc -m -d "%s" -o "%s" conduction.main', distRoot, exeName);
+        % Fallback to mcc if compiler.build is not available.
+        % mcc expects a source file path rather than a package-qualified name.
+        mainSource = fullfile(scriptsDir, '+conduction', 'main.m');
+        if exist(mainSource, 'file') ~= 2
+            error('compile_standalone:MissingMainSource', ...
+                'Expected main source file not found at: %s', mainSource);
+        end
+
+        cmd = sprintf('mcc -m -d "%s" -o "%s" "%s"', distRoot, exeName, mainSource);
         for i = 1:numel(additionalFiles)
             cmd = sprintf('%s -a "%s"', cmd, additionalFiles{i});
         end
@@ -85,4 +92,3 @@ function compile_standalone()
 
     fprintf('Build complete.\n');
 end
-
