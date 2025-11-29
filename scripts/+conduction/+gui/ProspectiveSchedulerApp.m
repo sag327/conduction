@@ -1298,7 +1298,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.Drawer = uipanel(app.MiddleLayout);
             app.Drawer.Layout.Row = [1 2];
             app.Drawer.Layout.Column = 3;
-            app.Drawer.BackgroundColor = [0.1 0.1 0.1];
+            % Match primary panel background used elsewhere so inspector
+            % drawer blends with the surrounding UI.
+            app.Drawer.BackgroundColor = [0.15 0.15 0.15];
             app.Drawer.BorderType = 'none';
             app.Drawer.Visible = 'on';
             conduction.gui.app.drawer.buildDrawerUI(app);
