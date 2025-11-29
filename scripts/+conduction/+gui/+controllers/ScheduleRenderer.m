@@ -315,6 +315,8 @@ classdef ScheduleRenderer < handle
             end
 
             % Bind interactions after everything is drawn
+            %  - enable drag/selection
+            %  - apply selection highlights
             if perfEnabled
                 segTic = tic;
             end
@@ -325,10 +327,20 @@ classdef ScheduleRenderer < handle
                 % Proposal pending: selection-only on baseline schedule
                 obj.enableCaseSelectionOnAxes(app, app.ScheduleAxes);
             end
+            if ~isempty(segTic)
+                try
+                    fprintf('[PERF] render bindInteractions-enable: %.3f s\n', toc(segTic));
+                catch
+                end
+            end
+
+            if perfEnabled
+                segTic = tic;
+            end
             obj.applyMultiSelectionHighlights(app);
             if ~isempty(segTic)
                 try
-                    fprintf('[PERF] render bindInteractions: %.3f s\n', toc(segTic));
+                    fprintf('[PERF] render bindInteractions-highlights: %.3f s\n', toc(segTic));
                 catch
                 end
             end
@@ -484,11 +496,24 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
+            perfEnabled = isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive;
+
             if ~isempty(app.CaseDragController)
                 app.CaseDragController.hideSoftHighlight();
             end
 
+            findTic = [];
+            if perfEnabled
+                findTic = tic;
+            end
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
+            if ~isempty(findTic)
+                try
+                    fprintf('[PERF] enableCaseDrag-findCaseBlocks: %.3f s (n=%d)\n', toc(findTic), numel(caseBlocks));
+                catch
+                end
+            end
+
             if isempty(caseBlocks)
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(false);
@@ -498,7 +523,22 @@ classdef ScheduleRenderer < handle
             end
 
             if ~isempty(app.CaseDragController)
+                regTic = [];
+                if perfEnabled
+                    regTic = tic;
+                end
                 app.CaseDragController.registerCaseBlocks(app, caseBlocks);
+                if ~isempty(regTic)
+                    try
+                        fprintf('[PERF] enableCaseDrag-register: %.3f s\n', toc(regTic));
+                    catch
+                    end
+                end
+            end
+
+            bindTic = [];
+            if perfEnabled
+                bindTic = tic;
             end
             for idx = 1:numel(caseBlocks)
                 blockHandle = caseBlocks(idx);
@@ -507,6 +547,12 @@ classdef ScheduleRenderer < handle
                 end
                 set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
                 try, uistack(blockHandle, 'top'); catch, end
+            end
+            if ~isempty(bindTic)
+                try
+                    fprintf('[PERF] enableCaseDrag-bindHandlers: %.3f s\n', toc(bindTic));
+                catch
+                end
             end
 
         end
