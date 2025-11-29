@@ -158,6 +158,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         % Visualization & KPIs
         ScheduleAxes                matlab.ui.control.UIAxes
         ScheduleStatusLabel         matlab.ui.control.Label
+        ScheduleFreshnessLabel      matlab.ui.control.Label
         ResourceLegendPanel        matlab.ui.container.Panel
         ResourceLegend             conduction.gui.components.ResourceLegend = conduction.gui.components.ResourceLegend.empty
         UtilAxes                    matlab.ui.control.UIAxes
@@ -453,6 +454,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.pushSelectionToBucketStores();
 
             % debug output removed
+
+            % Buckets may change unscheduled/scheduled counts; refresh header.
+            if ismethod(app, 'refreshOptimizationFreshnessHeader')
+                app.refreshOptimizationFreshnessHeader();
+            end
         end
 
         function syncCaseScheduleFields(app, dailySchedule)
@@ -984,6 +990,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         ReoptRespectLocks logical = true
         ReoptPreferCurrentLabs logical = false
         IsOptimizationDirty logical = true
+        HasBaselineOptimization logical = false
+        HasManualScheduleEditsSinceLastOptimization logical = false
+        OptionsVersion double = 0
+        OptionsVersionAtLastOptimization double = 0
+        ResourceVersion double = 0
+        ResourceVersionAtLastOptimization double = 0
         OptimizationChangeCounter double = 0
         IsOptimizationRunning logical = false
         OptimizationLastRun datetime = NaT
@@ -1104,6 +1116,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.RunBtn.FontWeight = 'bold';
             app.RunBtn.Tooltip = 'Run optimization to generate schedule (Primary Action)';
             app.refreshOptimizeButtonLabel();
+            if ismethod(app, 'refreshOptimizationFreshnessHeader')
+                app.refreshOptimizationFreshnessHeader();
+            end
 
             app.ResetPlanningButton = uibutton(app.TopBarLayout, 'push');
             app.ResetPlanningButton.Text = 'Reset to Planning';
@@ -1208,6 +1223,17 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleStatusLabel.FontColor = [1 1 1];
             app.ScheduleStatusLabel.HorizontalAlignment = 'left';
             app.ScheduleStatusLabel.Visible = 'off';
+
+            % Freshness hint label (separate from read-only banner)
+            app.ScheduleFreshnessLabel = uilabel(headerGrid);
+            app.ScheduleFreshnessLabel.Layout.Row = 2;
+            app.ScheduleFreshnessLabel.Layout.Column = 1;
+            app.ScheduleFreshnessLabel.Text = "";
+            app.ScheduleFreshnessLabel.FontSize = 11;
+            app.ScheduleFreshnessLabel.FontWeight = 'bold';
+            app.ScheduleFreshnessLabel.FontColor = [0.7 0.85 1.0];  % Neutral accent
+            app.ScheduleFreshnessLabel.HorizontalAlignment = 'left';
+            app.ScheduleFreshnessLabel.Visible = 'off';
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
             app.ScheduleAxes.Layout.Row = 2;
@@ -2740,6 +2766,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     app.ScheduleStatusLabel.Visible = 'off';
                 end
             end
+
+            % Keep freshness header in sync with read-only changes
+            if ismethod(app, 'refreshOptimizationFreshnessHeader')
+                app.refreshOptimizationFreshnessHeader();
+            end
         end
 
         function clearScheduleReadOnlyOverlay(app)
@@ -3127,6 +3158,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 'AcceptedMetadata', metadata, ...
                 'AcceptedSourceVersion', acceptedSourceVersion);
             app.showUndoToast('Remaining cases rescheduled', context);
+
+            % Accepting a proposal establishes a new optimized baseline.
+            if ismethod(app, 'notifyOptimizationCompleted')
+                app.notifyOptimizationCompleted();
+            end
         end
 
         function onProposedDiscard(app)
@@ -3560,6 +3596,94 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.updateResetPlanningButton();
         end
 
+        function notifyOptimizationCompleted(app)
+            %NOTIFYOPTIMIZATIONCOMPLETED Record baseline optimizer state.
+            app.HasBaselineOptimization = true;
+            app.OptionsVersionAtLastOptimization = app.OptionsVersion;
+            app.ResourceVersionAtLastOptimization = app.ResourceVersion;
+            app.HasManualScheduleEditsSinceLastOptimization = false;
+            app.refreshOptimizationFreshnessHeader();
+        end
+
+        function notifyOptionsChanged(app)
+            %NOTIFYOPTIONSCHANGED Bump options version and refresh header.
+            app.OptionsVersion = app.OptionsVersion + 1;
+            app.refreshOptimizationFreshnessHeader();
+        end
+
+        function notifyResourcesChanged(app)
+            %NOTIFYRESOURCESCHANGED Bump resource version and refresh header.
+            app.ResourceVersion = app.ResourceVersion + 1;
+            app.refreshOptimizationFreshnessHeader();
+        end
+
+        function notifyScheduleEdited(app)
+            %NOTIFYSCHEDULEEDITED Record that manual edits have occurred since last optimization.
+            app.HasManualScheduleEditsSinceLastOptimization = true;
+            app.refreshOptimizationFreshnessHeader();
+        end
+
+        function refreshOptimizationFreshnessHeader(app)
+            %REFRESHOPTIMIZATIONFRESHNESSHEADER Update header hint + button accent.
+            if isempty(app.RunBtn) || ~isvalid(app.RunBtn) || ...
+                    isempty(app.ScheduleFreshnessLabel) || ~isvalid(app.ScheduleFreshnessLabel)
+                return;
+            end
+
+            % When no baseline optimization exists yet, hide the hint.
+            if ~app.HasBaselineOptimization
+                app.ScheduleFreshnessLabel.Text = "";
+                app.ScheduleFreshnessLabel.Visible = 'off';
+                % Restore base button color
+                app.RunBtn.BackgroundColor = [0.2 0.5 0.8];
+                return;
+            end
+
+            % Derive unscheduled-case presence from existing bucket logic.
+            hasUnscheduledCases = false;
+            try
+                app.ensureBucketStores();
+                if ~isempty(app.UnscheduledCaseStore) && isvalid(app.UnscheduledCaseStore)
+                    hasUnscheduledCases = app.UnscheduledCaseStore.hasCases();
+                end
+            catch
+                hasUnscheduledCases = false;
+            end
+
+            hasScheduleEdits = app.HasManualScheduleEditsSinceLastOptimization;
+
+            hasResourceChanges = (app.ResourceVersion ~= app.ResourceVersionAtLastOptimization);
+            hasOptionsChanged = (app.OptionsVersion ~= app.OptionsVersionAtLastOptimization);
+
+            tokens = string.empty(0, 1);
+            if hasUnscheduledCases
+                tokens(end+1, 1) = "unscheduled cases"; %#ok<AGROW>
+            end
+            if hasScheduleEdits
+                tokens(end+1, 1) = "schedule edited"; %#ok<AGROW>
+            end
+            if hasResourceChanges
+                tokens(end+1, 1) = "changed resources"; %#ok<AGROW>
+            end
+            if hasOptionsChanged
+                tokens(end+1, 1) = "options changed"; %#ok<AGROW>
+            end
+
+            if isempty(tokens)
+                app.ScheduleFreshnessLabel.Text = "";
+                app.ScheduleFreshnessLabel.Visible = 'off';
+                app.RunBtn.BackgroundColor = [0.2 0.5 0.8];
+                return;
+            end
+
+            message = "Schedule not optimized: " + strjoin(tokens, " | ");
+            app.ScheduleFreshnessLabel.Text = message;
+            app.ScheduleFreshnessLabel.Visible = 'on';
+
+            % Slightly accent the optimize button when not optimized.
+            app.RunBtn.BackgroundColor = [0.3 0.7 1.0];
+        end
+
         % ------------------------------------------------------------------
         % Shared UI Utilities & State Updates
         % ------------------------------------------------------------------
@@ -3596,6 +3720,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Skip redundant refreshResourceLegend when already handled by caller
             if ~app.SuppressOptimizationDirty
                 app.refreshResourceLegend();
+            end
+
+            % Recompute freshness header when cases change (unscheduled, etc.)
+            if ismethod(app, 'refreshOptimizationFreshnessHeader')
+                app.refreshOptimizationFreshnessHeader();
             end
         end
 
