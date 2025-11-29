@@ -288,6 +288,9 @@ classdef OptimizationController < handle
                         'AcceptedMetadata', metadata, ...
                         'AcceptedSourceVersion', app.ProposedSourceVersion);
                     app.showUndoToast('Initial plan applied', context);
+                    if ismethod(app, 'notifyOptimizationCompleted')
+                        app.notifyOptimizationCompleted();
+                    end
                 end
                 if ismethod(app, 'refreshOptimizeButtonLabel')
                     app.refreshOptimizeButtonLabel();
@@ -948,6 +951,9 @@ classdef OptimizationController < handle
 
                     app.OptimizationController.updateOptimizationOptionsSummary(app);
                     app.OptimizationController.markOptimizationDirty(app);
+                    if ismethod(app, 'notifyOptionsChanged')
+                        app.notifyOptionsChanged();
+                    end
                 catch ME
                     uialert(app.UIFigure, sprintf('Failed to apply options: %s', ME.message), 'Optimization Options');
                 end
@@ -1084,6 +1090,9 @@ classdef OptimizationController < handle
 
                 obj.updateOptimizationOptionsSummary(app);
                 obj.markOptimizationDirty(app);
+                if ismethod(app, 'notifyOptionsChanged')
+                    app.notifyOptionsChanged();
+                end
             catch ME
                 % Failed to update optimization options
             end

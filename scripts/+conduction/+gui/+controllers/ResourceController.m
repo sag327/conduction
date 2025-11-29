@@ -322,7 +322,12 @@ classdef ResourceController < handle
                 delete(app.ResourceStoreListener);
             end
 
-            app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) obj.onResourceStoreChanged(app));
+            % Prefer app-level handler so global freshness state can be updated.
+            if ismethod(app, 'onResourceStoreChanged')
+                app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) app.onResourceStoreChanged());
+            else
+                app.ResourceStoreListener = addlistener(store, 'TypesChanged', @(~, ~) obj.onResourceStoreChanged(app));
+            end
         end
 
         function onResourceStoreChanged(obj, app)
@@ -407,6 +412,9 @@ classdef ResourceController < handle
 
                 if shouldMarkDirty
                     app.OptimizationController.markOptimizationDirty(app);
+                    if ismethod(app, 'notifyResourcesChanged')
+                        app.notifyResourcesChanged();
+                    end
                 end
 
             catch ME
@@ -458,6 +466,9 @@ classdef ResourceController < handle
                 app.endSuppressOptimizationDirty();
 
                 % CaseStore auto-refreshes via CaseManager listener
+                if ismethod(app, 'notifyResourcesChanged')
+                    app.notifyResourcesChanged();
+                end
             end
         end
 

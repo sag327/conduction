@@ -149,12 +149,6 @@ classdef ScheduleRenderer < handle
 
             app.syncCaseScheduleFields(dailySchedule);
 
-            % Use fade effect if schedule is stale/dirty
-            fadeAlpha = 1.0;  % Default: full opacity
-            if app.IsOptimizationDirty
-                fadeAlpha = 0.35;  % Faded when stale (35% opacity)
-            end
-
             % UNIFIED-TIMELINE: Always render NOW line (use app.NowPositionMinutes)
             currentTime = app.getNowPosition();
 
@@ -193,7 +187,6 @@ classdef ScheduleRenderer < handle
                 'LockedCaseIds', lockedIds, ...
                 'SelectedCaseId', "", ...
                 'OperatorColors', app.OperatorColors, ...
-                'FadeAlpha', fadeAlpha, ...
                 'TimeRange', sharedRange, ...
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
                 'CurrentTimeLabel', nowLabelText, ...
@@ -873,6 +866,9 @@ classdef ScheduleRenderer < handle
             scheduleWasUpdated = obj.applyCaseMove(app, drag.caseId, targetLabIndex, newSetupStartMinutes);
             if scheduleWasUpdated
                 app.OptimizationController.markOptimizationDirty(app);
+                if ismethod(app, 'notifyScheduleEdited')
+                    app.notifyScheduleEdited();
+                end
                 app.updateCasesTable();
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
@@ -1800,6 +1796,9 @@ classdef ScheduleRenderer < handle
             end
 
             app.OptimizationController.markOptimizationDirty(app);
+            if ismethod(app, 'notifyScheduleEdited')
+                app.notifyScheduleEdited();
+            end
             app.updateCasesTable();
 
             if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == caseId && ...
