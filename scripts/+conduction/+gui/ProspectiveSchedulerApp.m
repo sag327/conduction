@@ -2942,19 +2942,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            % Align axes plot box with main Schedule axes *before* drawing so
-            % lab labels and time grid use the same pixel geometry when
-            % converting font size (points) to data units.
-            try
-                if ~isempty(app.ScheduleAxes) && isvalid(app.ScheduleAxes)
-                    originalUnits = app.ProposedAxes.Units;
-                    app.ProposedAxes.Units = app.ScheduleAxes.Units;
-                    app.ProposedAxes.Position = app.ScheduleAxes.Position;
-                    app.ProposedAxes.Units = originalUnits;
-                end
-            catch
-            end
-
             nowMinutes = app.getEffectiveProposedNowMinutes();
             annotatedSchedule = app.ScheduleRenderer.annotateScheduleWithDerivedStatus(app, app.ProposedSchedule, nowMinutes);
             % Use the same shared time range as the main schedule so the
@@ -2995,15 +2982,37 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             if isempty(app.ProposedStaleBanner) || ~isvalid(app.ProposedStaleBanner)
                 return;
             end
-            if isempty(app.ProposedSchedule)
+            if isempty(app.ProposedSchedule) || isempty(app.ProposedSchedule.labAssignments())
                 app.ProposedStaleBanner.Visible = 'off';
+                if ~isempty(app.ProposedRerunButton) && isvalid(app.ProposedRerunButton)
+                    app.ProposedRerunButton.BackgroundColor = [0.2 0.5 0.8];
+                end
                 return;
             end
 
-            if app.isProposedScheduleStale()
-                app.ProposedStaleBanner.Visible = 'on';
-            else
+            if ~app.isProposedScheduleStale()
                 app.ProposedStaleBanner.Visible = 'off';
+                if ~isempty(app.ProposedRerunButton) && isvalid(app.ProposedRerunButton)
+                    app.ProposedRerunButton.BackgroundColor = [0.2 0.5 0.8];
+                end
+                return;
+            end
+
+            % Proposal is stale: reuse baseline freshness tokens to describe causes.
+            [tokens, ~] = app.computeOptimizationFreshnessTokens();
+            if isempty(tokens)
+                message = "Proposal out of date.";
+            else
+                message = "Proposal out of date: " + strjoin(tokens, " | ");
+            end
+
+            if ~isempty(app.ProposedStaleLabel) && isvalid(app.ProposedStaleLabel)
+                app.ProposedStaleLabel.Text = message;
+            end
+            app.ProposedStaleBanner.Visible = 'on';
+
+            if ~isempty(app.ProposedRerunButton) && isvalid(app.ProposedRerunButton)
+                app.ProposedRerunButton.BackgroundColor = [0.3 0.7 1.0];
             end
         end
 
@@ -3639,6 +3648,36 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
+            [tokens, ~] = app.computeOptimizationFreshnessTokens();
+
+            if isempty(tokens)
+                app.ScheduleFreshnessLabel.Text = "";
+                app.ScheduleFreshnessLabel.Visible = 'off';
+                app.RunBtn.BackgroundColor = [0.2 0.5 0.8];
+                return;
+            end
+
+            message = "Schedule not optimized: " + strjoin(tokens, " | ");
+            app.ScheduleFreshnessLabel.Text = message;
+            app.ScheduleFreshnessLabel.Visible = 'on';
+
+            % Slightly accent the optimize button when not optimized.
+            app.RunBtn.BackgroundColor = [0.3 0.7 1.0];
+        end
+
+        function [tokens, flags] = computeOptimizationFreshnessTokens(app)
+            %COMPUTEOPTIMIZATIONFRESHNESSTOKENS Build shared freshness tokens/flags.
+            tokens = string.empty(0, 1);
+            flags = struct( ...
+                'hasUnscheduledCases', false, ...
+                'hasScheduleEdits', false, ...
+                'hasResourceChanges', false, ...
+                'hasOptionsChanged', false);
+
+            if ~app.HasBaselineOptimization
+                return;
+            end
+
             % Derive unscheduled-case presence from existing bucket logic.
             hasUnscheduledCases = false;
             try
@@ -3655,7 +3694,6 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             hasResourceChanges = (app.ResourceVersion ~= app.ResourceVersionAtLastOptimization);
             hasOptionsChanged = (app.OptionsVersion ~= app.OptionsVersionAtLastOptimization);
 
-            tokens = string.empty(0, 1);
             if hasUnscheduledCases
                 tokens(end+1, 1) = "unscheduled cases"; %#ok<AGROW>
             end
@@ -3669,19 +3707,10 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 tokens(end+1, 1) = "options changed"; %#ok<AGROW>
             end
 
-            if isempty(tokens)
-                app.ScheduleFreshnessLabel.Text = "";
-                app.ScheduleFreshnessLabel.Visible = 'off';
-                app.RunBtn.BackgroundColor = [0.2 0.5 0.8];
-                return;
-            end
-
-            message = "Schedule not optimized: " + strjoin(tokens, " | ");
-            app.ScheduleFreshnessLabel.Text = message;
-            app.ScheduleFreshnessLabel.Visible = 'on';
-
-            % Slightly accent the optimize button when not optimized.
-            app.RunBtn.BackgroundColor = [0.3 0.7 1.0];
+            flags.hasUnscheduledCases = hasUnscheduledCases;
+            flags.hasScheduleEdits = hasScheduleEdits;
+            flags.hasResourceChanges = hasResourceChanges;
+            flags.hasOptionsChanged = hasOptionsChanged;
         end
 
         % ------------------------------------------------------------------

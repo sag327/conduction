@@ -39,8 +39,12 @@ function buildProposedTab(app, tabGroup)
     app.ProposedRerunButton = uibutton(headerGrid, 'push');
     app.ProposedRerunButton.Layout.Row = 1;
     app.ProposedRerunButton.Layout.Column = 2;
-    app.ProposedRerunButton.Text = 'Re-run Options';
+    app.ProposedRerunButton.Text = 'Re-run with current state';
     app.ProposedRerunButton.ButtonPushedFcn = @(~, ~) app.onProposedRerun();
+    app.ProposedRerunButton.BackgroundColor = [0.2 0.5 0.8];
+    app.ProposedRerunButton.FontColor = [1 1 1];
+    app.ProposedRerunButton.FontWeight = 'bold';
+    app.ProposedRerunButton.Tooltip = 'Re-run proposal using current options, schedule, and resources.';
 
     app.ProposedDiscardButton = uibutton(headerGrid, 'push');
     app.ProposedDiscardButton.Layout.Row = 1;
@@ -75,8 +79,8 @@ function buildProposedTab(app, tabGroup)
     app.ProposedStaleBanner.BorderType = 'none';
     app.ProposedStaleBanner.Visible = 'off';
 
-    bannerGrid = uigridlayout(app.ProposedStaleBanner, [1, 2]);
-    bannerGrid.ColumnWidth = {'1x', 'fit'};
+    bannerGrid = uigridlayout(app.ProposedStaleBanner, [1, 1]);
+    bannerGrid.ColumnWidth = {'1x'};
     bannerGrid.RowHeight = {'fit'};
     bannerGrid.Padding = [12 6 12 6];
     bannerGrid.ColumnSpacing = 12;
@@ -84,16 +88,9 @@ function buildProposedTab(app, tabGroup)
     app.ProposedStaleLabel = uilabel(bannerGrid);
     app.ProposedStaleLabel.Layout.Row = 1;
     app.ProposedStaleLabel.Layout.Column = 1;
-    app.ProposedStaleLabel.Text = 'Schedule changed since this proposal was generated.';
+    app.ProposedStaleLabel.Text = 'Proposal out of date.';
     app.ProposedStaleLabel.FontWeight = 'bold';
     app.ProposedStaleLabel.FontColor = [1 0.9 0.85];
     app.ProposedStaleLabel.WordWrap = 'on';
-
-    app.ProposedStaleActionButton = uibutton(bannerGrid, 'push');
-    app.ProposedStaleActionButton.Layout.Row = 1;
-    app.ProposedStaleActionButton.Layout.Column = 2;
-    app.ProposedStaleActionButton.Text = 'Re-run with current state';
-    app.ProposedStaleActionButton.ButtonPushedFcn = @(~, ~) app.onProposedRerun();
-    app.ProposedStaleActionButton.FontWeight = 'bold';
 
 end
