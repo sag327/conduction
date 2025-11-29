@@ -4318,11 +4318,8 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
 
             try
-                % Generate auto-save filename
-                autoSaveDir = './sessions/autosave';
-                if ~isfolder(autoSaveDir)
-                    mkdir(autoSaveDir);
-                end
+                % Generate auto-save filename in app data sessions/autosave
+                autoSaveDir = conduction.getAppDataDir(fullfile('sessions', 'autosave'));
 
                 timestamp = datestr(datetime('now'), 'yyyy-mm-dd_HHMMSS');
                 filename = sprintf('autosave_%s.mat', timestamp);

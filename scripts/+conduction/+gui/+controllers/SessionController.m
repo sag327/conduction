@@ -34,7 +34,8 @@ classdef SessionController < handle
                 end
             end
 
-            defaultPath = './sessions/';
+            % Default to sessions directory under app data; fall back to CWD
+            defaultPath = conduction.getAppDataDir('sessions');
             if ~isfolder(defaultPath)
                 defaultPath = pwd;
             end

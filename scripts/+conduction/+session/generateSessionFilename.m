@@ -15,9 +15,10 @@ function filepath = generateSessionFilename(targetDate, basePath)
     %       filepath = generateSessionFilename(datetime('2025-01-15'));
     %       filepath = generateSessionFilename(datetime('2025-01-15'), './my_sessions');
 
-    % Default base path
+    % Default base path: use app data dir for sessions (repo-relative when
+    % not deployed, user data dir when deployed).
     if nargin < 2
-        basePath = './sessions';
+        basePath = conduction.getAppDataDir('sessions');
     end
 
     % Validate targetDate
