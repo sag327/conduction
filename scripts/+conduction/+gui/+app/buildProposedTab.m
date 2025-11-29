@@ -75,7 +75,7 @@ function buildProposedTab(app, tabGroup)
     app.ProposedStaleBanner = uipanel(headerGrid);
     app.ProposedStaleBanner.Layout.Row = 2;
     app.ProposedStaleBanner.Layout.Column = [1 4];
-    app.ProposedStaleBanner.BackgroundColor = [0.4 0.2 0.05];
+    app.ProposedStaleBanner.BackgroundColor = headerPanel.BackgroundColor;
     app.ProposedStaleBanner.BorderType = 'none';
     app.ProposedStaleBanner.Visible = 'off';
 
@@ -89,8 +89,7 @@ function buildProposedTab(app, tabGroup)
     app.ProposedStaleLabel.Layout.Row = 1;
     app.ProposedStaleLabel.Layout.Column = 1;
     app.ProposedStaleLabel.Text = 'Proposal out of date.';
-    app.ProposedStaleLabel.FontWeight = 'bold';
-    app.ProposedStaleLabel.FontColor = [1 0.9 0.85];
+    app.applyFreshnessLabelStyle(app.ProposedStaleLabel);
     app.ProposedStaleLabel.WordWrap = 'on';
 
 end

@@ -1229,10 +1229,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.ScheduleFreshnessLabel.Layout.Row = 2;
             app.ScheduleFreshnessLabel.Layout.Column = 1;
             app.ScheduleFreshnessLabel.Text = "";
-            app.ScheduleFreshnessLabel.FontSize = 11;
-            app.ScheduleFreshnessLabel.FontWeight = 'bold';
-            app.ScheduleFreshnessLabel.FontColor = [0.7 0.85 1.0];  % Neutral accent
-            app.ScheduleFreshnessLabel.HorizontalAlignment = 'left';
+            app.applyFreshnessLabelStyle(app.ScheduleFreshnessLabel);
             app.ScheduleFreshnessLabel.Visible = 'off';
 
             app.ScheduleAxes = uiaxes(app.CanvasScheduleLayout);
@@ -3000,10 +2997,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Proposal is stale: reuse baseline freshness tokens to describe causes.
             [tokens, ~] = app.computeOptimizationFreshnessTokens();
-            if isempty(tokens)
+            message = app.buildFreshnessMessage("Proposal out of date", tokens);
+            if strlength(message) == 0
                 message = "Proposal out of date.";
-            else
-                message = "Proposal out of date: " + strjoin(tokens, " | ");
             end
 
             if ~isempty(app.ProposedStaleLabel) && isvalid(app.ProposedStaleLabel)
@@ -3657,7 +3653,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 return;
             end
 
-            message = "Schedule not optimized: " + strjoin(tokens, " | ");
+            message = app.buildFreshnessMessage("Schedule not optimized", tokens);
             app.ScheduleFreshnessLabel.Text = message;
             app.ScheduleFreshnessLabel.Visible = 'on';
 
@@ -3711,6 +3707,37 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             flags.hasScheduleEdits = hasScheduleEdits;
             flags.hasResourceChanges = hasResourceChanges;
             flags.hasOptionsChanged = hasOptionsChanged;
+        end
+
+        function message = buildFreshnessMessage(app, prefix, tokens)
+            %#ok<INUSD>  % app unused, kept for method consistency
+            if nargin < 2
+                prefix = "";
+            end
+            if nargin < 3
+                tokens = string.empty(0, 1);
+            else
+                tokens = string(tokens(:));
+                tokens = tokens(strlength(tokens) > 0);
+            end
+            if isempty(tokens)
+                message = "";
+                return;
+            end
+            message = string(prefix) + ": " + strjoin(tokens, " | ");
+        end
+
+        function applyFreshnessLabelStyle(app, labelHandle)
+            %#ok<INUSD>
+            if nargin < 2 || isempty(labelHandle) || ~isvalid(labelHandle)
+                return;
+            end
+            labelHandle.FontSize = 11;
+            labelHandle.FontWeight = 'bold';
+            labelHandle.FontColor = [0.7 0.85 1.0];  % Neutral accent
+            if isprop(labelHandle, 'HorizontalAlignment')
+                labelHandle.HorizontalAlignment = 'left';
+            end
         end
 
         % ------------------------------------------------------------------
