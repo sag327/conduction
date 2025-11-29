@@ -870,6 +870,12 @@ classdef ScheduleRenderer < handle
                     app.notifyScheduleEdited();
                 end
                 app.updateCasesTable();
+                % After a successful drag, treat the dragged case as the
+                % active selection so it remains highlighted (or takes over
+                % highlighting from any previously selected case).
+                if ismethod(app, 'selectCases')
+                    app.selectCases(drag.caseId, 'replace');
+                end
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
                     app.DrawerController.populateDrawer(app, drag.caseId);
@@ -2681,6 +2687,11 @@ classdef ScheduleRenderer < handle
             % Return unique sorted list
             if ~isempty(overlappingIds)
                 overlappingIds = unique(overlappingIds, 'stable');
+                % Ensure the last dragged case is drawn last when overlapping
+                if strlength(lastDraggedCaseId) > 0 && any(overlappingIds == lastDraggedCaseId)
+                    mask = overlappingIds ~= lastDraggedCaseId;
+                    overlappingIds = [overlappingIds(mask); lastDraggedCaseId];
+                end
             end
         end
 

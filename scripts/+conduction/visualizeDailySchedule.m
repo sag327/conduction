@@ -353,6 +353,45 @@ function plotLabSchedule(ax, caseTimelines, labLabels, startHour, endHour, opera
         fadeAlpha = opts.FadeAlpha;
     end
 
+    % When overlapping cases are present, draw the designated "on top"
+    % cases last so they appear visually above their neighbors. The list
+    % comes from ScheduleRenderer.detectOverlappingCases via the
+    % OverlappingCaseIds option and already encodes persistence and
+    % last-dragged priorities.
+    overlappingIds = string.empty(0, 1);
+    if isstruct(opts) && isfield(opts, 'OverlappingCaseIds')
+        overlappingIds = string(opts.OverlappingCaseIds);
+        overlappingIds = overlappingIds(strlength(overlappingIds) > 0);
+    end
+    if ~isempty(overlappingIds)
+        allIds = string({caseTimelines.caseId});
+        if ~isempty(allIds)
+            isOverlap = ismember(allIds, overlappingIds);
+            baseOrder = find(~isOverlap);
+
+            overlapOrder = [];
+            for k = 1:numel(overlappingIds)
+                id = overlappingIds(k);
+                if strlength(id) == 0
+                    continue;
+                end
+                idx = find(allIds == id);
+                if ~isempty(idx)
+                    overlapOrder = [overlapOrder, idx(:).']; %#ok<AGROW>
+                end
+            end
+            if ~isempty(overlapOrder)
+                [~, uniqIdx] = unique(overlapOrder, 'stable');
+                overlapOrder = overlapOrder(uniqIdx);
+            end
+
+            finalOrder = [baseOrder(:).', overlapOrder];
+            if ~isempty(finalOrder)
+                caseTimelines = caseTimelines(finalOrder);
+            end
+        end
+    end
+
     set(ax, 'YDir', 'reverse');
     ylim(ax, [startHour, endHour]);
     xlim(ax, [0.5, numLabs + 0.5]);
