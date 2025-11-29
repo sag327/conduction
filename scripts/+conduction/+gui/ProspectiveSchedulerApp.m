@@ -829,18 +829,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
                 overlayApplied = false;
                 if ~isempty(app.CaseDragController)
-                    overlayStartTic = [];
-                    if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
-                        overlayStartTic = tic;
-                    end
                     overlayApplied = app.CaseDragController.showSelectionOverlayForIds(app, selectedIds);
-                    if ~isempty(overlayStartTic)
-                        try
-                            elapsedOverlay = toc(overlayStartTic);
-                            fprintf('[PERF] selection overlay: %.3f s (applied=%d)\n', elapsedOverlay, overlayApplied);
-                        catch
-                        end
-                    end
 
                     % Force UI update so selection overlay appears immediately
                     if overlayApplied
@@ -852,18 +841,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                     end
                 end
                 if ~overlayApplied && ~isempty(app.OptimizedSchedule)
-                    redrawStartTic = [];
-                    if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
-                        redrawStartTic = tic;
-                    end
                     conduction.gui.app.redrawSchedule(app);
-                    if ~isempty(redrawStartTic)
-                        try
-                            elapsedRedraw = toc(redrawStartTic);
-                            fprintf('[PERF] redrawSchedule from selection: %.3f s\n', elapsedRedraw);
-                        catch
-                        end
-                    end
                 end
 
                 if isMultiSelect

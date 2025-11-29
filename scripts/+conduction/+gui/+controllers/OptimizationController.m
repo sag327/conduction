@@ -652,18 +652,7 @@ classdef OptimizationController < handle
                     % Re-render existing schedule with fade to indicate it's stale
                     % Use simulated schedule if time control is active to preserve status indicators
                     scheduleToRender = app.getScheduleForRendering();
-                    renderTic = [];
-                    if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
-                        renderTic = tic;
-                    end
                     app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleToRender, app.OptimizationOutcome);
-                    if ~isempty(renderTic)
-                        try
-                            elapsedRender = toc(renderTic);
-                            fprintf('[PERF] markOptimizationDirty->renderOptimizedSchedule: %.3f s\n', elapsedRender);
-                        catch
-                        end
-                    end
                 end
             end
 

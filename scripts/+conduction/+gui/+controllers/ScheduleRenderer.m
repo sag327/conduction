@@ -140,46 +140,20 @@ classdef ScheduleRenderer < handle
                 metadata = struct();
             end
 
-            perfEnabled = isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive;
-            totalTic = [];
-            if perfEnabled
-                totalTic = tic;
-            end
-
             if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
                 app.AnalyticsRenderer.resetKPIBar(app);
                 app.ScheduleRenderer.updateActualTimeIndicator(app);
-                if ~isempty(totalTic)
-                    try
-                        elapsedTotal = toc(totalTic);
-                        fprintf('[PERF] renderOptimizedSchedule (empty) total: %.3f s\n', elapsedTotal);
-                    catch
-                    end
-                end
                 return;
             end
 
-            segTic = [];
-            if perfEnabled
-                segTic = tic;
-            end
             app.syncCaseScheduleFields(dailySchedule);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render syncCaseScheduleFields: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             % UNIFIED-TIMELINE: Always render NOW line (use app.NowPositionMinutes)
             currentTime = app.getNowPosition();
 
             % Build locked case ids on demand from per-case flags and NOW-derived auto-lock
             lockedIds = string.empty(0,1);
-            if perfEnabled
-                segTic = tic;
-            end
             try
                 if ~isempty(app.CaseManager) && app.CaseManager.CaseCount > 0
                     for i = 1:app.CaseManager.CaseCount
@@ -192,30 +166,12 @@ classdef ScheduleRenderer < handle
             catch
                 lockedIds = string.empty(0,1);
             end
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render buildLockedIds: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             % Detect and cache overlapping cases before rendering
-            if perfEnabled
-                segTic = tic;
-            end
             app.OverlappingCaseIds = obj.detectOverlappingCases(app);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render detectOverlaps: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             % Compute a shared time range for Schedule vs Proposed so their
             % visualized axes stay aligned when both exist.
-            if perfEnabled
-                segTic = tic;
-            end
             sharedRange = app.getSharedTimeRange(dailySchedule, app.ProposedSchedule);
 
             % Determine initial NOW label text so visualizeDailySchedule
@@ -235,12 +191,6 @@ classdef ScheduleRenderer < handle
                 'CurrentTimeMinutes', currentTime, ... % REALTIME-SCHEDULING
                 'CurrentTimeLabel', nowLabelText, ...
                 'OverlappingCaseIds', app.OverlappingCaseIds);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render visualizeDailySchedule: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             obj.drawClosedLabOverlays(app, dailySchedule);
 
@@ -256,70 +206,27 @@ classdef ScheduleRenderer < handle
                 end
                 resourceSummary = app.CaseManager.caseResourceSummary();
             end
-
-            if perfEnabled
-                segTic = tic;
-            end
             app.updateResourceLegendContents(resourceTypes, resourceSummary);
             obj.refreshResourceHighlightsForAxes(app, app.ScheduleAxes, dailySchedule, resourceTypes);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render resources+legend: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
-
-            if perfEnabled
-                segTic = tic;
-            end
             app.OptimizationController.updateOptimizationStatus(app);
             app.OptimizationController.updateOptimizationActionAvailability(app);
             app.AnalyticsRenderer.updateKPIBar(app, dailySchedule);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render optimization+KPI: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             % Update optional actual time indicator after schedule renders
-            if perfEnabled
-                segTic = tic;
-            end
             app.ScheduleRenderer.updateActualTimeIndicator(app);
 
             % UNIFIED-TIMELINE: Always enable NOW line drag
             obj.enableNowLineDrag(app);
             conduction.gui.controllers.ScheduleRenderer.refreshNowLabelForAxes(app, app.ScheduleAxes);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render nowLine+label: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
-            if perfEnabled
-                segTic = tic;
-            end
             if ~isempty(app.CanvasTabGroup) && isvalid(app.CanvasTabGroup) && ...
                     app.CanvasTabGroup.SelectedTab == app.CanvasAnalyzeTab
                 app.AnalyticsRenderer.drawUtilization(app, app.UtilAxes);
                 app.AnalyticsRenderer.drawFlipMetrics(app, app.FlipAxes);
                 app.AnalyticsRenderer.drawIdleMetrics(app, app.IdleAxes);
             end
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render analyticsCharts: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
 
             % Bind interactions after everything is drawn
-            %  - enable drag/selection
-            %  - apply selection highlights
-            if perfEnabled
-                segTic = tic;
-            end
             if isempty(app.ProposedSchedule)
                 % Normal mode: allow drag/resize
                 obj.enableCaseDrag(app);
@@ -327,31 +234,7 @@ classdef ScheduleRenderer < handle
                 % Proposal pending: selection-only on baseline schedule
                 obj.enableCaseSelectionOnAxes(app, app.ScheduleAxes);
             end
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render bindInteractions-enable: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
-
-            if perfEnabled
-                segTic = tic;
-            end
             obj.applyMultiSelectionHighlights(app);
-            if ~isempty(segTic)
-                try
-                    fprintf('[PERF] render bindInteractions-highlights: %.3f s\n', toc(segTic));
-                catch
-                end
-            end
-
-            if ~isempty(totalTic)
-                try
-                    elapsedTotal = toc(totalTic);
-                    fprintf('[PERF] renderOptimizedSchedule total: %.3f s\n', elapsedTotal);
-                catch
-                end
-            end
         end
 
         function refreshResourceHighlights(obj, app)
@@ -496,24 +379,11 @@ classdef ScheduleRenderer < handle
                 return;
             end
 
-            perfEnabled = isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive;
-
             if ~isempty(app.CaseDragController)
                 app.CaseDragController.hideSoftHighlight();
             end
 
-            findTic = [];
-            if perfEnabled
-                findTic = tic;
-            end
             caseBlocks = findobj(app.ScheduleAxes, 'Tag', 'CaseBlock');
-            if ~isempty(findTic)
-                try
-                    fprintf('[PERF] enableCaseDrag-findCaseBlocks: %.3f s (n=%d)\n', toc(findTic), numel(caseBlocks));
-                catch
-                end
-            end
-
             if isempty(caseBlocks)
                 if ~isempty(app.CaseDragController)
                     app.CaseDragController.hideSelectionOverlay(false);
@@ -523,35 +393,15 @@ classdef ScheduleRenderer < handle
             end
 
             if ~isempty(app.CaseDragController)
-                regTic = [];
-                if perfEnabled
-                    regTic = tic;
-                end
                 app.CaseDragController.registerCaseBlocks(app, caseBlocks);
-                if ~isempty(regTic)
-                    try
-                        fprintf('[PERF] enableCaseDrag-register: %.3f s\n', toc(regTic));
-                    catch
-                    end
-                end
             end
 
-            bindTic = [];
-            if perfEnabled
-                bindTic = tic;
-            end
             for idx = 1:numel(caseBlocks)
                 blockHandle = caseBlocks(idx);
                 if ~isgraphics(blockHandle)
                     continue;
                 end
                 set(blockHandle, 'ButtonDownFcn', @(src, ~) obj.onCaseBlockMouseDown(app, src));
-            end
-            if ~isempty(bindTic)
-                try
-                    fprintf('[PERF] enableCaseDrag-bindHandlers: %.3f s\n', toc(bindTic));
-                catch
-                end
             end
 
         end
@@ -1013,18 +863,7 @@ classdef ScheduleRenderer < handle
             % Apply move and measure render/selection costs when in testing mode
             scheduleWasUpdated = obj.applyCaseMove(app, drag.caseId, targetLabIndex, newSetupStartMinutes);
             if scheduleWasUpdated
-                renderStartTic = [];
-                if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
-                    renderStartTic = tic;
-                end
                 app.OptimizationController.markOptimizationDirty(app);
-                if ~isempty(renderStartTic)
-                    try
-                        elapsedRender = toc(renderStartTic);
-                        fprintf('[PERF] drag render: %.3f s\n', elapsedRender);
-                    catch
-                    end
-                end
                 if ismethod(app, 'notifyScheduleEdited')
                     app.notifyScheduleEdited();
                 end
@@ -1033,18 +872,7 @@ classdef ScheduleRenderer < handle
                 % active selection so it remains highlighted (or takes over
                 % highlighting from any previously selected case).
                 if ismethod(app, 'selectCases')
-                    selectStartTic = [];
-                    if isprop(app, 'IsTestingModeActive') && app.IsTestingModeActive
-                        selectStartTic = tic;
-                    end
                     app.selectCases(drag.caseId, 'replace');
-                    if ~isempty(selectStartTic)
-                        try
-                            elapsedSelect = toc(selectStartTic);
-                            fprintf('[PERF] drag selectCases: %.3f s\n', elapsedSelect);
-                        catch
-                        end
-                    end
                 end
                 if strlength(app.DrawerCurrentCaseId) > 0 && app.DrawerCurrentCaseId == drag.caseId && ...
                         app.DrawerWidth > conduction.gui.app.Constants.DrawerHandleWidth
