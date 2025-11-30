@@ -16,6 +16,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptMetricLabel.Text = 'Optimization metric:';
     app.OptMetricLabel.Layout.Row = 1;
     app.OptMetricLabel.Layout.Column = 1;
+    app.OptMetricLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptMetricDropDown = uidropdown(optimizationGrid);
     app.OptMetricDropDown.Items = {'operatorIdle', 'labIdle', 'makespan', 'operatorOvertime'};
@@ -23,11 +24,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptMetricDropDown.Layout.Row = 1;
     app.OptMetricDropDown.Layout.Column = 2;
     app.OptMetricDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptMetricDropDown.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptMetricDropDown.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptLabsLabel = uilabel(optimizationGrid);
     app.OptLabsLabel.Text = 'Number of labs:';
     app.OptLabsLabel.Layout.Row = 2;
     app.OptLabsLabel.Layout.Column = 1;
+    app.OptLabsLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptLabsSpinner = uispinner(optimizationGrid);
     app.OptLabsSpinner.Limits = [1 12];
@@ -36,11 +40,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptLabsSpinner.Layout.Row = 2;
     app.OptLabsSpinner.Layout.Column = 2;
     app.OptLabsSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptLabsSpinner.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptLabsSpinner.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptAvailableLabsLabel = uilabel(optimizationGrid);
     app.OptAvailableLabsLabel.Text = 'Available labs:';
     app.OptAvailableLabsLabel.Layout.Row = 3;
     app.OptAvailableLabsLabel.Layout.Column = 1;
+    app.OptAvailableLabsLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     availableWrapper = uigridlayout(optimizationGrid);
     availableWrapper.Layout.Row = 4;
@@ -52,11 +59,13 @@ function buildOptimizationTab(app, optimizationGrid)
     availableWrapper.ColumnWidth = {'1x'};
     availableWrapper.RowSpacing = 2;
     availableWrapper.Padding = [0 0 0 0];
+    conduction.gui.utils.Theme.applyPanelBackground(availableWrapper);
 
     app.OptAvailableSelectAll = uicheckbox(availableWrapper);
     app.OptAvailableSelectAll.Text = 'Select all labs';
     app.OptAvailableSelectAll.Layout.Row = 1;
     app.OptAvailableSelectAll.Layout.Column = 1;
+    app.OptAvailableSelectAll.FontColor = conduction.gui.utils.Theme.primaryText();
     conduction.gui.app.availableLabs.bindSelectAll(app, app.OptAvailableSelectAll);
 
     app.OptAvailableLabsPanel = uipanel(availableWrapper);
@@ -64,6 +73,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptAvailableLabsPanel.Layout.Column = 1;
     app.OptAvailableLabsPanel.Scrollable = 'on';
     app.OptAvailableLabsPanel.BorderType = 'none';
+    conduction.gui.utils.Theme.applyPanelBackground(app.OptAvailableLabsPanel);
 
     app.buildAvailableLabCheckboxes();
 
@@ -71,6 +81,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptFilterLabel.Text = 'Case filter:';
     app.OptFilterLabel.Layout.Row = 5;
     app.OptFilterLabel.Layout.Column = 1;
+    app.OptFilterLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptFilterDropDown = uidropdown(optimizationGrid);
     app.OptFilterDropDown.Items = {'all cases', 'outpatient', 'inpatient'};
@@ -79,11 +90,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptFilterDropDown.Layout.Row = 5;
     app.OptFilterDropDown.Layout.Column = 2;
     app.OptFilterDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptFilterDropDown.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptFilterDropDown.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptTurnoverLabel = uilabel(optimizationGrid);
     app.OptTurnoverLabel.Text = 'Turnover (minutes):';
     app.OptTurnoverLabel.Layout.Row = 6;
     app.OptTurnoverLabel.Layout.Column = 1;
+    app.OptTurnoverLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptTurnoverSpinner = uispinner(optimizationGrid);
     app.OptTurnoverSpinner.Limits = [0 240];
@@ -92,11 +106,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptTurnoverSpinner.Layout.Row = 6;
     app.OptTurnoverSpinner.Layout.Column = 2;
     app.OptTurnoverSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptTurnoverSpinner.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptTurnoverSpinner.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptSetupLabel = uilabel(optimizationGrid);
     app.OptSetupLabel.Text = 'Setup (minutes):';
     app.OptSetupLabel.Layout.Row = 7;
     app.OptSetupLabel.Layout.Column = 1;
+    app.OptSetupLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptSetupSpinner = uispinner(optimizationGrid);
     app.OptSetupSpinner.Limits = [0 120];
@@ -105,11 +122,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptSetupSpinner.Layout.Row = 7;
     app.OptSetupSpinner.Layout.Column = 2;
     app.OptSetupSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptSetupSpinner.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptSetupSpinner.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptPostLabel = uilabel(optimizationGrid);
     app.OptPostLabel.Text = 'Post-procedure (min):';
     app.OptPostLabel.Layout.Row = 8;
     app.OptPostLabel.Layout.Column = 1;
+    app.OptPostLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptPostSpinner = uispinner(optimizationGrid);
     app.OptPostSpinner.Limits = [0 120];
@@ -118,11 +138,14 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptPostSpinner.Layout.Row = 8;
     app.OptPostSpinner.Layout.Column = 2;
     app.OptPostSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptPostSpinner.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptPostSpinner.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptMaxOperatorLabel = uilabel(optimizationGrid);
     app.OptMaxOperatorLabel.Text = 'Max operator (min):';
     app.OptMaxOperatorLabel.Layout.Row = 9;
     app.OptMaxOperatorLabel.Layout.Column = 1;
+    app.OptMaxOperatorLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptMaxOperatorSpinner = uispinner(optimizationGrid);
     app.OptMaxOperatorSpinner.Limits = [60 1440];
@@ -131,6 +154,8 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptMaxOperatorSpinner.Layout.Row = 9;
     app.OptMaxOperatorSpinner.Layout.Column = 2;
     app.OptMaxOperatorSpinner.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptMaxOperatorSpinner.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptMaxOperatorSpinner.FontColor = conduction.gui.utils.Theme.primaryText();
 
     % Create container for label + info button
     labelContainer = uigridlayout(optimizationGrid);
@@ -140,11 +165,15 @@ function buildOptimizationTab(app, optimizationGrid)
     labelContainer.ColumnWidth = {'1x', 20};
     labelContainer.Padding = [0 0 0 0];
     labelContainer.ColumnSpacing = 4;
+    if isprop(labelContainer, 'BackgroundColor')
+        labelContainer.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
+    end
 
     app.OptOutpatientInpatientModeLabel = uilabel(labelContainer);
     app.OptOutpatientInpatientModeLabel.Text = 'Outpt/Inpt handling:';
     app.OptOutpatientInpatientModeLabel.Layout.Row = 1;
     app.OptOutpatientInpatientModeLabel.Layout.Column = 1;
+    app.OptOutpatientInpatientModeLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.OptOutpatientInpatientModeInfoButton = uibutton(labelContainer, 'push');
     app.OptOutpatientInpatientModeInfoButton.Text = '?';
@@ -165,6 +194,8 @@ function buildOptimizationTab(app, optimizationGrid)
     app.OptOutpatientInpatientModeDropDown.Layout.Row = 10;
     app.OptOutpatientInpatientModeDropDown.Layout.Column = 2;
     app.OptOutpatientInpatientModeDropDown.ValueChangedFcn = @(~, ~) app.OptimizationController.updateOptimizationOptionsFromTab(app);
+    app.OptOutpatientInpatientModeDropDown.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.OptOutpatientInpatientModeDropDown.FontColor = conduction.gui.utils.Theme.primaryText();
     scopeSpacer = uilabel(optimizationGrid);
     scopeSpacer.Text = ' ';
     scopeSpacer.FontSize = 6;
@@ -176,25 +207,30 @@ function buildOptimizationTab(app, optimizationGrid)
     scopePanel.Layout.Row = 12;
     scopePanel.Layout.Column = [1 2];
     scopePanel.Visible = 'off';
-    scopePanel.BackgroundColor = [0.13 0.13 0.13];
-    scopePanel.ForegroundColor = [0.95 0.95 0.95];
+    scopePanel.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
+    scopePanel.ForegroundColor = conduction.gui.utils.Theme.primaryText();
 
     scopeGrid = uigridlayout(scopePanel, [4, 2]);
     scopeGrid.ColumnWidth = {'fit', '1x'};
     scopeGrid.RowHeight = {'fit','fit','fit','fit'};
     scopeGrid.RowSpacing = 4;
     scopeGrid.Padding = [8 10 8 6];  % [left top right bottom]
+    if isprop(scopeGrid, 'BackgroundColor')
+        scopeGrid.BackgroundColor = scopePanel.BackgroundColor;
+    end
 
     app.ScopeSummaryLabel = uilabel(scopeGrid);
     app.ScopeSummaryLabel.Layout.Row = 1;
     app.ScopeSummaryLabel.Layout.Column = [1 2];
     app.ScopeSummaryLabel.Text = 'Summary: Awaiting proposal';
     app.ScopeSummaryLabel.WordWrap = 'on';
+    app.ScopeSummaryLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     includeLabel = uilabel(scopeGrid);
     includeLabel.Text = 'Include cases:';
     includeLabel.Layout.Row = 2;
     includeLabel.Layout.Column = 1;
+    includeLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.ScopeIncludeDropDown = uidropdown(scopeGrid);
     app.ScopeIncludeDropDown.Items = {'Unscheduled + scheduled future','Unscheduled only'};
@@ -204,6 +240,8 @@ function buildOptimizationTab(app, optimizationGrid)
     app.ScopeIncludeDropDown.Layout.Column = 2;
     app.ScopeIncludeDropDown.Tooltip = 'Choose which cases are eligible when re-optimizing.';
     app.ScopeIncludeDropDown.ValueChangedFcn = @(src, ~) app.onScopeIncludeChanged(src.Value);
+    app.ScopeIncludeDropDown.BackgroundColor = conduction.gui.utils.Theme.inputBackground();
+    app.ScopeIncludeDropDown.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.ScopeRespectLocksCheckBox = uicheckbox(scopeGrid);
     app.ScopeRespectLocksCheckBox.Text = 'Respect user locks';
@@ -212,6 +250,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.ScopeRespectLocksCheckBox.Layout.Column = [1 2];
     app.ScopeRespectLocksCheckBox.Tooltip = 'When unchecked, locked cases may move during re-optimization.';
     app.ScopeRespectLocksCheckBox.ValueChangedFcn = @(src, ~) app.onScopeRespectLocksChanged(logical(src.Value));
+    app.ScopeRespectLocksCheckBox.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.ScopePreferLabsCheckBox = uicheckbox(scopeGrid);
     app.ScopePreferLabsCheckBox.Text = 'Prefer current labs';
@@ -220,6 +259,7 @@ function buildOptimizationTab(app, optimizationGrid)
     app.ScopePreferLabsCheckBox.Layout.Column = [1 2];
     app.ScopePreferLabsCheckBox.Tooltip = 'Encourage the optimizer to keep cases in their existing labs when possible.';
     app.ScopePreferLabsCheckBox.ValueChangedFcn = @(src, ~) app.onScopePreferLabsChanged(logical(src.Value));
+    app.ScopePreferLabsCheckBox.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.ScopeControlsPanel = scopePanel;
 

@@ -103,6 +103,16 @@ classdef ResourceChecklist < handle
             isHorizontal = obj.Options.HorizontalLayout;
 
             obj.Grid = uigridlayout(parent);
+            if isprop(obj.Grid, 'BackgroundColor')
+                try
+                    if isprop(parent, 'BackgroundColor')
+                        obj.Grid.BackgroundColor = parent.BackgroundColor;
+                    else
+                        obj.Grid.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
+                    end
+                catch
+                end
+            end
             if isHorizontal
                 % Horizontal layout: no title, no create button, just checkboxes
                 obj.Grid.RowHeight = {'fit'};
@@ -123,6 +133,7 @@ classdef ResourceChecklist < handle
                 titleLabel.FontWeight = 'bold';
                 titleLabel.Layout.Row = 1;
                 titleLabel.Layout.Column = 1;
+                conduction.gui.utils.Theme.stylePrimaryLabel(titleLabel);
             end
 
             obj.ScrollPanel = uipanel(obj.Grid);
@@ -254,6 +265,7 @@ classdef ResourceChecklist < handle
                 end
                 checkbox.ValueChangedFcn = @(src, evt) obj.onCheckboxChanged(src);
                 checkbox.Tag = char(type.Id);
+                conduction.gui.utils.Theme.styleCheckbox(checkbox);
                 isAssignable = type.Capacity > 0;
                 shouldSelect = isAssignable && any(currentSelection == type.Id);
                 checkbox.Value = shouldSelect;

@@ -156,6 +156,9 @@ function buildDrawerUI(app)
     app.DrawerHistogramAxes = uiaxes(app.DrawerHistogramPanel);
     app.DrawerHistogramAxes.Units = 'normalized';
     app.DrawerHistogramAxes.Position = [0, 0, 1, 1];
+    app.DrawerHistogramAxes.Color = [0 0 0];
+    app.DrawerHistogramAxes.XColor = [0.7 0.7 0.7];
+    app.DrawerHistogramAxes.YColor = [0.7 0.7 0.7];
     app.DrawerHistogramAxes.Toolbar.Visible = 'off';
     app.DrawerHistogramAxes.Interactions = [];
     disableDefaultInteractivity(app.DrawerHistogramAxes);

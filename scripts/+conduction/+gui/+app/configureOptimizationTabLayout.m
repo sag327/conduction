@@ -7,4 +7,7 @@ function optimizationGrid = configureOptimizationTabLayout(app)
     optimizationGrid.Padding = [10 10 10 10];
     optimizationGrid.RowSpacing = 6;
     optimizationGrid.ColumnSpacing = 8;
+    if isprop(optimizationGrid, 'BackgroundColor')
+        optimizationGrid.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+    end
 end

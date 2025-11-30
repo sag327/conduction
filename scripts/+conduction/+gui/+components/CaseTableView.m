@@ -100,6 +100,18 @@ classdef CaseTableView < handle
             obj.Grid.Padding = [10 10 10 10];
             obj.Grid.RowSpacing = 6;
             obj.Grid.ColumnSpacing = 10;
+            % Match surrounding panel background so the cases tab adopts
+            % the dark theme consistently.
+            if isprop(obj.Grid, 'BackgroundColor')
+                try
+                    if isprop(parent, 'BackgroundColor')
+                        obj.Grid.BackgroundColor = parent.BackgroundColor;
+                    else
+                        conduction.gui.utils.Theme.applyPanelBackground(obj.Grid);
+                    end
+                catch
+                end
+            end
 
             if isfield(obj.Options.Layout, 'RowHeight')
                 obj.Grid.RowHeight = obj.Options.Layout.RowHeight;
@@ -122,6 +134,7 @@ classdef CaseTableView < handle
             obj.TitleLabel.FontWeight = 'bold';
             obj.TitleLabel.Layout.Row = 1;
             obj.TitleLabel.Layout.Column = [1 2];
+            conduction.gui.utils.Theme.stylePrimaryLabel(obj.TitleLabel);
 
             obj.Table = uitable(obj.Grid);
             obj.Table.Layout.Row = 2;
@@ -132,6 +145,7 @@ classdef CaseTableView < handle
             obj.Table.SelectionType = 'row';
             obj.Table.Multiselect = 'on';
             obj.Table.SelectionChangedFcn = @(src, event) obj.onTableSelectionChanged(event);
+            conduction.gui.utils.Theme.styleInput(obj.Table);
 
             rowStyle = uistyle('HorizontalAlignment', 'left');
             addStyle(obj.Table, rowStyle);
@@ -152,6 +166,10 @@ classdef CaseTableView < handle
             obj.RemoveButton.Layout.Column = 1;
             obj.RemoveButton.Enable = 'off';
             obj.RemoveButton.ButtonPushedFcn = @(src, event) obj.onRemoveButtonPushed();
+            obj.RemoveButton.BackgroundColor = [0.3 0.3 0.3];
+            if isprop(obj.RemoveButton, 'FontColor')
+                obj.RemoveButton.FontColor = [1 1 1];
+            end
 
             obj.ClearButton = uibutton(buttonGrid, 'push');
             obj.ClearButton.Text = 'Clear All';
@@ -159,6 +177,10 @@ classdef CaseTableView < handle
             obj.ClearButton.Layout.Column = 2;
             obj.ClearButton.Enable = 'off';
             obj.ClearButton.ButtonPushedFcn = @(src, event) obj.onClearButtonPushed();
+            obj.ClearButton.BackgroundColor = [0.3 0.3 0.3];
+            if isprop(obj.ClearButton, 'FontColor')
+                obj.ClearButton.FontColor = [1 1 1];
+            end
         end
 
         function attachStoreListeners(obj)

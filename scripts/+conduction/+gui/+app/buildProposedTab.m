@@ -9,18 +9,22 @@ function buildProposedTab(app, tabGroup)
     end
 
     app.ProposedTab = uitab(tabGroup, 'Title', 'Proposed');
+    if isprop(app.ProposedTab, 'BackgroundColor')
+        app.ProposedTab.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+    end
 
     grid = uigridlayout(app.ProposedTab, [2, 1]);
     grid.RowHeight = {conduction.gui.app.Constants.ScheduleHeaderHeight, '1x'};
     grid.ColumnWidth = {'1x'};
     grid.Padding = [10 10 10 10];
     grid.RowSpacing = 8;
+    conduction.gui.utils.Theme.applyAppBackground(grid);
 
     headerPanel = uipanel(grid);
     headerPanel.Layout.Row = 1;
     headerPanel.Layout.Column = 1;
     headerPanel.BorderType = 'none';
-    headerPanel.BackgroundColor = [0.15 0.15 0.15];
+    headerPanel.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
 
     headerGrid = uigridlayout(headerPanel, [2, 4]);
     headerGrid.ColumnWidth = {'1x', 'fit', 'fit', 'fit'};
@@ -28,13 +32,16 @@ function buildProposedTab(app, tabGroup)
     headerGrid.Padding = [10 8 10 8];
     headerGrid.ColumnSpacing = 10;
     headerGrid.RowSpacing = 6;
+    if isprop(headerGrid, 'BackgroundColor')
+        headerGrid.BackgroundColor = headerPanel.BackgroundColor;
+    end
 
     app.ProposedSummaryLabel = uilabel(headerGrid);
     app.ProposedSummaryLabel.Layout.Row = 1;
     app.ProposedSummaryLabel.Layout.Column = 1;
     app.ProposedSummaryLabel.Text = 'Summary: Awaiting proposal';
     app.ProposedSummaryLabel.FontSize = 14;
-    app.ProposedSummaryLabel.FontColor = [1 1 1];
+    app.ProposedSummaryLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.ProposedRerunButton = uibutton(headerGrid, 'push');
     app.ProposedRerunButton.Layout.Row = 1;

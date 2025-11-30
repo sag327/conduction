@@ -7,4 +7,7 @@ function addGrid = configureAddTabLayout(app)
     addGrid.Padding = [10 10 10 10];
     addGrid.RowSpacing = 3;
     addGrid.ColumnSpacing = 6;
+    if isprop(addGrid, 'BackgroundColor')
+        addGrid.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+    end
 end

@@ -7,4 +7,7 @@ function resourcesGrid = configureResourcesTabLayout(app)
     resourcesGrid.Padding = [10 10 10 10];
     resourcesGrid.RowSpacing = 8;
     resourcesGrid.ColumnSpacing = 0;
+    if isprop(resourcesGrid, 'BackgroundColor')
+        resourcesGrid.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+    end
 end
