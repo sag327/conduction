@@ -7,4 +7,7 @@ function casesGrid = configureListTabLayout(app)
     casesGrid.Padding = [10 10 10 10];
     casesGrid.RowSpacing = 6;
     casesGrid.ColumnSpacing = 10;
+    if isprop(casesGrid, 'BackgroundColor')
+        casesGrid.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+    end
 end

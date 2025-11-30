@@ -1081,10 +1081,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
             app.UIFigure.Position = [100 100 1400 900];
-            % Explicitly set a dark background color so all panels that
-            % inherit UIFigure.Color remain consistent in compiled and
-            % non-compiled environments.
-            app.UIFigure.Color = [0.1 0.1 0.1];
+            % Explicitly set a dark background color via centralized theme
+            % so the app looks consistent across MATLAB/OS themes.
+            app.UIFigure.Color = conduction.gui.utils.Theme.appBackground();
             versionInfo = conduction.version();
             app.UIFigure.Name = sprintf('Conduction v%s', versionInfo.Version);
             app.UIFigure.Resize = 'on';
@@ -1093,6 +1092,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             % Root layout: header, content
             app.MainGridLayout = uigridlayout(app.UIFigure);
+            if isprop(app.MainGridLayout, 'BackgroundColor')
+                app.MainGridLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
             app.MainGridLayout.RowHeight = {'fit', '1x'};
             app.MainGridLayout.ColumnWidth = {'1x'};
             app.MainGridLayout.RowSpacing = 10;
@@ -1109,6 +1111,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.TopBarLayout.ColumnWidth = {'fit','1x','fit',50};
             app.TopBarLayout.ColumnSpacing = 8;  % Reduced spacing for tighter grouping of controls
             app.TopBarLayout.Padding = [0 0 42 0];  % Right padding to align with middle panel edge (avoid drawer overlap)
+            app.TopBarLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
 
             app.RunBtn = uibutton(app.TopBarLayout, 'push');
             app.RunBtn.Text = '  Optimize Schedule  ';  % Added padding spaces for width
@@ -1152,16 +1155,26 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.MiddleLayout.ColumnSpacing = 12;
             app.MiddleLayout.RowSpacing = 6;
             app.MiddleLayout.Padding = [0 0 0 0];
+            if isprop(app.MiddleLayout, 'BackgroundColor')
+                app.MiddleLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
 
             app.TabGroup = uitabgroup(app.MiddleLayout);
             app.TabGroup.Layout.Row = 1;
             app.TabGroup.Layout.Column = 1;
             app.TabGroup.SelectionChangedFcn = createCallbackFcn(app, @MainTabGroupSelectionChanged, true);
+            if isprop(app.TabGroup, 'BackgroundColor')
+                app.TabGroup.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
 
             app.TabAdd = uitab(app.TabGroup, 'Title', 'Add/Edit');
+            app.TabAdd.BackgroundColor = conduction.gui.utils.Theme.appBackground();
             app.TabList = uitab(app.TabGroup, 'Title', 'Cases');
+            app.TabList.BackgroundColor = conduction.gui.utils.Theme.appBackground();
             app.TabOptimization = uitab(app.TabGroup, 'Title', 'Optimization');
+            app.TabOptimization.BackgroundColor = conduction.gui.utils.Theme.appBackground();
             app.TabResources = uitab(app.TabGroup, 'Title', 'Resources');
+            app.TabResources.BackgroundColor = conduction.gui.utils.Theme.appBackground();
 
             addGrid = conduction.gui.app.configureAddTabLayout(app);
             conduction.gui.app.buildDateSection(app, addGrid);
@@ -1169,12 +1182,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             conduction.gui.app.buildDurationSection(app, addGrid);
             conduction.gui.app.buildConstraintSection(app, addGrid);
 
-            app.TestPanel = uipanel(app.MiddleLayout);
-            app.TestPanel.Layout.Row = 2;
-            app.TestPanel.Layout.Column = 1;
-            app.TestPanel.Title = 'Testing';
-            app.TestPanel.Visible = 'off';
-            app.TestPanel.BackgroundColor = app.UIFigure.Color;
+              app.TestPanel = uipanel(app.MiddleLayout);
+              app.TestPanel.Layout.Row = 2;
+              app.TestPanel.Layout.Column = 1;
+              app.TestPanel.Title = 'Testing';
+              app.TestPanel.Visible = 'off';
+              app.TestPanel.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
             conduction.gui.app.testingMode.buildTestingPanel(app);
 
             listGrid = conduction.gui.app.configureListTabLayout(app);
@@ -1190,26 +1203,35 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CanvasTabGroup.Layout.Row = [1 2];
             app.CanvasTabGroup.Layout.Column = 2;
             app.CanvasTabGroup.SelectionChangedFcn = createCallbackFcn(app, @CanvasTabGroupSelectionChanged, true);
+            if isprop(app.CanvasTabGroup, 'BackgroundColor')
+                app.CanvasTabGroup.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
 
             app.CanvasScheduleTab = uitab(app.CanvasTabGroup, 'Title', 'Schedule');
             app.CanvasAnalyzeTab = uitab(app.CanvasTabGroup, 'Title', 'Analyze');
 
-            app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
-            app.CanvasScheduleLayout.RowHeight = {conduction.gui.app.Constants.ScheduleHeaderHeight, '1x'};
-            app.CanvasScheduleLayout.ColumnWidth = {'1x'};  % Single column - schedule fills width
-            % Match Proposed tab canvas layout so Schedule/Proposed axes
-            % share the same pixel height for the unified time range.
-            app.CanvasScheduleLayout.Padding = [10 10 10 10];
-            app.CanvasScheduleLayout.RowSpacing = 8;
-            app.CanvasScheduleLayout.ColumnSpacing = 10;
+              app.CanvasScheduleTab.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+              app.CanvasAnalyzeTab.BackgroundColor = conduction.gui.utils.Theme.appBackground();
 
-            % Header row mirrors Proposed tab layout and is used to display
-            % read-only status when a proposal is pending.
-            scheduleHeaderPanel = uipanel(app.CanvasScheduleLayout);
-            scheduleHeaderPanel.Layout.Row = 1;
-            scheduleHeaderPanel.Layout.Column = 1;
-            scheduleHeaderPanel.BorderType = 'none';
-            scheduleHeaderPanel.BackgroundColor = [0.15 0.15 0.15];
+              app.CanvasScheduleLayout = uigridlayout(app.CanvasScheduleTab);
+              app.CanvasScheduleLayout.RowHeight = {conduction.gui.app.Constants.ScheduleHeaderHeight, '1x'};
+              app.CanvasScheduleLayout.ColumnWidth = {'1x'};  % Single column - schedule fills width
+              % Match Proposed tab canvas layout so Schedule/Proposed axes
+              % share the same pixel height for the unified time range.
+              app.CanvasScheduleLayout.Padding = [10 10 10 10];
+              app.CanvasScheduleLayout.RowSpacing = 8;
+              app.CanvasScheduleLayout.ColumnSpacing = 10;
+              if isprop(app.CanvasScheduleLayout, 'BackgroundColor')
+                  app.CanvasScheduleLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+              end
+
+              % Header row mirrors Proposed tab layout and is used to display
+              % read-only status when a proposal is pending.
+              scheduleHeaderPanel = uipanel(app.CanvasScheduleLayout);
+              scheduleHeaderPanel.Layout.Row = 1;
+              scheduleHeaderPanel.Layout.Column = 1;
+              scheduleHeaderPanel.BorderType = 'none';
+              conduction.gui.utils.Theme.applyAppBackground(scheduleHeaderPanel);
 
             % Use the same 2x4 grid pattern as the Proposed header
             headerGrid = uigridlayout(scheduleHeaderPanel, [2, 4]);
@@ -1218,6 +1240,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             headerGrid.Padding = [10 8 10 8];
             headerGrid.ColumnSpacing = 10;
             headerGrid.RowSpacing = 6;
+            if isprop(headerGrid, 'BackgroundColor')
+                headerGrid.BackgroundColor = scheduleHeaderPanel.BackgroundColor;
+            end
 
             app.ScheduleStatusLabel = uilabel(headerGrid);
             app.ScheduleStatusLabel.Layout.Row = 1;
@@ -1256,6 +1281,9 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.CanvasAnalyzeLayout.Padding = [8 8 8 8];
             app.CanvasAnalyzeLayout.RowSpacing = 5;
             app.CanvasAnalyzeLayout.ColumnSpacing = 0;
+            if isprop(app.CanvasAnalyzeLayout, 'BackgroundColor')
+                app.CanvasAnalyzeLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
 
             app.UtilAxes = uiaxes(app.CanvasAnalyzeLayout);
             app.UtilAxes.Layout.Row = 1;
@@ -1295,12 +1323,12 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.CanvasTabGroup.SelectedTab = app.CanvasScheduleTab;
 
-            app.Drawer = uipanel(app.MiddleLayout);
-            app.Drawer.Layout.Row = [1 2];
-            app.Drawer.Layout.Column = 3;
-            % Match primary panel background used elsewhere so inspector
-            % drawer blends with the surrounding UI.
-            app.Drawer.BackgroundColor = [0.15 0.15 0.15];
+              app.Drawer = uipanel(app.MiddleLayout);
+              app.Drawer.Layout.Row = [1 2];
+              app.Drawer.Layout.Column = 3;
+              % Match primary panel background used elsewhere so inspector
+              % drawer blends with the surrounding UI.
+              app.Drawer.BackgroundColor = conduction.gui.utils.Theme.panelBackground();
             app.Drawer.BorderType = 'none';
             app.Drawer.Visible = 'on';
             conduction.gui.app.drawer.buildDrawerUI(app);
@@ -1319,12 +1347,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.BottomBarLayout.ColumnWidth = {'3x','fit','fit','fit','fit'};  % 5 columns (removed Makespan)
             app.BottomBarLayout.ColumnSpacing = 11;
             app.BottomBarLayout.Padding = [0 12 4 0];
+            if isprop(app.BottomBarLayout, 'BackgroundColor')
+                app.BottomBarLayout.BackgroundColor = conduction.gui.utils.Theme.appBackground();
+            end
 
             % Create ResourceLegend in Column 1 (horizontal layout)
             app.ResourceLegendPanel = uipanel(app.BottomBarLayout);
             app.ResourceLegendPanel.Layout.Column = 1;
             app.ResourceLegendPanel.BorderType = 'none';
-            app.ResourceLegendPanel.BackgroundColor = app.UIFigure.Color;
+            conduction.gui.utils.Theme.applyAppBackground(app.ResourceLegendPanel);
 
             app.ResourceLegend = conduction.gui.components.ResourceLegend(app.ResourceLegendPanel, ...
                 'HighlightChangedFcn', @(ids) app.onResourceLegendHighlightChanged(ids));
@@ -1333,12 +1364,19 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
 
             app.KPI1 = uilabel(app.BottomBarLayout, 'Text', 'Cases: --', sharedKpiStyle{:});
             app.KPI1.Layout.Column = 2;
+            conduction.gui.utils.Theme.stylePrimaryLabel(app.KPI1);
+
             app.KPI3 = uilabel(app.BottomBarLayout, 'Text', 'Op idle: --', sharedKpiStyle{:});
             app.KPI3.Layout.Column = 3;
+            conduction.gui.utils.Theme.stylePrimaryLabel(app.KPI3);
+
             app.KPI4 = uilabel(app.BottomBarLayout, 'Text', 'Lab idle: --', sharedKpiStyle{:});
             app.KPI4.Layout.Column = 4;
+            conduction.gui.utils.Theme.stylePrimaryLabel(app.KPI4);
+
             app.KPI5 = uilabel(app.BottomBarLayout, 'Text', 'Flip ratio: --', sharedKpiStyle{:});
             app.KPI5.Layout.Column = 5;
+            conduction.gui.utils.Theme.stylePrimaryLabel(app.KPI5);
 
             % Refresh theming when OS/light mode changes
             app.UIFigure.ThemeChangedFcn = @(src, evt) app.DurationSelector.applyDurationThemeColors(app);
@@ -1451,14 +1489,15 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 labIds = 1:max(1, app.Opts.labs);
             end
 
-            if isempty(app.AvailableLabIds)
-                app.AvailableLabIds = labIds;
-            end
-
-            checkboxGrid = uigridlayout(app.OptAvailableLabsPanel);
-            checkboxGrid.Padding = [0 0 0 0];
-            checkboxGrid.RowSpacing = 2;
-            checkboxGrid.ColumnSpacing = 12;
+              if isempty(app.AvailableLabIds)
+                  app.AvailableLabIds = labIds;
+              end
+  
+              checkboxGrid = uigridlayout(app.OptAvailableLabsPanel);
+              checkboxGrid.Padding = [0 0 0 0];
+              checkboxGrid.RowSpacing = 2;
+              checkboxGrid.ColumnSpacing = 12;
+              conduction.gui.utils.Theme.applyPanelBackground(checkboxGrid);
 
             numLabs = numel(labIds);
             if numLabs == 0
@@ -1471,19 +1510,20 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             checkboxGrid.RowHeight = repmat({'fit'}, 1, rows);
             checkboxGrid.ColumnWidth = repmat({'fit'}, 1, maxColumns);
 
-            app.IsSyncingAvailableLabSelection = true;
-            app.OptAvailableLabCheckboxes = matlab.ui.control.CheckBox.empty(0, 1);
-            for idx = 1:numLabs
-                labId = labIds(idx);
-                cb = uicheckbox(checkboxGrid);
-                cb.Text = sprintf('Lab %d', labId);
-                cb.Layout.Row = ceil(idx / maxColumns);
-                cb.Layout.Column = mod(idx - 1, maxColumns) + 1;
-                cb.Value = ismember(labId, app.AvailableLabIds);
-                cb.UserData = labId;
-                conduction.gui.app.availableLabs.bindCheckbox(app, cb);
-                app.OptAvailableLabCheckboxes(end+1, 1) = cb; %#ok<AGROW>
-            end
+              app.IsSyncingAvailableLabSelection = true;
+              app.OptAvailableLabCheckboxes = matlab.ui.control.CheckBox.empty(0, 1);
+              for idx = 1:numLabs
+                  labId = labIds(idx);
+                  cb = uicheckbox(checkboxGrid);
+                  cb.Text = sprintf('Lab %d', labId);
+                  cb.Layout.Row = ceil(idx / maxColumns);
+                  cb.Layout.Column = mod(idx - 1, maxColumns) + 1;
+                  cb.Value = ismember(labId, app.AvailableLabIds);
+                  cb.UserData = labId;
+                  conduction.gui.app.availableLabs.bindCheckbox(app, cb);
+                  conduction.gui.utils.Theme.styleCheckbox(cb);
+                  app.OptAvailableLabCheckboxes(end+1, 1) = cb; %#ok<AGROW>
+              end
             app.IsSyncingAvailableLabSelection = false;
             app.syncAvailableLabsSelectAll();
         end

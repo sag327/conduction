@@ -20,12 +20,14 @@ function buildCaseManagementSection(app, casesGrid)
     header.RowSpacing = 0;
     header.ColumnSpacing = 8;
     header.Padding = [0 0 0 0];
+    conduction.gui.utils.Theme.applyAppBackground(header);
 
     app.CasesLabel = uilabel(header);
     app.CasesLabel.Text = 'Added Cases';
     app.CasesLabel.FontWeight = 'bold';
     app.CasesLabel.Layout.Row = 1;
     app.CasesLabel.Layout.Column = 1;
+    app.CasesLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.CasesUndockButton = uibutton(header, 'push');
     app.CasesUndockButton.Layout.Row = 1;

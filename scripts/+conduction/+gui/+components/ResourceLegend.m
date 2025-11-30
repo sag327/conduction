@@ -116,6 +116,12 @@ classdef ResourceLegend < handle
             obj.Grid.RowSpacing = 0;
             obj.Grid.ColumnSpacing = 0;
             obj.Grid.Padding = [0 0 0 0];
+            try
+                if isprop(obj.Parent, 'BackgroundColor')
+                    obj.Grid.BackgroundColor = obj.Parent.BackgroundColor;
+                end
+            catch
+            end
 
             % No header label for horizontal layout
             obj.HeaderLabel = matlab.ui.control.Label.empty;
@@ -128,6 +134,12 @@ classdef ResourceLegend < handle
             obj.ListGrid.RowSpacing = 0;
             obj.ListGrid.Padding = [0 0 0 0];
             obj.ListGrid.ColumnWidth = {};  % Will be set dynamically based on resource count
+            try
+                if isprop(obj.Grid, 'BackgroundColor')
+                    obj.ListGrid.BackgroundColor = obj.Grid.BackgroundColor;
+                end
+            catch
+            end
 
             obj.rebuildList();
         end
@@ -148,7 +160,7 @@ classdef ResourceLegend < handle
 
                 obj.EmptyLabel = uilabel(obj.ListGrid);
                 obj.EmptyLabel.Text = 'No resources defined';
-                obj.EmptyLabel.FontColor = [0.6 0.6 0.6];
+                obj.EmptyLabel.FontColor = [0.8 0.8 0.8];
                 obj.EmptyLabel.HorizontalAlignment = 'center';
                 obj.EmptyLabel.Layout.Row = 1;
                 obj.EmptyLabel.Layout.Column = 2;
@@ -177,6 +189,7 @@ classdef ResourceLegend < handle
                 toggle.Layout.Column = idx + 1;  % Offset by 1 due to spacer column
                 toggle.Tag = char(entry.Id);
                 toggle.ValueChangedFcn = @(src, ~) obj.onToggleChanged(src);
+                toggle.FontColor = [1 1 1];
 
                 % Disable if capacity is 0 or less
                 if entry.Capacity <= 0

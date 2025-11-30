@@ -6,10 +6,11 @@ function buildDurationSection(app, leftGrid)
     app.DurationStatsLabel.FontWeight = 'bold';
     app.DurationStatsLabel.Layout.Row = 14;
     app.DurationStatsLabel.Layout.Column = [1 4];
+    app.DurationStatsLabel.FontColor = conduction.gui.utils.Theme.primaryText();
 
     app.DurationButtonGroup = uibuttongroup(leftGrid);
     app.DurationButtonGroup.BorderType = 'none';
-    app.DurationButtonGroup.BackgroundColor = [0.149 0.149 0.149];  % Match figure background
+    conduction.gui.utils.Theme.applyAppBackground(app.DurationButtonGroup);
     app.DurationButtonGroup.Layout.Row = 16;
     app.DurationButtonGroup.Layout.Column = [1 2];
     app.DurationButtonGroup.SelectionChangedFcn = @(src, event) app.DurationSelector.DurationOptionChanged(app, event);
