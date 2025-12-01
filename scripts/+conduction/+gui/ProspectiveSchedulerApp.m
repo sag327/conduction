@@ -217,51 +217,67 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
         end
 
         function handleBucketRemove(app, store, scopeLabel, affectsSelection)
-            if isempty(store) || ~isvalid(store)
-                return;
-            end
-            ids = store.getSelectedCaseIds();
-            if isempty(ids)
-                return;
-            end
+              if isempty(store) || ~isvalid(store)
+                  return;
+              end
+              ids = store.getSelectedCaseIds();
+              if isempty(ids)
+                  return;
+              end
 
-            prettyScope = app.prettyScopeLabel(scopeLabel);
-            prompt = sprintf('Remove %d %s case(s)?', numel(ids), prettyScope);
-            answer = string(app.confirmAction(prompt, 'Remove Cases', {'Remove', 'Cancel'}, 2));
-            if answer ~= "Remove"
-                return;
-            end
+              prettyScope = app.prettyScopeLabel(scopeLabel);
+              prompt = sprintf('Remove %d %s case(s)?', numel(ids), prettyScope);
+              answer = string(app.confirmAction(prompt, 'Remove Cases', {'Remove', 'Cancel'}, 2));
+              if answer ~= "Remove"
+                  return;
+              end
 
-            store.removeSelected();
-
-            if affectsSelection && ~isempty(ids)
-                remaining = setdiff(app.SelectedCaseIds, ids, 'stable');
-                app.selectCases(remaining, "replace");
-            end
-            app.markDirty();
-        end
+              % Delegate removal (CaseManager, archives, schedules, locks, selection)
+              % to the central helper used by the Add/Edit tab.
+              % SelectedCaseIds are already kept in sync with bucket selection via
+              % onBucketSelectionChanged/onCompletedBucketSelectionChanged, so we
+              % can safely reuse removeSelectedCases without a second prompt.
+              %#ok<INUSD>
+              app.removeSelectedCases(false);
+          end
 
         function handleBucketClear(app, store, scopeLabel, affectsSelection)
-            if isempty(store) || ~isvalid(store) || ~store.hasCases()
-                return;
-            end
+              if isempty(store) || ~isvalid(store) || ~store.hasCases()
+                  return;
+              end
 
             prettyScope = app.prettyScopeLabel(scopeLabel);
-            prompt = sprintf('Clear all %s cases?', prettyScope);
-            answer = string(app.confirmAction(prompt, 'Clear Cases', {'Clear', 'Cancel'}, 2));
-            if answer ~= "Clear"
-                return;
-            end
+              prompt = sprintf('Clear all %s cases?', prettyScope);
+              answer = string(app.confirmAction(prompt, 'Clear Cases', {'Clear', 'Cancel'}, 2));
+              if answer ~= "Clear"
+                  return;
+              end
 
-            idsBefore = store.getSelectedCaseIds();
-            store.clearAll();
+              %#ok<INUSD>
+              % Gather all case IDs currently visible in this bucket's store
+              % so that Clear All only affects the cases shown in this table.
+              idsToRemove = string.empty(0, 1);
+              if ismethod(store, 'caseCount') && ismethod(store, 'setSelection') && ...
+                      ismethod(store, 'getSelectedCaseIds')
+                  count = store.caseCount();
+                  if count > 0
+                      store.setSelection(1:count);
+                      idsToRemove = store.getSelectedCaseIds();
+                      store.clearSelection();
+                  end
+              end
 
-            if affectsSelection && ~isempty(idsBefore)
-                remaining = setdiff(app.SelectedCaseIds, idsBefore, 'stable');
-                app.selectCases(remaining, "replace");
-            end
-            app.markDirty();
-        end
+              idsToRemove = app.normalizeCaseIds(idsToRemove);
+              if isempty(idsToRemove)
+                  return;
+              end
+
+              % Ensure SelectedCaseIds matches what we're about to remove,
+              % then reuse the shared deletion pipeline without a second
+              % confirmation prompt.
+              app.assignSelectedCaseIds(idsToRemove, "manual");
+              app.removeSelectedCases(false);
+          end
 
         function label = prettyScopeLabel(~, scopeLabel)
             scope = lower(string(scopeLabel));
@@ -411,11 +427,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             end
         end
 
-        function subset = filterIdsByCompleted(app, ids)
-            subset = string.empty(0, 1);
-            if isempty(ids) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
-                return;
-            end
+          function subset = filterIdsByCompleted(app, ids)
+              subset = string.empty(0, 1);
+              if isempty(ids) || isempty(app.CaseManager) || ~isvalid(app.CaseManager)
+                  return;
+              end
 
             ids = app.normalizeCaseIds(ids);
             for idx = 1:numel(ids)
@@ -423,11 +439,11 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 if strlength(caseId) == 0
                     continue;
                 end
-                if app.CaseManager.isCaseInCompletedArchive(caseId)
-                    subset(end+1, 1) = caseId; %#ok<AGROW>
-                end
-            end
-        end
+                  if app.CaseManager.isCaseInCompletedArchive(caseId)
+                      subset(end+1, 1) = caseId; %#ok<AGROW>
+                  end
+              end
+          end
 
         function clearBucketSelectionSyncGuard(app)
             app.IsSyncingBucketSelection = false;
@@ -1983,7 +1999,7 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
             app.removeSelectedCases();
         end
 
-        function removeSelectedCases(app, confirmRemoval)
+          function removeSelectedCases(app, confirmRemoval)
             if nargin < 2
                 confirmRemoval = true;
             end
@@ -2013,47 +2029,56 @@ classdef ProspectiveSchedulerApp < matlab.apps.AppBase
                 end
             end
 
-            activeIndices = double.empty(1, 0);
-            archivedIds = string.empty(0, 1);
-            for idx = 1:numel(selectedIds)
-                caseId = selectedIds(idx);
-                [~, caseIndex] = app.CaseManager.findCaseById(char(caseId));
-                if ~isnan(caseIndex) && caseIndex >= 1
-                    activeIndices(end+1) = caseIndex; %#ok<AGROW>
-                else
-                    archivedIds(end+1, 1) = caseId; %#ok<AGROW>
-                end
-            end
+              activeIndices = double.empty(1, 0);
+              archivedIds = string.empty(0, 1);
+              for idx = 1:numel(selectedIds)
+                  caseId = selectedIds(idx);
+                  [~, caseIndex] = app.CaseManager.findCaseById(char(caseId));
+                  if ~isnan(caseIndex) && caseIndex >= 1
+                      activeIndices(end+1) = caseIndex; %#ok<AGROW>
+                  else
+                      archivedIds(end+1, 1) = caseId; %#ok<AGROW>
+                  end
+              end
 
-            if ~isempty(activeIndices)
-                removalOrder = sort(unique(activeIndices, 'stable'), 'descend');
-                app.executeBatchUpdate(@() app.removeCasesAtIndices(removalOrder), true);
-            end
+              if ~isempty(activeIndices)
+                  removalOrder = sort(unique(activeIndices, 'stable'), 'descend');
+                  app.executeBatchUpdate(@() app.removeCasesAtIndices(removalOrder), true);
+              end
 
-            if ~isempty(archivedIds) && ismethod(app.CaseManager, 'removeCompletedCasesByIds')
-                archivedIds = unique(archivedIds, 'stable');
-                app.CaseManager.removeCompletedCasesByIds(archivedIds);
-            end
+              % Always remove matching entries from the completed archive,
+              % even when a case is still present in the active list. This
+              % keeps the Completed bucket in sync with deletions from any
+              % source (including the Completed table itself).
+              if ismethod(app.CaseManager, 'getCompletedCases') && ...
+                     ismethod(app.CaseManager, 'removeCompletedCasesByIds')
+                  completedCases = app.CaseManager.getCompletedCases();
+                  if ~isempty(completedCases)
+                      completedIds = strings(numel(completedCases), 1);
+                      for idx = 1:numel(completedCases)
+                          completedIds(idx) = string(completedCases(idx).CaseId);
+                      end
+                      completedIds = completedIds(strlength(completedIds) > 0);
+                      if ~isempty(completedIds)
+                          % Merge any IDs already classified as archived
+                          % with those present in the completed archive.
+                          mergedIds = unique([archivedIds; intersect(selectedIds, completedIds, 'stable')], 'stable');
+                          if ~isempty(mergedIds)
+                              app.CaseManager.removeCompletedCasesByIds(mergedIds);
+                          end
+                      end
+                  end
+              end
 
-            scheduleWasUpdated = app.removeCaseIdsFromSchedules(selectedIds);
+              scheduleWasUpdated = app.removeCaseIdsFromSchedules(selectedIds);
 
-            scheduleForRender = [];
-            if app.IsTimeControlActive
-                currentTimeMinutes = app.CaseManager.getCurrentTime();
-                scheduleForRender = app.ScheduleRenderer.updateCaseStatusesByTime(app, currentTimeMinutes);
-            elseif scheduleWasUpdated
-                scheduleForRender = app.OptimizedSchedule;
-            end
-
-            if scheduleWasUpdated
-                app.OptimizationController.markOptimizationDirty(app);
-            end
-
-            if ~isempty(scheduleForRender)
-                app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
-            elseif scheduleWasUpdated
-                app.ScheduleRenderer.renderOptimizedSchedule(app, app.OptimizedSchedule, app.OptimizationOutcome);
-            end
+              if scheduleWasUpdated
+                  app.OptimizationController.markOptimizationDirty(app);
+                  % Use unified timeline helper so statuses are derived from
+                  % the current NOW position rather than the system clock.
+                  scheduleForRender = app.getScheduleForRendering();
+                  app.ScheduleRenderer.renderOptimizedSchedule(app, scheduleForRender, app.OptimizationOutcome);
+              end
 
             app.LockedCaseIds = setdiff(app.LockedCaseIds, selectedIds, 'stable');
             if isprop(app, 'TimeControlLockedCaseIds')

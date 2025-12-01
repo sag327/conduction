@@ -140,7 +140,22 @@ classdef ScheduleRenderer < handle
                 metadata = struct();
             end
 
+            % Treat schedules with no lab assignments OR no cases as empty
+            % and render the baseline grid instead of leaving stale
+            % content on the axes.
             if isempty(dailySchedule) || isempty(dailySchedule.labAssignments())
+                app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
+                app.AnalyticsRenderer.resetKPIBar(app);
+                app.ScheduleRenderer.updateActualTimeIndicator(app);
+                return;
+            end
+
+            try
+                allCases = dailySchedule.cases();
+            catch
+                allCases = [];
+            end
+            if isempty(allCases)
                 app.ScheduleRenderer.renderEmptySchedule(app, app.LabIds);
                 app.AnalyticsRenderer.resetKPIBar(app);
                 app.ScheduleRenderer.updateActualTimeIndicator(app);
